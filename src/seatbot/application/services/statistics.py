@@ -50,8 +50,8 @@ class StatisticsService:
             active_rides=active,
         )
 
-    async def all_users_stats(self, limit: int = 100) -> list[UserStats]:
-        users = await self._users_dao.get_all(limit=limit)
+    async def all_users_stats(self, limit: int = 100, exclude_user_id: int | None = None) -> list[UserStats]:
+        users = await self._users_dao.get_all(limit=limit, exclude_user_id=exclude_user_id)
         out: list[UserStats] = []
         for user in users:
             total_rides = await self._bookings_dao.count_completed_for_user(user.user_id)

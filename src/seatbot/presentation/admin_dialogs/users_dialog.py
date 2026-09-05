@@ -7,6 +7,7 @@ from dishka.integrations.aiogram_dialog import inject
 
 from seatbot.application.services.statistics import StatisticsService
 from seatbot.application.services.user import UserService
+from seatbot.infrastructure.config.models import Config
 from seatbot.infrastructure.database.dao import UsersDAO
 
 from ..user_dialogs.states import DepositSG, UsersSG
@@ -16,9 +17,10 @@ from ..user_dialogs.states import DepositSG, UsersSG
 async def get_users_list(
     dialog_manager: DialogManager,
     statistics_service: FromDishka[StatisticsService],
+    config: FromDishka[Config],
     **_kwargs,
 ):
-    stats = await statistics_service.all_users_stats(limit=50)
+    stats = await statistics_service.all_users_stats(limit=50, exclude_user_id=config.bot.creator_id)
     if not stats:
         return {"has_users": False, "empty_text": "🚫 Нет пользователей.", "back_btn": "⬅️ В панель"}
     items = []

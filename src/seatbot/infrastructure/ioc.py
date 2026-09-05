@@ -149,9 +149,9 @@ class ServicesProvider(Provider):
 
     @provide
     def get_broadcast_service(
-        self, bot: Bot, users_dao: UsersDAO
+        self, bot: Bot, config: Config, users_dao: UsersDAO
     ) -> BroadcastService:
-        return BroadcastService(bot, users_dao)
+        return BroadcastService(bot, config, users_dao)
 
     @provide
     def get_bot_service(self, bot: Bot, config: Config, users_dao: UsersDAO) -> BotService:

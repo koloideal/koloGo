@@ -9,6 +9,7 @@ from seatbot.application.services.ride import RideService
 from seatbot.application.services.statistics import StatisticsService
 from seatbot.domain.exceptions import NoFreeSeatsError
 from seatbot.domain.schemas import BookingStatus
+from seatbot.infrastructure.config.models import Config
 from seatbot.infrastructure.database.dao import BookingsDAO, RidesDAO, UsersDAO
 
 from ..user_dialogs.states import RideBookingsSG
@@ -149,12 +150,13 @@ async def get_passengers_list(
     dialog_manager: DialogManager,
     statistics_service: FromDishka[StatisticsService],
     bookings_dao: FromDishka[BookingsDAO],
+    config: FromDishka[Config],
     **_kwargs,
 ):
     ride_id: int = dialog_manager.dialog_data.get("ride_id", 0)
     if not ride_id:
         return {"has_users": False, "empty_text": "🚫 Поездка не найдена.", "back_btn": "⬅️ К броням"}
-    stats = await statistics_service.all_users_stats(limit=50)
+    stats = await statistics_service.all_users_stats(limit=50, exclude_user_id=config.bot.creator_id)
     if not stats:
         return {"has_users": False, "empty_text": "🚫 Нет пользователей.", "back_btn": "⬅️ К броням"}
     # Исключаем уже забронировавших

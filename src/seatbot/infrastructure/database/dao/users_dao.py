@@ -95,8 +95,10 @@ class UsersDAO:
         orm_user.is_vip = is_vip
         return self._map_to_domain(orm_user)
 
-    async def get_all(self, limit: int = -1) -> list[User]:
+    async def get_all(self, limit: int = -1, exclude_user_id: int | None = None) -> list[User]:
         query = select(OrmUser).order_by(OrmUser.registration_date.desc())
+        if exclude_user_id is not None:
+            query = query.where(OrmUser.user_id != exclude_user_id)
         if limit != -1:
             query = query.limit(limit)
         result = await self.session.execute(query)

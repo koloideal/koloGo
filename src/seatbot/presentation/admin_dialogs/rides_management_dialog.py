@@ -1,5 +1,5 @@
 from aiogram.types import CallbackQuery
-from aiogram_dialog import Dialog, DialogManager, StartMode, Window
+from aiogram_dialog import Dialog, DialogManager, Window
 from aiogram_dialog.widgets.kbd import Button, Cancel, Column, Group, Select, SwitchTo
 from aiogram_dialog.widgets.text import Const, Format
 from dishka import FromDishka
@@ -140,6 +140,15 @@ async def on_ride_selected(
     await manager.next()
 
 
+async def on_to_bookings(
+    callback: CallbackQuery,
+    button: Button,
+    manager: DialogManager,
+):
+    ride_id: int = manager.dialog_data["ride_id"]
+    await manager.start(RideBookingsSG.bookings_list, data={"ride_id": ride_id})
+
+
 rides_management_dialog = Dialog(
     Window(
         Const("🚗 <b>Мои поездки</b>"),
@@ -160,7 +169,7 @@ rides_management_dialog = Dialog(
     ),
     Window(
         Format("{ride_text}"),
-        Button(Format("{bookings_btn}"), id="to_bookings", on_click=lambda c, b, m: m.start(RideBookingsSG.bookings_list, mode=StartMode.NORMAL)),
+        Button(Format("{bookings_btn}"), id="to_bookings", on_click=on_to_bookings),
         Group(
             Button(Format("{toggle_vis_btn}"), id="toggle_vis", on_click=on_toggle_visibility, when="is_open"),
             Button(Format("{toggle_auto_btn}"), id="toggle_auto", on_click=on_toggle_auto_approve, when="is_open"),

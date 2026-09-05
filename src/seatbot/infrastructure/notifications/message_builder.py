@@ -83,7 +83,11 @@ class MessageBuilder:
 
     @staticmethod
     def ride_completed_notification(ride: Ride) -> str:
-        return f"🏁 <b>Поездка #{ride.ride_id} завершена.</b>\nСпасибо за поездку!"
+        return (
+            f"🏁 <b>Поездка #{ride.ride_id} завершена.</b>\n\n"
+            f"🕒 Отправление: {_fmt_dt(ride.departure_at)}\n"
+            f"Спасибо за поездку!"
+        )
 
     @staticmethod
     def no_show_notification(ride: Ride) -> str:
