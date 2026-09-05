@@ -1,6 +1,6 @@
 from aiogram.types import CallbackQuery
 from aiogram_dialog import Dialog, DialogManager, Window
-from aiogram_dialog.widgets.kbd import Button, Group, Select, SwitchTo
+from aiogram_dialog.widgets.kbd import Button, Cancel, Group, Select, SwitchTo
 from aiogram_dialog.widgets.text import Const, Format
 from dishka import FromDishka
 from dishka.integrations.aiogram_dialog import inject
@@ -9,7 +9,7 @@ from seatbot.application.services.ride import RideService
 from seatbot.domain.schemas import BookingStatus
 from seatbot.infrastructure.database.dao import BookingsDAO, RidesDAO, UsersDAO
 
-from ..user_dialogs.states import RideBookingsSG, RidesMgmtSG
+from ..user_dialogs.states import RideBookingsSG
 
 _STATUS_EMOJI = {
     BookingStatus.PENDING: "⏳",
@@ -151,7 +151,7 @@ ride_detail_dialog = Dialog(
             when="has_bookings",
         ),
         Format("{empty_text}", when="not has_bookings"),
-        SwitchTo(Format("{back_btn}"), id="back", state=RidesMgmtSG.ride_detail),
+        Cancel(Format("{back_btn}")),
         state=RideBookingsSG.bookings_list,
         getter=get_ride_bookings,
     ),
