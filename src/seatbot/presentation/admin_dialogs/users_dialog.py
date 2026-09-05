@@ -1,5 +1,5 @@
 from aiogram.types import CallbackQuery
-from aiogram_dialog import Dialog, DialogManager, StartMode, Window
+from aiogram_dialog import Dialog, DialogManager, Window
 from aiogram_dialog.widgets.kbd import Button, Cancel, Column, Group, Select, SwitchTo
 from aiogram_dialog.widgets.text import Const, Format
 from dishka import FromDishka
@@ -48,7 +48,12 @@ async def get_user_detail(
     users_dao: FromDishka[UsersDAO],
     **_kwargs,
 ):
-    user_id: int = dialog_manager.dialog_data["user_id"]
+    start_data = dialog_manager.start_data
+    if isinstance(start_data, dict) and "user_id" in start_data:
+        dialog_manager.dialog_data["user_id"] = start_data["user_id"]
+    user_id: int = dialog_manager.dialog_data.get("user_id", 0)
+    if not user_id:
+        return {"user_text": "🚫 Пользователь не найден", "back_btn": "⬅️ Назад"}
     stats = await statistics_service.user_stats(user_id)
     user = await users_dao.get_by_id(user_id)
     if not stats or not user:
@@ -110,11 +115,13 @@ async def on_toggle_vip(
 
 
 async def on_deposit_click(callback: CallbackQuery, button: Button, manager: DialogManager):
-    await manager.start(DepositSG.deposit_amount, mode=StartMode.NORMAL)
+    user_id: int = manager.dialog_data["user_id"]
+    await manager.start(DepositSG.deposit_amount, data={"user_id": user_id})
 
 
 async def on_decrease_click(callback: CallbackQuery, button: Button, manager: DialogManager):
-    await manager.start(DepositSG.decrease_amount, mode=StartMode.NORMAL)
+    user_id: int = manager.dialog_data["user_id"]
+    await manager.start(DepositSG.decrease_amount, data={"user_id": user_id})
 
 
 async def on_user_selected(

@@ -12,6 +12,16 @@ from seatbot.domain.exceptions import InsufficientBalanceError
 from ..user_dialogs.states import DepositSG, UsersSG
 
 
+def _get_user_id(manager: DialogManager) -> int | None:
+    """Достаёт user_id из start_data или dialog_data."""
+    start_data = manager.start_data
+    if isinstance(start_data, dict) and "user_id" in start_data:
+        uid = start_data["user_id"]
+        manager.dialog_data["user_id"] = uid
+        return uid
+    return manager.dialog_data.get("user_id")
+
+
 async def _parse_amount(text: str) -> float | None:
     text = text.strip().replace(",", ".")
     try:
@@ -34,13 +44,16 @@ async def on_topup_input(
     if amount is None:
         await message.answer("❌ Введите положительное число (например, <code>50.00</code>).")
         return
-    user_id: int = manager.dialog_data["user_id"]
+    user_id = _get_user_id(manager)
+    if not user_id:
+        await message.answer("❌ Пользователь не определён.")
+        return
     user = await deposit_service.topup(user_id, amount)
     if not user:
         await message.answer("❌ Пользователь не найден.")
         return
     await message.answer(f"✅ Депозит пополнен на {amount:.2f} BYN. Баланс: {user.balance:.2f} BYN")
-    await manager.start(UsersSG.user_detail, mode=StartMode.RESET_STACK)
+    await manager.start(UsersSG.user_detail, data={"user_id": user_id}, mode=StartMode.RESET_STACK)
 
 
 @inject
@@ -54,7 +67,10 @@ async def on_decrease_input(
     if amount is None:
         await message.answer("❌ Введите положительное число (например, <code>10.00</code>).")
         return
-    user_id: int = manager.dialog_data["user_id"]
+    user_id = _get_user_id(manager)
+    if not user_id:
+        await message.answer("❌ Пользователь не определён.")
+        return
     try:
         user = await deposit_service.decrease(user_id, amount)
     except InsufficientBalanceError:
@@ -64,7 +80,7 @@ async def on_decrease_input(
         await message.answer("❌ Пользователь не найден.")
         return
     await message.answer(f"✅ Списано {amount:.2f} BYN. Баланс: {user.balance:.2f} BYN")
-    await manager.start(UsersSG.user_detail, mode=StartMode.RESET_STACK)
+    await manager.start(UsersSG.user_detail, data={"user_id": user_id}, mode=StartMode.RESET_STACK)
 
 
 deposit_dialog = Dialog(
