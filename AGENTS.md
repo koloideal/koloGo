@@ -1,0 +1,47 @@
+# SeatBot — агентские соглашения
+
+## О проекте
+Telegram-бот на aiogram для менеджмента платных поездок из колледжа в Минск.
+Водитель (один админ) создаёт поездки, пассажиры бронируют места (всего 4),
+платят с депозита, который админ пополняет вручную (нал, без платёжных шлюзов).
+
+## Стек (взято из репозитория Tunnex — эталонный гайдлайн)
+- Python 3.13+, aiogram 3 + aiogram-dialog 2
+- dishka (DI), adaptix (dataclass-схемы), SQLAlchemy 2 + asyncpg + alembic
+- Redis (FSM + кэш), apscheduler, orjson
+- ruff / isort / mypy / pyright, Justfile, uv
+
+## Архитектура (DDD-слои в `src/seatbot`)
+- `domain/` — чистые dataclass-схемы сущностей и исключения, без зависимостей.
+- `application/` — сервисы (cross-cutting) и интеракторы (use-case) с командами и фасадами.
+- `infrastructure/` — конфиг, БД (models + dao), кэш, логирование, уведомления, шедулер, DI (`ioc.py`).
+- `presentation/` — роутеры, middleware, aiogram-dialog окна (user_dialogs / admin_dialogs).
+
+## Конвенции
+- DAO маппит ORM → domain-dataclass через `_map_to_domain`.
+- Сессия БД открывается в dishka-провайдере с `session.begin()` (транзакция на запрос).
+- Все строки UI — на русском, встроены в диалоги напрямую (bot только русский).
+- Числа денег — `Decimal` в БД (`Numeric(10,2)`), `float` в domain-схемах.
+- Кэш-ключи — типобезопасные `CacheKey[CacheValue]` в `infrastructure/cache/keys.py`.
+
+## Команды
+- `just install-dev` — установить зависимости
+- `just migrate` — применить миграции
+- `just migrate-new "сообщение"` — новая автоген-миграция
+- `just run` / `just watch` — запуск / запуск с авто-перезагрузкой
+- `just lint` / `just format` / `just typecheck` — проверки
+
+## Доменная модель
+- **User**: пассажир. Поля: `balance` (депозит), `is_banned` (ЧС), `is_vip` (бесплатно + авто-апрув), `is_admin` (водитель).
+- **Ride**: поездка. `departure_at`, `price` (0 = бесплатная), `seats_total` (4), `is_visible` (публикация), `auto_approve`, `status` (open/closed/completed/cancelled).
+- **Booking**: бронь 1 места. `status` (pending/approved/rejected/cancelled/completed/no_show), `paid_amount` (сколько списано с депозита).
+- **Transaction**: движение депозита. `type` (admin_topup/admin_decrease/ride_payment/refund), `amount`, `ride_id?`.
+
+## Бизнес-правила (edge cases)
+- VIP: поездка бесплатна (paid_amount=0) + всегда авто-апрув, даже если ride.auto_approve=False.
+- Бесплатная поездка (price=0): никто не платит, апрув по ride.auto_approve / VIP.
+- Платная поездка: списание с баланса при бронировании; при reject/cancel — возврат.
+- Бронь невозможна: недостаточно баланса, нет свободных мест, поездка закрыта/невидима/в прошлом, пользователь в ЧС, уже забронировано.
+- Скрытая поездка (`is_visible=False`): не видна в списке для тех, кто не забронировал; забронировавшие видят свою бронь.
+- Отмена поездки админом → возврат всем + уведомление.
+- No-show: админ отмечает, возврата нет, в статистику не идёт как completed.

@@ -1,0 +1,22 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+secret_data/config.toml
+logs
+test.py
+test2.py
+
+.kiro
+.idea
+.vscode
+*.mo
+test_*.py
+.*cache
