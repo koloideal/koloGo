@@ -1,6 +1,6 @@
 from aiogram.types import CallbackQuery
 from aiogram_dialog import Dialog, DialogManager, StartMode, Window
-from aiogram_dialog.widgets.kbd import Button, Cancel, Group, Select, SwitchTo
+from aiogram_dialog.widgets.kbd import Button, Cancel, Column, Group, Select, SwitchTo
 from aiogram_dialog.widgets.text import Const, Format
 from dishka import FromDishka
 from dishka.integrations.aiogram_dialog import inject
@@ -143,13 +143,15 @@ async def on_ride_selected(
 rides_management_dialog = Dialog(
     Window(
         Const("🚗 <b>Мои поездки</b>"),
-        Select(
-            Format("{item[title]}"),
-            id="rides_sel",
-            item_id_getter=lambda item: str(item["ride_id"]),
-            items="rides",
-            on_click=on_ride_selected,
-            when="has_rides",
+        Column(
+            Select(
+                Format("{item[title]}"),
+                id="rides_sel",
+                item_id_getter=lambda item: str(item["ride_id"]),
+                items="rides",
+                on_click=on_ride_selected,
+                when="has_rides",
+            ),
         ),
         Format("{empty_text}", when="not has_rides"),
         Cancel(Format("{back_btn}")),

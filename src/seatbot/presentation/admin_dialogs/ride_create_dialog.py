@@ -4,9 +4,9 @@ from aiogram.types import CallbackQuery, Message
 from aiogram_dialog import Dialog, DialogManager, StartMode, Window
 from aiogram_dialog.api.entities import ChatEvent
 from aiogram_dialog.widgets.input import MessageInput
-from aiogram_dialog.widgets.kbd import (Button, Calendar, Cancel, ManagedCalendar,
-                                        ManagedTimeSelect, Row, Select, SwitchTo,
-                                        TimeSelect)
+from aiogram_dialog.widgets.kbd import (Button, Calendar, Cancel, Column,
+                                        ManagedCalendar, ManagedTimeSelect, Row,
+                                        Select, SwitchTo, TimeSelect)
 from aiogram_dialog.widgets.kbd.time import OnValueChanged
 from aiogram_dialog.widgets.text import Const, Format
 from dishka import FromDishka
@@ -278,7 +278,7 @@ async def on_template_selected(
     manager.dialog_data["is_visible"] = template.is_visible
     manager.dialog_data["note"] = template.note
     await callback.answer("Шаблон загружен, выберите дату", show_alert=True)
-    await manager.start(RideCreateSG.calendar, mode=StartMode.NORMAL)
+    await manager.switch_to(RideCreateSG.calendar)
 
 
 # ── диалог ───────────────────────────────────────────────────────────────────
@@ -288,16 +288,18 @@ ride_create_dialog = Dialog(
     # 1. Выбор: шаблон или новая поездка
     Window(
         Const("➕ <b>Создание поездки</b>\n\nВыберите шаблон или создайте новую:"),
-        Select(
-            Format("{item[title]}"),
-            id="templates_sel",
-            item_id_getter=lambda item: str(item["ride_id"]),
-            items="templates",
-            on_click=on_template_selected,
-            when="has_templates",
+        Column(
+            Select(
+                Format("{item[title]}"),
+                id="templates_sel",
+                item_id_getter=lambda item: str(item["ride_id"]),
+                items="templates",
+                on_click=on_template_selected,
+                when="has_templates",
+            ),
         ),
         Format("{empty_text}", when="not has_templates"),
-        Button(Const("🆕 Новая поездка"), id="new_ride", on_click=lambda c, b, m: m.start(RideCreateSG.calendar, mode=StartMode.NORMAL)),
+        SwitchTo(Const("🆕 Новая поездка"), id="new_ride", state=RideCreateSG.calendar),
         Cancel(Format("{back_btn}")),
         state=RideCreateSG.select_template,
         getter=get_templates,
@@ -311,8 +313,13 @@ ride_create_dialog = Dialog(
     ),
     # 3. Выбор времени
     Window(
-        Format("📅 Дата: <b>{selected_date}</b>\n\n� <b>Выберите время отправления:</b>"),
-        TimeSelect(id="time_sel", on_value_changed=on_time_changed),
+        Format("📅 Дата: <b>{selected_date}</b>\n\n🕒 <b>Выберите время отправления:</b>"),
+        TimeSelect(
+            id="time_sel",
+            hour_header=Const("Час"),
+            minute_header=Const("Минута"),
+            on_value_changed=on_time_changed,
+        ),
         SwitchTo(Format("{back_btn}"), id="back", state=RideCreateSG.calendar),
         state=RideCreateSG.time,
         getter=get_time_data,

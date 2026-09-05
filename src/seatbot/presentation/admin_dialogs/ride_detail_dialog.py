@@ -1,6 +1,6 @@
 from aiogram.types import CallbackQuery
 from aiogram_dialog import Dialog, DialogManager, Window
-from aiogram_dialog.widgets.kbd import Button, Cancel, Group, Select, SwitchTo
+from aiogram_dialog.widgets.kbd import Button, Cancel, Column, Group, Select, SwitchTo
 from aiogram_dialog.widgets.text import Const, Format
 from dishka import FromDishka
 from dishka.integrations.aiogram_dialog import inject
@@ -142,13 +142,15 @@ async def on_noshow(
 ride_detail_dialog = Dialog(
     Window(
         Const("📋 <b>Брони на поездку</b>"),
-        Select(
-            Format("{item[title]}"),
-            id="bookings_sel",
-            item_id_getter=lambda item: str(item["booking_id"]),
-            items="bookings",
-            on_click=on_booking_selected,
-            when="has_bookings",
+        Column(
+            Select(
+                Format("{item[title]}"),
+                id="bookings_sel",
+                item_id_getter=lambda item: str(item["booking_id"]),
+                items="bookings",
+                on_click=on_booking_selected,
+                when="has_bookings",
+            ),
         ),
         Format("{empty_text}", when="not has_bookings"),
         Cancel(Format("{back_btn}")),

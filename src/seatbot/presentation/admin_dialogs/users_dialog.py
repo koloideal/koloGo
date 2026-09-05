@@ -1,6 +1,6 @@
 from aiogram.types import CallbackQuery
 from aiogram_dialog import Dialog, DialogManager, StartMode, Window
-from aiogram_dialog.widgets.kbd import Button, Cancel, Group, Select, SwitchTo
+from aiogram_dialog.widgets.kbd import Button, Cancel, Column, Group, Select, SwitchTo
 from aiogram_dialog.widgets.text import Const, Format
 from dishka import FromDishka
 from dishka.integrations.aiogram_dialog import inject
@@ -128,13 +128,15 @@ async def on_user_selected(
 users_dialog = Dialog(
     Window(
         Const("👥 <b>Клиенты</b>"),
-        Select(
-            Format("{item[title]}"),
-            id="users_sel",
-            item_id_getter=lambda item: str(item["user_id"]),
-            items="users",
-            on_click=on_user_selected,
-            when="has_users",
+        Column(
+            Select(
+                Format("{item[title]}"),
+                id="users_sel",
+                item_id_getter=lambda item: str(item["user_id"]),
+                items="users",
+                on_click=on_user_selected,
+                when="has_users",
+            ),
         ),
         Format("{empty_text}", when="not has_users"),
         Cancel(Format("{back_btn}")),
