@@ -37,6 +37,7 @@ class RideService:
         note: str | None = None,
         is_visible: bool = True,
         repeat_days: int = 1,
+        remind_minutes: int = 30,
     ) -> list[Ride]:
         """Создаёт поездку. Если repeat_days > 1, создаёт несколько подряд."""
         rides = []
@@ -49,6 +50,7 @@ class RideService:
                 auto_approve=auto_approve,
                 note=note,
                 is_visible=is_visible,
+                remind_minutes=remind_minutes,
             )
             rides.append(ride)
         return rides
@@ -63,7 +65,6 @@ class RideService:
         template = await self._rides_dao.get_by_id(template_ride_id)
         if not template:
             return None
-        # Берем время из шаблона, дату из start_date
         departure_at = start_date.replace(
             hour=template.departure_at.hour,
             minute=template.departure_at.minute,
@@ -79,6 +80,7 @@ class RideService:
             note=template.note,
             is_visible=template.is_visible,
             repeat_days=repeat_days,
+            remind_minutes=template.remind_minutes,
         )
 
     async def cancel_ride(self, ride_id: int) -> Ride | None:
@@ -203,6 +205,33 @@ class RideService:
             MessageBuilder.new_booking_admin_log(booking, user, ride)
         )
         return booking
+
+    # ── ручное добавление пассажира админом ───────────────────────────────────
+
+    async def add_passenger(self, ride_id: int, user_id: int) -> Booking | None:
+        """Админ вручную добавляет клиента в поездку (сразу approved, бесплатно)."""
+        ride = await self._rides_dao.get_by_id(ride_id)
+        if not ride or ride.status != RideStatus.OPEN:
+            return None
+        user = await self._users_dao.get_by_id(user_id)
+        if not user:
+            return None
+        existing = await self._bookings_dao.get_by_ride_and_user(ride_id, user_id)
+        if existing:
+            return existing
+        active_count = await self._bookings_dao.count_active_for_ride(ride_id)
+        if active_count >= ride.seats_total:
+            raise NoFreeSeatsError(ride_id)
+        booking = await self._bookings_dao.create(
+            ride_id=ride_id,
+            user_id=user_id,
+            paid_amount=0.0,
+        )
+        await self._bookings_dao.set_status(booking.booking_id, BookingStatus.APPROVED)
+        await self._bot_service.notify_user(
+            user_id, MessageBuilder.added_by_admin_notification(ride)
+        )
+        return await self._bookings_dao.get_by_id(booking.booking_id)
 
     # ── апрув / реджект ───────────────────────────────────────────────────────
 

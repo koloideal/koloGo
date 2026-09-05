@@ -48,6 +48,7 @@ class Ride:
     status: RideStatus
     created_at: datetime
     note: str | None = None
+    remind_minutes: int = 30
 
     @property
     def is_free(self) -> bool:

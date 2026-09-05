@@ -144,3 +144,21 @@ class MessageBuilder:
     @staticmethod
     def vip_revoked_notification() -> str:
         return "⭐ VIP-статус снят."
+
+    @staticmethod
+    def added_by_admin_notification(ride: Ride) -> str:
+        return (
+            f"✅ <b>Вас добавили в поездку!</b>\n\n"
+            f"Поездка #{ride.ride_id} в {_fmt_dt(ride.departure_at)}.\n"
+            f"Место закреплено за вами. Жду вас!"
+        )
+
+    @staticmethod
+    def ride_reminder_notification(ride: Ride) -> str:
+        return (
+            f"⏰ <b>Напоминание о поездке!</b>\n\n"
+            f"Поездка #{ride.ride_id} отправляется через "
+            f"{ride.remind_minutes} мин.\n"
+            f"🕒 Время: {_fmt_dt(ride.departure_at)}\n"
+            f"Не опаздывайте!"
+        )

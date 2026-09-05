@@ -6,6 +6,8 @@ from dishka import FromDishka
 from dishka.integrations.aiogram_dialog import inject
 
 from seatbot.application.services.ride import RideService
+from seatbot.application.services.statistics import StatisticsService
+from seatbot.domain.exceptions import NoFreeSeatsError
 from seatbot.domain.schemas import BookingStatus
 from seatbot.infrastructure.database.dao import BookingsDAO, RidesDAO, UsersDAO
 
@@ -33,11 +35,13 @@ async def get_ride_bookings(
         start_data.get("ride_id") if isinstance(start_data, dict) else dialog_manager.dialog_data.get("ride_id")
     )
     if ride_id is None:
-        return {"has_bookings": False, "empty_text": "🚫 Нет броней.", "back_btn": "⬅️ Назад"}
+        return {"has_bookings": False, "empty_text": "🚫 Нет броней.", "back_btn": "⬅️ Назад",
+                "add_passenger_btn": "➕ Добавить клиента"}
     dialog_manager.dialog_data["ride_id"] = ride_id
     bookings = await bookings_dao.list_for_ride(ride_id)
     if not bookings:
-        return {"has_bookings": False, "empty_text": "🚫 На эту поездку нет броней.", "back_btn": "⬅️ Назад"}
+        return {"has_bookings": False, "empty_text": "🚫 На эту поездку нет броней.", "back_btn": "⬅️ Назад",
+                "add_passenger_btn": "➕ Добавить клиента"}
     items = []
     for b in bookings:
         user = await users_dao.get_by_id(b.user_id)
@@ -50,7 +54,8 @@ async def get_ride_bookings(
                 "title": f"{emoji} #{b.booking_id} • {uname}{vip} • {b.status.value} • {b.paid_amount:.2f}",
             }
         )
-    return {"has_bookings": True, "bookings": items, "back_btn": "⬅️ К поездке"}
+    return {"has_bookings": True, "bookings": items, "back_btn": "⬅️ К поездке",
+            "add_passenger_btn": "➕ Добавить клиента"}
 
 
 @inject
@@ -139,6 +144,66 @@ async def on_noshow(
     await manager.switch_to(RideBookingsSG.bookings_list)
 
 
+@inject
+async def get_passengers_list(
+    dialog_manager: DialogManager,
+    statistics_service: FromDishka[StatisticsService],
+    bookings_dao: FromDishka[BookingsDAO],
+    **_kwargs,
+):
+    ride_id: int = dialog_manager.dialog_data.get("ride_id", 0)
+    if not ride_id:
+        return {"has_users": False, "empty_text": "🚫 Поездка не найдена.", "back_btn": "⬅️ К броням"}
+    stats = await statistics_service.all_users_stats(limit=50)
+    if not stats:
+        return {"has_users": False, "empty_text": "🚫 Нет пользователей.", "back_btn": "⬅️ К броням"}
+    # Исключаем уже забронировавших
+    existing = await bookings_dao.list_for_ride(ride_id)
+    existing_ids = {b.user_id for b in existing}
+    items = []
+    for s in stats:
+        if s.user_id in existing_ids:
+            continue
+        badges = []
+        if s.is_vip:
+            badges.append("⭐")
+        if s.is_banned:
+            badges.append("🚫")
+        badge_str = " " + "".join(badges) if badges else ""
+        uname = f"@{s.username}" if s.username else f"id:{s.user_id}"
+        items.append(
+            {
+                "user_id": s.user_id,
+                "title": f"{uname}{badge_str} • {s.balance:.2f} BYN",
+            }
+        )
+    if not items:
+        return {"has_users": False, "empty_text": "🚫 Все клиенты уже в поездке.", "back_btn": "⬅️ К броням"}
+    return {"has_users": True, "users": items, "back_btn": "⬅️ К броням"}
+
+
+@inject
+async def on_passenger_selected(
+    callback: CallbackQuery,
+    select: Select,
+    manager: DialogManager,
+    item_id: str,
+    ride_service: FromDishka[RideService],
+):
+    ride_id: int = manager.dialog_data.get("ride_id", 0)
+    user_id = int(item_id)
+    try:
+        booking = await ride_service.add_passenger(ride_id, user_id)
+    except NoFreeSeatsError:
+        await callback.answer("Нет свободных мест", show_alert=True)
+        return
+    if booking:
+        await callback.answer("Клиент добавлен, уведомление отправлено", show_alert=True)
+    else:
+        await callback.answer("Не удалось добавить", show_alert=True)
+    await manager.switch_to(RideBookingsSG.bookings_list)
+
+
 ride_detail_dialog = Dialog(
     Window(
         Const("📋 <b>Брони на поездку</b>"),
@@ -153,6 +218,7 @@ ride_detail_dialog = Dialog(
             ),
         ),
         Format("{empty_text}", when="not has_bookings"),
+        SwitchTo(Format("{add_passenger_btn}"), id="add_passenger", state=RideBookingsSG.add_passenger),
         Cancel(Format("{back_btn}")),
         state=RideBookingsSG.bookings_list,
         getter=get_ride_bookings,
@@ -168,5 +234,22 @@ ride_detail_dialog = Dialog(
         SwitchTo(Format("{back_btn}"), id="back", state=RideBookingsSG.bookings_list),
         state=RideBookingsSG.booking_detail,
         getter=get_booking_detail,
+    ),
+    Window(
+        Const("➕ <b>Добавить клиента в поездку</b>\n\nВыберите клиента:"),
+        Column(
+            Select(
+                Format("{item[title]}"),
+                id="users_sel",
+                item_id_getter=lambda item: str(item["user_id"]),
+                items="users",
+                on_click=on_passenger_selected,
+                when="has_users",
+            ),
+        ),
+        Format("{empty_text}", when="not has_users"),
+        SwitchTo(Format("{back_btn}"), id="back", state=RideBookingsSG.bookings_list),
+        state=RideBookingsSG.add_passenger,
+        getter=get_passengers_list,
     ),
 )

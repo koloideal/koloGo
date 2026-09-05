@@ -42,12 +42,14 @@ class RideCreateSG(StatesGroup):
     visibility = State()
     note = State()
     repeat_days = State()
+    remind = State()
     confirm = State()
 
 
 class RideBookingsSG(StatesGroup):
     bookings_list = State()
     booking_detail = State()
+    add_passenger = State()
 
 
 class UsersSG(StatesGroup):

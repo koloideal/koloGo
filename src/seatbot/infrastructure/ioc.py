@@ -21,7 +21,8 @@ from seatbot.infrastructure.config.models import Config
 from seatbot.infrastructure.database.config import new_session_maker
 from seatbot.infrastructure.database.dao import (BookingsDAO, RidesDAO, TransactionsDAO,
                                                  UsersDAO)
-from seatbot.infrastructure.scheduling.tasks import auto_close_past_rides
+from seatbot.infrastructure.scheduling.tasks import (auto_close_past_rides,
+                                                     send_ride_reminders)
 
 # ==========================================
 # 1. INFRASTRUCTURE LAYER
@@ -92,6 +93,12 @@ class SchedulerProvider(Provider):
             trigger=IntervalTrigger(minutes=5),
             kwargs={"container": async_container},
             name="auto_close_past_rides",
+        )
+        scheduler.add_job(
+            func=send_ride_reminders,
+            trigger=IntervalTrigger(minutes=1),
+            kwargs={"container": async_container},
+            name="send_ride_reminders",
         )
         return scheduler
 

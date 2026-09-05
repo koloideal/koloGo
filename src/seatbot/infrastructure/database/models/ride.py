@@ -24,6 +24,8 @@ class Ride(Base):
     auto_approve: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="open", server_default="open")
     note: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    remind_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=30, server_default="30")
+    remind_sent: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
     )

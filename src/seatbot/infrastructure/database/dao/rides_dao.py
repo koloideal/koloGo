@@ -21,6 +21,7 @@ class RidesDAO:
         auto_approve: bool,
         note: str | None = None,
         is_visible: bool = True,
+        remind_minutes: int = 30,
     ) -> Ride:
         orm_ride = OrmRide(
             departure_at=departure_at,
@@ -30,6 +31,7 @@ class RidesDAO:
             is_visible=is_visible,
             status=RideStatus.OPEN.value,
             note=note,
+            remind_minutes=remind_minutes,
         )
         self.session.add(orm_ride)
         await self.session.flush()
@@ -173,6 +175,17 @@ class RidesDAO:
         result = await self.session.execute(select(func.count(OrmRide.id)))
         return int(result.scalar_one() or 0)
 
+    async def is_remind_sent(self, ride_id: int) -> bool:
+        result = await self.session.execute(select(OrmRide.remind_sent).where(OrmRide.id == ride_id))
+        return bool(result.scalar_one_or_none())
+
+    async def mark_remind_sent(self, ride_id: int) -> None:
+        result = await self.session.execute(select(OrmRide).where(OrmRide.id == ride_id))
+        orm_ride = result.scalar_one_or_none()
+        if orm_ride:
+            orm_ride.remind_sent = True
+            await self.session.flush()
+
     async def count_by_status(self, status: RideStatus) -> int:
         result = await self.session.execute(
             select(func.count(OrmRide.id)).where(OrmRide.status == status.value)
@@ -200,4 +213,5 @@ class RidesDAO:
             status=RideStatus(orm_ride.status),
             created_at=orm_ride.created_at,
             note=orm_ride.note,
+            remind_minutes=orm_ride.remind_minutes,
         )

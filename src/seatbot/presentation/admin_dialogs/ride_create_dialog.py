@@ -4,9 +4,9 @@ from aiogram.types import CallbackQuery, Message
 from aiogram_dialog import Dialog, DialogManager, StartMode, Window
 from aiogram_dialog.api.entities import ChatEvent
 from aiogram_dialog.widgets.input import MessageInput
-from aiogram_dialog.widgets.kbd import (Button, Calendar, Cancel, Column,
-                                        ManagedCalendar, ManagedTimeSelect, Row,
-                                        Select, SwitchTo, TimeSelect)
+from aiogram_dialog.widgets.kbd import (Button, Calendar, Cancel, Column, ManagedCalendar,
+                                        ManagedTimeSelect, Row, Select, SwitchTo,
+                                        TimeSelect)
 from aiogram_dialog.widgets.kbd.time import OnValueChanged
 from aiogram_dialog.widgets.text import Const, Format
 from dishka import FromDishka
@@ -86,6 +86,21 @@ async def get_repeat_data(
     }
 
 
+async def get_remind_data(
+    dialog_manager: DialogManager,
+    **_kwargs,
+):
+    return {
+        "remind_info": (
+            "⏰ <b>Напоминание перед поездкой</b>\n\n"
+            "За сколько минут до отправления напомнить пассажирам?\n"
+            "Введите число от 1 до 1440 (например, 30 — за полчаса).\n\n"
+            "0 — без напоминания."
+        ),
+        "back_btn": "⬅️ Назад",
+    }
+
+
 async def get_price_data(
     dialog_manager: DialogManager,
     **_kwargs,
@@ -112,8 +127,10 @@ async def get_confirm_data(
     is_visible = dialog_manager.dialog_data.get("is_visible", True)
     note = dialog_manager.dialog_data.get("note")
     repeat_days = dialog_manager.dialog_data.get("repeat_days", 1)
+    remind_minutes = dialog_manager.dialog_data.get("remind_minutes", 30)
     price_str = "Бесплатно" if price <= 0 else f"{price:.2f} BYN"
     repeat_str = f"{repeat_days} дн." if repeat_days > 1 else "1 день"
+    remind_str = f"{remind_minutes} мин." if remind_minutes > 0 else "выключено"
     text = (
         "📝 <b>Подтвердите создание поездки</b>\n\n"
         f"📅 Дата: <b>{selected_date}</b>\n"
@@ -121,6 +138,7 @@ async def get_confirm_data(
         f"💰 Цена: <b>{price_str}</b>\n"
         f"🪑 Мест: <b>4</b>\n"
         f"🔁 Повтор: <b>{repeat_str}</b>\n"
+        f"⏰ Напоминание: <b>{remind_str}</b>\n"
         f"⚡ Авто-апрув: {'ВКЛ' if auto_approve else 'ВЫКЛ'}\n"
         f"👁️ Видимость: {'видна всем' if is_visible else 'скрытая'}\n"
         f"📝 Заметка: {note or '—'}"
@@ -194,6 +212,19 @@ async def on_repeat_input(message: Message, widget: MessageInput, manager: Dialo
     await manager.next()
 
 
+async def on_remind_input(message: Message, widget: MessageInput, manager: DialogManager):
+    text = (message.text or "").strip()
+    try:
+        remind_minutes = int(text)
+        if not 0 <= remind_minutes <= 1440:
+            raise ValueError
+    except ValueError:
+        await message.answer("❌ Введите число от 0 до 1440.")
+        return
+    manager.dialog_data["remind_minutes"] = remind_minutes
+    await manager.next()
+
+
 async def on_note_input(message: Message, widget: MessageInput, manager: DialogManager):
     manager.dialog_data["note"] = (message.text or "").strip()[:512] or None
     await manager.next()
@@ -239,6 +270,7 @@ async def on_create(
     is_visible: bool = manager.dialog_data.get("is_visible", True)
     note: str | None = manager.dialog_data.get("note")
     repeat_days: int = manager.dialog_data.get("repeat_days", 1)
+    remind_minutes: int = manager.dialog_data.get("remind_minutes", 30)
 
     d = date.fromisoformat(date_str)
     departure_at = datetime(
@@ -253,6 +285,7 @@ async def on_create(
         note=note,
         is_visible=is_visible,
         repeat_days=repeat_days,
+        remind_minutes=remind_minutes,
     )
     count = len(rides)
     await callback.answer(f"✅ Создано поездок: {count}!", show_alert=True)
@@ -277,6 +310,7 @@ async def on_template_selected(
     manager.dialog_data["auto_approve"] = template.auto_approve
     manager.dialog_data["is_visible"] = template.is_visible
     manager.dialog_data["note"] = template.note
+    manager.dialog_data["remind_minutes"] = template.remind_minutes
     await callback.answer("Шаблон загружен, выберите дату", show_alert=True)
     await manager.switch_to(RideCreateSG.calendar)
 
@@ -340,14 +374,22 @@ ride_create_dialog = Dialog(
         state=RideCreateSG.repeat_days,
         getter=get_repeat_data,
     ),
-    # 6. Авто-одобрение
+    # 6. Напоминание
+    Window(
+        Format("{remind_info}"),
+        MessageInput(on_remind_input),
+        SwitchTo(Format("{back_btn}"), id="back", state=RideCreateSG.repeat_days),
+        state=RideCreateSG.remind,
+        getter=get_remind_data,
+    ),
+    # 7. Авто-одобрение
     Window(
         Const("⚡ <b>Авто-одобрение?</b>\n\nОдобрять брони автоматически без вашего участия?"),
         Row(
             Button(Const("✅ Да"), id="auto_yes", on_click=on_auto_yes),
             Button(Const("❌ Нет"), id="auto_no", on_click=on_auto_no),
         ),
-        SwitchTo(Const("⬅️ Назад"), id="back", state=RideCreateSG.repeat_days),
+        SwitchTo(Const("⬅️ Назад"), id="back", state=RideCreateSG.remind),
         state=RideCreateSG.auto_approve,
     ),
     # 7. Видимость
