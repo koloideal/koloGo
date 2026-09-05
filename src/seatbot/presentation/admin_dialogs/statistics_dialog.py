@@ -1,6 +1,6 @@
 from aiogram_dialog import Dialog, DialogManager, Window
 from aiogram_dialog.widgets.kbd import Cancel
-from aiogram_dialog.widgets.text import Const, Format
+from aiogram_dialog.widgets.text import Format
 from dishka import FromDishka
 from dishka.integrations.aiogram_dialog import inject
 
@@ -30,7 +30,7 @@ async def get_admin_stats(
 statistics_dialog = Dialog(
     Window(
         Format("{stats_text}"),
-        Cancel(Const("{back_btn}")),
+        Cancel(Format("{back_btn}")),
         state=AdminStatsSG.stats,
         getter=get_admin_stats,
     ),

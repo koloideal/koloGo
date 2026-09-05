@@ -1,6 +1,8 @@
+from typing import Any
+
 from aiogram.types import CallbackQuery
 from aiogram_dialog import Dialog, DialogManager, Window
-from aiogram_dialog.widgets.kbd import Button, SwitchTo
+from aiogram_dialog.widgets.kbd import Button, Group, SwitchTo
 from aiogram_dialog.widgets.text import Const, Format, List
 from dishka import FromDishka
 from dishka.integrations.aiogram_dialog import inject
@@ -28,7 +30,8 @@ async def get_ride_bookings(
     users_dao: FromDishka[UsersDAO],
     **_kwargs,
 ):
-    ride_id: int = dialog_manager.start_data.get("ride_id") if dialog_manager.start_data else dialog_manager.dialog_data.get("ride_id")  # type: ignore[union-attr,assignment]
+    start_data: dict[str, Any] | None = dialog_manager.start_data  # type: ignore[assignment]
+    ride_id: int | None = start_data.get("ride_id") if start_data else dialog_manager.dialog_data.get("ride_id")
     if ride_id is None:
         return {"has_bookings": False, "empty_text": "🚫 Нет броней.", "back_btn": "⬅️ Назад"}
     dialog_manager.dialog_data["ride_id"] = ride_id
@@ -130,17 +133,20 @@ ride_detail_dialog = Dialog(
     Window(
         Const("📋 <b>Брони на поездку</b>"),
         List(Format("{item[title]}"), items="bookings", id="bookings_list", when="has_bookings"),
-        Const("{empty_text}", when="not has_bookings"),
-        SwitchTo(Const("{back_btn}"), id="back", state=RidesMgmtSG.ride_detail),
+        Format("{empty_text}", when="not has_bookings"),
+        SwitchTo(Format("{back_btn}"), id="back", state=RidesMgmtSG.ride_detail),
         state=RideBookingsSG.bookings_list,
         getter=get_ride_bookings,
     ),
     Window(
         Format("{booking_text}"),
-        Button(Format("{approve_btn}"), id="approve", on_click=on_approve, when="is_pending"),
-        Button(Format("{reject_btn}"), id="reject", on_click=on_reject, when="is_pending"),
-        Button(Format("{noshow_btn}"), id="noshow", on_click=on_noshow, when="is_approved"),
-        SwitchTo(Const("{back_btn}"), id="back", state=RideBookingsSG.bookings_list),
+        Group(
+            Button(Format("{approve_btn}"), id="approve", on_click=on_approve, when="is_pending"),
+            Button(Format("{reject_btn}"), id="reject", on_click=on_reject, when="is_pending"),
+            Button(Format("{noshow_btn}"), id="noshow", on_click=on_noshow, when="is_approved"),
+            width=2,
+        ),
+        SwitchTo(Format("{back_btn}"), id="back", state=RideBookingsSG.bookings_list),
         state=RideBookingsSG.booking_detail,
         getter=get_booking_detail,
     ),

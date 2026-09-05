@@ -1,9 +1,10 @@
 from aiogram_dialog import Dialog, DialogManager, Window
 from aiogram_dialog.widgets.kbd import Cancel
-from aiogram_dialog.widgets.text import Const, Format
+from aiogram_dialog.widgets.text import Format
 from dishka import FromDishka
 from dishka.integrations.aiogram_dialog import inject
 
+from seatbot.domain.schemas import TransactionType
 from seatbot.infrastructure.database.dao import TransactionsDAO, UsersDAO
 
 from .states import BalanceSG
@@ -35,11 +36,11 @@ async def get_balance(
         for t in transactions:
             sign = "+" if t.amount > 0 else ""
             type_label = {
-                "ADMIN_TOPUP": "Пополнение",
-                "ADMIN_DECREASE": "Списание",
-                "RIDE_PAYMENT": "Оплата поездки",
-                "REFUND": "Возврат",
-            }.get(t.type.value, t.type.value)
+                TransactionType.ADMIN_TOPUP: "Пополнение",
+                TransactionType.ADMIN_DECREASE: "Списание",
+                TransactionType.RIDE_PAYMENT: "Оплата поездки",
+                TransactionType.REFUND: "Возврат",
+            }.get(t.type, t.type.value)
             lines.append(f"• {t.created_at.strftime('%d.%m %H:%M')} {type_label}: {sign}{t.amount:.2f}")
 
     return {
@@ -51,7 +52,7 @@ async def get_balance(
 balance_dialog = Dialog(
     Window(
         Format("{balance_text}"),
-        Cancel(Const("{back_btn}")),
+        Cancel(Format("{back_btn}")),
         state=BalanceSG.balance,
         getter=get_balance,
     ),

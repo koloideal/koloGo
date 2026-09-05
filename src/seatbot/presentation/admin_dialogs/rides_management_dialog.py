@@ -1,6 +1,6 @@
 from aiogram.types import CallbackQuery
 from aiogram_dialog import Dialog, DialogManager, StartMode, Window
-from aiogram_dialog.widgets.kbd import Button, Cancel, SwitchTo
+from aiogram_dialog.widgets.kbd import Button, Cancel, Group, SwitchTo
 from aiogram_dialog.widgets.text import Const, Format, List
 from dishka import FromDishka
 from dishka.integrations.aiogram_dialog import inject
@@ -134,19 +134,25 @@ rides_management_dialog = Dialog(
     Window(
         Const("🚗 <b>Мои поездки</b>"),
         List(Format("{item[title]}"), items="rides", id="rides_list", when="has_rides"),
-        Const("{empty_text}", when="not has_rides"),
-        Cancel(Const("{back_btn}")),
+        Format("{empty_text}", when="not has_rides"),
+        Cancel(Format("{back_btn}")),
         state=RidesMgmtSG.rides_list,
         getter=get_rides_list,
     ),
     Window(
         Format("{ride_text}"),
         Button(Format("{bookings_btn}"), id="to_bookings", on_click=lambda c, b, m: m.start(RideBookingsSG.bookings_list, mode=StartMode.NORMAL)),
-        Button(Format("{toggle_vis_btn}"), id="toggle_vis", on_click=on_toggle_visibility, when="is_open"),
-        Button(Format("{toggle_auto_btn}"), id="toggle_auto", on_click=on_toggle_auto_approve, when="is_open"),
-        Button(Format("{complete_btn}"), id="complete", on_click=on_complete, when="is_active"),
-        Button(Format("{cancel_btn}"), id="cancel_ride", on_click=on_cancel_ride, when="is_active"),
-        SwitchTo(Const("{back_btn}"), id="back", state=RidesMgmtSG.rides_list),
+        Group(
+            Button(Format("{toggle_vis_btn}"), id="toggle_vis", on_click=on_toggle_visibility, when="is_open"),
+            Button(Format("{toggle_auto_btn}"), id="toggle_auto", on_click=on_toggle_auto_approve, when="is_open"),
+            width=2,
+        ),
+        Group(
+            Button(Format("{complete_btn}"), id="complete", on_click=on_complete, when="is_active"),
+            Button(Format("{cancel_btn}"), id="cancel_ride", on_click=on_cancel_ride, when="is_active"),
+            width=2,
+        ),
+        SwitchTo(Format("{back_btn}"), id="back", state=RidesMgmtSG.rides_list),
         state=RidesMgmtSG.ride_detail,
         getter=get_ride_detail,
     ),

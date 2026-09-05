@@ -1,6 +1,6 @@
 from aiogram.types import CallbackQuery
 from aiogram_dialog import Dialog, DialogManager, StartMode, Window
-from aiogram_dialog.widgets.kbd import Button, Cancel, SwitchTo
+from aiogram_dialog.widgets.kbd import Button, Cancel, Group, SwitchTo
 from aiogram_dialog.widgets.text import Const, Format, List
 from dishka import FromDishka
 from dishka.integrations.aiogram_dialog import inject
@@ -119,18 +119,24 @@ users_dialog = Dialog(
     Window(
         Const("👥 <b>Клиенты</b>"),
         List(Format("{item[title]}"), items="users", id="users_list", when="has_users"),
-        Const("{empty_text}", when="not has_users"),
-        Cancel(Const("{back_btn}")),
+        Format("{empty_text}", when="not has_users"),
+        Cancel(Format("{back_btn}")),
         state=UsersSG.users_list,
         getter=get_users_list,
     ),
     Window(
         Format("{user_text}"),
-        Button(Format("{deposit_btn}"), id="deposit", on_click=on_deposit_click),
-        Button(Format("{decrease_btn}"), id="decrease", on_click=on_decrease_click),
-        Button(Format("{ban_btn}"), id="toggle_ban", on_click=on_toggle_ban),
-        Button(Format("{vip_btn}"), id="toggle_vip", on_click=on_toggle_vip),
-        SwitchTo(Const("{back_btn}"), id="back", state=UsersSG.users_list),
+        Group(
+            Button(Format("{deposit_btn}"), id="deposit", on_click=on_deposit_click),
+            Button(Format("{decrease_btn}"), id="decrease", on_click=on_decrease_click),
+            width=2,
+        ),
+        Group(
+            Button(Format("{ban_btn}"), id="toggle_ban", on_click=on_toggle_ban),
+            Button(Format("{vip_btn}"), id="toggle_vip", on_click=on_toggle_vip),
+            width=2,
+        ),
+        SwitchTo(Format("{back_btn}"), id="back", state=UsersSG.users_list),
         state=UsersSG.user_detail,
         getter=get_user_detail,
     ),

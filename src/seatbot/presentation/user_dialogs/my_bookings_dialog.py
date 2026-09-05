@@ -104,15 +104,15 @@ my_bookings_dialog = Dialog(
     Window(
         Const("📋 <b>Мои брони</b>"),
         List(Format("{item[title]}"), items="bookings", id="bookings_list", when="has_bookings"),
-        Const("{empty_text}", when="not has_bookings"),
-        Cancel(Const("{back_btn}")),
+        Format("{empty_text}", when="not has_bookings"),
+        Cancel(Format("{back_btn}")),
         state=MyBookingsSG.list,
         getter=get_my_bookings,
     ),
     Window(
         Format("{booking_text}"),
         Button(Format("{cancel_btn}"), id="cancel_booking", on_click=on_cancel_booking, when="can_cancel"),
-        SwitchTo(Const("{back_btn}"), id="back", state=MyBookingsSG.list),
+        SwitchTo(Format("{back_btn}"), id="back", state=MyBookingsSG.list),
         state=MyBookingsSG.detail,
         getter=get_booking_detail,
     ),

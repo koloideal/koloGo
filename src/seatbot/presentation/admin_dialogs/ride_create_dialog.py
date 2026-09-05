@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 from aiogram.types import CallbackQuery, Message
 from aiogram_dialog import Dialog, DialogManager, StartMode, Window
 from aiogram_dialog.widgets.input import MessageInput
-from aiogram_dialog.widgets.kbd import Button, Cancel, SwitchTo
+from aiogram_dialog.widgets.kbd import Button, Cancel, Row, SwitchTo
 from aiogram_dialog.widgets.text import Const, Format
 from dishka import FromDishka
 from dishka.integrations.aiogram_dialog import inject
@@ -186,8 +186,10 @@ ride_create_dialog = Dialog(
     ),
     Window(
         Const("⚡ <b>Авто-одобрение?</b>\n\nОдобрять брони автоматически без вашего участия?"),
-        Button(Const("✅ Да, авто-апрув"), id="auto_yes", on_click=on_auto_yes),
-        Button(Const("❌ Нет, вручную"), id="auto_no", on_click=on_auto_no),
+        Row(
+            Button(Const("✅ Да"), id="auto_yes", on_click=on_auto_yes),
+            Button(Const("❌ Нет"), id="auto_no", on_click=on_auto_no),
+        ),
         Cancel(Const("⬅️ Отмена")),
         state=RideCreateSG.auto_approve,
     ),
@@ -196,8 +198,10 @@ ride_create_dialog = Dialog(
             "👁️ <b>Видимость</b>\n\n"
             "Сделать поездку видимой всем, или скрытой (видна только забронировавшим)?"
         ),
-        Button(Const("👁️ Видна всем"), id="vis_yes", on_click=on_vis_yes),
-        Button(Const("🔒 Скрытая"), id="vis_no", on_click=on_vis_no),
+        Row(
+            Button(Const("👁️ Видна всем"), id="vis_yes", on_click=on_vis_yes),
+            Button(Const("🔒 Скрытая"), id="vis_no", on_click=on_vis_no),
+        ),
         Cancel(Const("⬅️ Отмена")),
         state=RideCreateSG.visibility,
     ),
