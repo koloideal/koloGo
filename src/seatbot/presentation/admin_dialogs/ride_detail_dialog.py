@@ -1,9 +1,7 @@
-from typing import Any
-
 from aiogram.types import CallbackQuery
 from aiogram_dialog import Dialog, DialogManager, Window
-from aiogram_dialog.widgets.kbd import Button, Group, SwitchTo
-from aiogram_dialog.widgets.text import Const, Format, List
+from aiogram_dialog.widgets.kbd import Button, Group, Select, SwitchTo
+from aiogram_dialog.widgets.text import Const, Format
 from dishka import FromDishka
 from dishka.integrations.aiogram_dialog import inject
 
@@ -30,8 +28,10 @@ async def get_ride_bookings(
     users_dao: FromDishka[UsersDAO],
     **_kwargs,
 ):
-    start_data: dict[str, Any] | None = dialog_manager.start_data  # type: ignore[assignment]
-    ride_id: int | None = start_data.get("ride_id") if start_data else dialog_manager.dialog_data.get("ride_id")
+    start_data = dialog_manager.start_data
+    ride_id: int | None = (
+        start_data.get("ride_id") if isinstance(start_data, dict) else dialog_manager.dialog_data.get("ride_id")
+    )
     if ride_id is None:
         return {"has_bookings": False, "empty_text": "🚫 Нет броней.", "back_btn": "⬅️ Назад"}
     dialog_manager.dialog_data["ride_id"] = ride_id
@@ -90,6 +90,16 @@ async def get_booking_detail(
     }
 
 
+async def on_booking_selected(
+    callback: CallbackQuery,
+    select: Select,
+    manager: DialogManager,
+    item_id: str,
+):
+    manager.dialog_data["booking_id"] = int(item_id)
+    await manager.next()
+
+
 @inject
 async def on_approve(
     callback: CallbackQuery,
@@ -132,7 +142,14 @@ async def on_noshow(
 ride_detail_dialog = Dialog(
     Window(
         Const("📋 <b>Брони на поездку</b>"),
-        List(Format("{item[title]}"), items="bookings", id="bookings_list", when="has_bookings"),
+        Select(
+            Format("{item[title]}"),
+            id="bookings_sel",
+            item_id_getter=lambda item: str(item["booking_id"]),
+            items="bookings",
+            on_click=on_booking_selected,
+            when="has_bookings",
+        ),
         Format("{empty_text}", when="not has_bookings"),
         SwitchTo(Format("{back_btn}"), id="back", state=RidesMgmtSG.ride_detail),
         state=RideBookingsSG.bookings_list,

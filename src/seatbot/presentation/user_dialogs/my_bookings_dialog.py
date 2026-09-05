@@ -1,7 +1,7 @@
 from aiogram.types import CallbackQuery
 from aiogram_dialog import Dialog, DialogManager, Window
-from aiogram_dialog.widgets.kbd import Button, Cancel, SwitchTo
-from aiogram_dialog.widgets.text import Const, Format, List
+from aiogram_dialog.widgets.kbd import Button, Cancel, Select, SwitchTo
+from aiogram_dialog.widgets.text import Const, Format
 from dishka import FromDishka
 from dishka.integrations.aiogram_dialog import inject
 
@@ -100,10 +100,27 @@ async def on_cancel_booking(
     await manager.switch_to(MyBookingsSG.list)
 
 
+async def on_booking_selected(
+    callback: CallbackQuery,
+    select: Select,
+    manager: DialogManager,
+    item_id: str,
+):
+    manager.dialog_data["booking_id"] = int(item_id)
+    await manager.next()
+
+
 my_bookings_dialog = Dialog(
     Window(
         Const("📋 <b>Мои брони</b>"),
-        List(Format("{item[title]}"), items="bookings", id="bookings_list", when="has_bookings"),
+        Select(
+            Format("{item[title]}"),
+            id="bookings_sel",
+            item_id_getter=lambda item: str(item["booking_id"]),
+            items="bookings",
+            on_click=on_booking_selected,
+            when="has_bookings",
+        ),
         Format("{empty_text}", when="not has_bookings"),
         Cancel(Format("{back_btn}")),
         state=MyBookingsSG.list,

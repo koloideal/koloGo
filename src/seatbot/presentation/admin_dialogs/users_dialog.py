@@ -1,7 +1,7 @@
 from aiogram.types import CallbackQuery
 from aiogram_dialog import Dialog, DialogManager, StartMode, Window
-from aiogram_dialog.widgets.kbd import Button, Cancel, Group, SwitchTo
-from aiogram_dialog.widgets.text import Const, Format, List
+from aiogram_dialog.widgets.kbd import Button, Cancel, Group, Select, SwitchTo
+from aiogram_dialog.widgets.text import Const, Format
 from dishka import FromDishka
 from dishka.integrations.aiogram_dialog import inject
 
@@ -115,10 +115,27 @@ async def on_decrease_click(callback: CallbackQuery, button: Button, manager: Di
     await manager.start(DepositSG.decrease_amount, mode=StartMode.NORMAL)
 
 
+async def on_user_selected(
+    callback: CallbackQuery,
+    select: Select,
+    manager: DialogManager,
+    item_id: str,
+):
+    manager.dialog_data["user_id"] = int(item_id)
+    await manager.next()
+
+
 users_dialog = Dialog(
     Window(
         Const("👥 <b>Клиенты</b>"),
-        List(Format("{item[title]}"), items="users", id="users_list", when="has_users"),
+        Select(
+            Format("{item[title]}"),
+            id="users_sel",
+            item_id_getter=lambda item: str(item["user_id"]),
+            items="users",
+            on_click=on_user_selected,
+            when="has_users",
+        ),
         Format("{empty_text}", when="not has_users"),
         Cancel(Format("{back_btn}")),
         state=UsersSG.users_list,

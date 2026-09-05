@@ -5,9 +5,10 @@ from aiogram_dialog import Dialog, DialogManager, StartMode, Window
 from aiogram_dialog.api.entities import ChatEvent
 from aiogram_dialog.widgets.input import MessageInput
 from aiogram_dialog.widgets.kbd import (Button, Calendar, Cancel, ManagedCalendar,
-                                        ManagedTimeSelect, Row, SwitchTo, TimeSelect)
+                                        ManagedTimeSelect, Row, Select, SwitchTo,
+                                        TimeSelect)
 from aiogram_dialog.widgets.kbd.time import OnValueChanged
-from aiogram_dialog.widgets.text import Const, Format, List
+from aiogram_dialog.widgets.text import Const, Format
 from dishka import FromDishka
 from dishka.integrations.aiogram_dialog import inject
 
@@ -261,24 +262,21 @@ async def on_create(
 @inject
 async def on_template_selected(
     callback: CallbackQuery,
-    button: Button,
+    select: Select,
     manager: DialogManager,
+    item_id: str,
     rides_dao: FromDishka[RidesDAO],
 ):
-    ride_id: int = manager.dialog_data.get("template_ride_id", 0)
-    if not ride_id:
-        return
+    ride_id = int(item_id)
     template = await rides_dao.get_by_id(ride_id)
     if not template:
         await callback.answer("Шаблон не найден", show_alert=True)
         return
-    # Копируем данные шаблона, пропускаем цену/авто-апрув/видимость/заметку
     manager.dialog_data["template_ride_id"] = ride_id
     manager.dialog_data["price"] = float(template.price)
     manager.dialog_data["auto_approve"] = template.auto_approve
     manager.dialog_data["is_visible"] = template.is_visible
     manager.dialog_data["note"] = template.note
-    # Шаблон — сразу к календарю (выбор новой даты)
     await callback.answer("Шаблон загружен, выберите дату", show_alert=True)
     await manager.start(RideCreateSG.calendar, mode=StartMode.NORMAL)
 
@@ -290,7 +288,14 @@ ride_create_dialog = Dialog(
     # 1. Выбор: шаблон или новая поездка
     Window(
         Const("➕ <b>Создание поездки</b>\n\nВыберите шаблон или создайте новую:"),
-        List(Format("{item[title]}"), items="templates", id="templates_list", when="has_templates"),
+        Select(
+            Format("{item[title]}"),
+            id="templates_sel",
+            item_id_getter=lambda item: str(item["ride_id"]),
+            items="templates",
+            on_click=on_template_selected,
+            when="has_templates",
+        ),
         Format("{empty_text}", when="not has_templates"),
         Button(Const("🆕 Новая поездка"), id="new_ride", on_click=lambda c, b, m: m.start(RideCreateSG.calendar, mode=StartMode.NORMAL)),
         Cancel(Format("{back_btn}")),

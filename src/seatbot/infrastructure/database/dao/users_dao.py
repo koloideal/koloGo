@@ -1,4 +1,4 @@
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from decimal import Decimal
 
 from sqlalchemy import func, select
@@ -27,8 +27,9 @@ class UsersDAO:
         )
         await self.session.execute(stmt)
         await self.session.flush()
-        orm_user = await self.session.scalar(select(OrmUser).where(OrmUser.user_id == user_id))
-        return self._map_to_domain(orm_user)  # type: ignore[arg-type]
+        result = await self.session.execute(select(OrmUser).where(OrmUser.user_id == user_id))
+        orm_user = result.scalar_one()
+        return self._map_to_domain(orm_user)
 
     async def get_or_create(self, user_id: int, username: str | None) -> User:
         user = await self.get_by_id(user_id)
@@ -42,7 +43,7 @@ class UsersDAO:
         if not orm_user:
             return None
         orm_user.username = username
-        return self._map_to_domain(orm_user)  # type: ignore[arg-type]
+        return self._map_to_domain(orm_user)
 
     async def increase_balance(self, user_id: int, amount: float) -> User | None:
         result = await self.session.execute(select(OrmUser).where(OrmUser.user_id == user_id))
@@ -50,7 +51,7 @@ class UsersDAO:
         if not orm_user:
             return None
         orm_user.balance += Decimal(str(amount))
-        return self._map_to_domain(orm_user)  # type: ignore[arg-type]
+        return self._map_to_domain(orm_user)
 
     async def decrease_balance(self, user_id: int, amount: float) -> User | None:
         result = await self.session.execute(select(OrmUser).where(OrmUser.user_id == user_id))
@@ -60,7 +61,7 @@ class UsersDAO:
         if orm_user.balance < amount:
             raise InsufficientBalanceError(required=amount, available=float(orm_user.balance))
         orm_user.balance -= Decimal(str(amount))
-        return self._map_to_domain(orm_user)  # type: ignore[arg-type]
+        return self._map_to_domain(orm_user)
 
     async def set_balance(self, user_id: int, new_balance: float) -> User | None:
         result = await self.session.execute(select(OrmUser).where(OrmUser.user_id == user_id))
@@ -68,7 +69,7 @@ class UsersDAO:
         if not orm_user:
             return None
         orm_user.balance = Decimal(str(new_balance))
-        return self._map_to_domain(orm_user)  # type: ignore[arg-type]
+        return self._map_to_domain(orm_user)
 
     async def ban_user(self, user_id: int) -> User | None:
         result = await self.session.execute(select(OrmUser).where(OrmUser.user_id == user_id))
@@ -76,7 +77,7 @@ class UsersDAO:
         if not orm_user:
             return None
         orm_user.is_banned = True
-        return self._map_to_domain(orm_user)  # type: ignore[arg-type]
+        return self._map_to_domain(orm_user)
 
     async def unban_user(self, user_id: int) -> User | None:
         result = await self.session.execute(select(OrmUser).where(OrmUser.user_id == user_id))
@@ -84,7 +85,7 @@ class UsersDAO:
         if not orm_user:
             return None
         orm_user.is_banned = False
-        return self._map_to_domain(orm_user)  # type: ignore[arg-type]
+        return self._map_to_domain(orm_user)
 
     async def set_vip(self, user_id: int, is_vip: bool) -> User | None:
         result = await self.session.execute(select(OrmUser).where(OrmUser.user_id == user_id))
@@ -92,7 +93,7 @@ class UsersDAO:
         if not orm_user:
             return None
         orm_user.is_vip = is_vip
-        return self._map_to_domain(orm_user)  # type: ignore[arg-type]
+        return self._map_to_domain(orm_user)
 
     async def get_all(self, limit: int = -1) -> list[User]:
         query = select(OrmUser).order_by(OrmUser.registration_date.desc())
