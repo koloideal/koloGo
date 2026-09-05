@@ -6,7 +6,7 @@ from dishka.integrations.aiogram_dialog import inject
 
 from seatbot.application.services.statistics import StatisticsService
 
-from ..user_dialogs.states import AdminSG
+from ..user_dialogs.states import AdminStatsSG
 
 
 @inject
@@ -31,7 +31,7 @@ statistics_dialog = Dialog(
     Window(
         Format("{stats_text}"),
         Cancel(Const("{back_btn}")),
-        state=AdminSG.stats,
+        state=AdminStatsSG.stats,
         getter=get_admin_stats,
     ),
 )

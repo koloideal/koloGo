@@ -9,7 +9,7 @@ from seatbot.application.services.statistics import StatisticsService
 from seatbot.application.services.user import UserService
 from seatbot.infrastructure.database.dao import UsersDAO
 
-from ..user_dialogs.states import AdminSG
+from ..user_dialogs.states import DepositSG, UsersSG
 
 
 @inject
@@ -108,11 +108,11 @@ async def on_toggle_vip(
 
 
 async def on_deposit_click(callback: CallbackQuery, button: Button, manager: DialogManager):
-    await manager.start(AdminSG.user_deposit_amount, mode=StartMode.NORMAL)
+    await manager.start(DepositSG.deposit_amount, mode=StartMode.NORMAL)
 
 
 async def on_decrease_click(callback: CallbackQuery, button: Button, manager: DialogManager):
-    await manager.start(AdminSG.user_decrease_amount, mode=StartMode.NORMAL)
+    await manager.start(DepositSG.decrease_amount, mode=StartMode.NORMAL)
 
 
 users_dialog = Dialog(
@@ -121,7 +121,7 @@ users_dialog = Dialog(
         List(Format("{item[title]}"), items="users", id="users_list", when="has_users"),
         Const("{empty_text}", when="not has_users"),
         Cancel(Const("{back_btn}")),
-        state=AdminSG.users_list,
+        state=UsersSG.users_list,
         getter=get_users_list,
     ),
     Window(
@@ -130,8 +130,8 @@ users_dialog = Dialog(
         Button(Format("{decrease_btn}"), id="decrease", on_click=on_decrease_click),
         Button(Format("{ban_btn}"), id="toggle_ban", on_click=on_toggle_ban),
         Button(Format("{vip_btn}"), id="toggle_vip", on_click=on_toggle_vip),
-        SwitchTo(Const("{back_btn}"), id="back", state=AdminSG.users_list),
-        state=AdminSG.user_detail,
+        SwitchTo(Const("{back_btn}"), id="back", state=UsersSG.users_list),
+        state=UsersSG.user_detail,
         getter=get_user_detail,
     ),
 )

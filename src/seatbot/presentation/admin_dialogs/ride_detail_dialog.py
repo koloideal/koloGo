@@ -9,7 +9,7 @@ from seatbot.application.services.ride import RideService
 from seatbot.domain.schemas import BookingStatus
 from seatbot.infrastructure.database.dao import BookingsDAO, RidesDAO, UsersDAO
 
-from ..user_dialogs.states import AdminSG
+from ..user_dialogs.states import RideBookingsSG, RidesMgmtSG
 
 _STATUS_EMOJI = {
     BookingStatus.PENDING: "⏳",
@@ -97,7 +97,7 @@ async def on_approve(
     booking_id: int = manager.dialog_data["booking_id"]
     await ride_service.approve_booking(booking_id)
     await callback.answer("Одобрено", show_alert=True)
-    await manager.switch_to(AdminSG.ride_bookings_list)
+    await manager.switch_to(RideBookingsSG.bookings_list)
 
 
 @inject
@@ -110,7 +110,7 @@ async def on_reject(
     booking_id: int = manager.dialog_data["booking_id"]
     await ride_service.reject_booking(booking_id)
     await callback.answer("Отклонено, возврат выполнен", show_alert=True)
-    await manager.switch_to(AdminSG.ride_bookings_list)
+    await manager.switch_to(RideBookingsSG.bookings_list)
 
 
 @inject
@@ -123,7 +123,7 @@ async def on_noshow(
     booking_id: int = manager.dialog_data["booking_id"]
     await ride_service.mark_no_show(booking_id)
     await callback.answer("Отмечено no-show", show_alert=True)
-    await manager.switch_to(AdminSG.ride_bookings_list)
+    await manager.switch_to(RideBookingsSG.bookings_list)
 
 
 ride_detail_dialog = Dialog(
@@ -131,8 +131,8 @@ ride_detail_dialog = Dialog(
         Const("📋 <b>Брони на поездку</b>"),
         List(Format("{item[title]}"), items="bookings", id="bookings_list", when="has_bookings"),
         Const("{empty_text}", when="not has_bookings"),
-        SwitchTo(Const("{back_btn}"), id="back", state=AdminSG.ride_detail),
-        state=AdminSG.ride_bookings_list,
+        SwitchTo(Const("{back_btn}"), id="back", state=RidesMgmtSG.ride_detail),
+        state=RideBookingsSG.bookings_list,
         getter=get_ride_bookings,
     ),
     Window(
@@ -140,8 +140,8 @@ ride_detail_dialog = Dialog(
         Button(Format("{approve_btn}"), id="approve", on_click=on_approve, when="is_pending"),
         Button(Format("{reject_btn}"), id="reject", on_click=on_reject, when="is_pending"),
         Button(Format("{noshow_btn}"), id="noshow", on_click=on_noshow, when="is_approved"),
-        SwitchTo(Const("{back_btn}"), id="back", state=AdminSG.ride_bookings_list),
-        state=AdminSG.booking_detail,
+        SwitchTo(Const("{back_btn}"), id="back", state=RideBookingsSG.bookings_list),
+        state=RideBookingsSG.booking_detail,
         getter=get_booking_detail,
     ),
 )

@@ -24,23 +24,44 @@ class StatsSG(StatesGroup):
     stats = State()
 
 
-class AdminSG(StatesGroup):
+class AdminPanelSG(StatesGroup):
     main = State()
+
+
+class RidesMgmtSG(StatesGroup):
     rides_list = State()
     ride_detail = State()
-    ride_create_departure = State()
-    ride_create_price = State()
-    ride_create_seats = State()
-    ride_create_auto_approve = State()
-    ride_create_visibility = State()
-    ride_create_note = State()
-    ride_create_confirm = State()
-    ride_bookings_list = State()
+
+
+class RideCreateSG(StatesGroup):
+    departure = State()
+    price = State()
+    seats = State()
+    auto_approve = State()
+    visibility = State()
+    note = State()
+    confirm = State()
+
+
+class RideBookingsSG(StatesGroup):
+    bookings_list = State()
     booking_detail = State()
+
+
+class UsersSG(StatesGroup):
     users_list = State()
     user_detail = State()
-    user_deposit_amount = State()
-    user_decrease_amount = State()
-    broadcast_text = State()
-    broadcast_confirm = State()
+
+
+class DepositSG(StatesGroup):
+    deposit_amount = State()
+    decrease_amount = State()
+
+
+class BroadcastSG(StatesGroup):
+    text = State()
+    confirm = State()
+
+
+class AdminStatsSG(StatesGroup):
     stats = State()

@@ -8,7 +8,7 @@ from dishka.integrations.aiogram_dialog import inject
 
 from seatbot.application.services.broadcast import BroadcastService
 
-from ..user_dialogs.states import AdminSG
+from ..user_dialogs.states import AdminPanelSG, BroadcastSG
 
 
 async def on_broadcast_text_input(message: Message, widget: MessageInput, manager: DialogManager):
@@ -37,7 +37,7 @@ async def on_send_broadcast(
     success, total = await broadcast_service.broadcast(text)
     if callback.message:
         await callback.message.answer(f"✅ Рассылка завершена.\nОтправлено: {success}/{total}")
-    await manager.start(AdminSG.main, mode=StartMode.RESET_STACK)
+    await manager.start(AdminPanelSG.main, mode=StartMode.RESET_STACK)
 
 
 broadcast_dialog = Dialog(
@@ -48,14 +48,14 @@ broadcast_dialog = Dialog(
         ),
         MessageInput(on_broadcast_text_input),
         Cancel(Const("⬅️ Отмена")),
-        state=AdminSG.broadcast_text,
+        state=BroadcastSG.text,
     ),
     Window(
         Const("📋 <b>Предпросмотр:</b>\n\n"),
         Format("{preview_text}"),
         Button(Format("{send_btn}"), id="send", on_click=on_send_broadcast),
-        SwitchTo(Format("{back_btn}"), id="back", state=AdminSG.broadcast_text),
-        state=AdminSG.broadcast_confirm,
+        SwitchTo(Format("{back_btn}"), id="back", state=BroadcastSG.text),
+        state=BroadcastSG.confirm,
         getter=get_broadcast_confirm,
     ),
 )

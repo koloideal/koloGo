@@ -9,7 +9,7 @@ from dishka.integrations.aiogram_dialog import inject
 from seatbot.application.services.deposit import DepositService
 from seatbot.domain.exceptions import InsufficientBalanceError
 
-from ..user_dialogs.states import AdminSG
+from ..user_dialogs.states import DepositSG, UsersSG
 
 
 async def _parse_amount(text: str) -> float | None:
@@ -40,7 +40,7 @@ async def on_topup_input(
         await message.answer("❌ Пользователь не найден.")
         return
     await message.answer(f"✅ Депозит пополнен на {amount:.2f} BYN. Баланс: {user.balance:.2f} BYN")
-    await manager.start(AdminSG.user_detail, mode=StartMode.RESET_STACK)
+    await manager.start(UsersSG.user_detail, mode=StartMode.RESET_STACK)
 
 
 @inject
@@ -64,7 +64,7 @@ async def on_decrease_input(
         await message.answer("❌ Пользователь не найден.")
         return
     await message.answer(f"✅ Списано {amount:.2f} BYN. Баланс: {user.balance:.2f} BYN")
-    await manager.start(AdminSG.user_detail, mode=StartMode.RESET_STACK)
+    await manager.start(UsersSG.user_detail, mode=StartMode.RESET_STACK)
 
 
 deposit_dialog = Dialog(
@@ -72,12 +72,12 @@ deposit_dialog = Dialog(
         Const("💰 <b>Пополнение депозита</b>\n\nВведите сумму в BYN:"),
         MessageInput(on_topup_input),
         Cancel(Const("⬅️ Отмена")),
-        state=AdminSG.user_deposit_amount,
+        state=DepositSG.deposit_amount,
     ),
     Window(
         Const("💸 <b>Списание с депозита</b>\n\nВведите сумму в BYN:"),
         MessageInput(on_decrease_input),
         Cancel(Const("⬅️ Отмена")),
-        state=AdminSG.user_decrease_amount,
+        state=DepositSG.decrease_amount,
     ),
 )

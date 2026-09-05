@@ -11,7 +11,7 @@ from dishka.integrations.aiogram_dialog import inject
 from seatbot.application.services.ride import RideService
 from seatbot.infrastructure.config.models import Config
 
-from ..user_dialogs.states import AdminSG
+from ..user_dialogs.states import RideCreateSG, RidesMgmtSG
 
 
 def _parse_datetime(text: str) -> datetime | None:
@@ -132,7 +132,7 @@ async def on_create(
         is_visible=is_visible,
     )
     await callback.answer("✅ Поездка создана!", show_alert=True)
-    await manager.start(AdminSG.rides_list, mode=StartMode.RESET_STACK)
+    await manager.start(RidesMgmtSG.rides_list, mode=StartMode.RESET_STACK)
 
 
 async def on_auto_yes(callback: CallbackQuery, button: Button, manager: DialogManager):
@@ -165,7 +165,7 @@ ride_create_dialog = Dialog(
         ),
         MessageInput(on_departure_input),
         Cancel(Const("⬅️ Отмена")),
-        state=AdminSG.ride_create_departure,
+        state=RideCreateSG.departure,
     ),
     Window(
         Const(
@@ -176,20 +176,20 @@ ride_create_dialog = Dialog(
         ),
         MessageInput(on_price_input),
         Cancel(Const("⬅️ Отмена")),
-        state=AdminSG.ride_create_price,
+        state=RideCreateSG.price,
     ),
     Window(
         Const("🪑 <b>Количество мест</b>\n\nВведите число от 1 до 10 (по умолчанию 4)."),
         MessageInput(on_seats_input),
         Cancel(Const("⬅️ Отмена")),
-        state=AdminSG.ride_create_seats,
+        state=RideCreateSG.seats,
     ),
     Window(
         Const("⚡ <b>Авто-одобрение?</b>\n\nОдобрять брони автоматически без вашего участия?"),
         Button(Const("✅ Да, авто-апрув"), id="auto_yes", on_click=on_auto_yes),
         Button(Const("❌ Нет, вручную"), id="auto_no", on_click=on_auto_no),
         Cancel(Const("⬅️ Отмена")),
-        state=AdminSG.ride_create_auto_approve,
+        state=RideCreateSG.auto_approve,
     ),
     Window(
         Const(
@@ -199,7 +199,7 @@ ride_create_dialog = Dialog(
         Button(Const("👁️ Видна всем"), id="vis_yes", on_click=on_vis_yes),
         Button(Const("🔒 Скрытая"), id="vis_no", on_click=on_vis_no),
         Cancel(Const("⬅️ Отмена")),
-        state=AdminSG.ride_create_visibility,
+        state=RideCreateSG.visibility,
     ),
     Window(
         Const(
@@ -209,13 +209,13 @@ ride_create_dialog = Dialog(
         MessageInput(on_note_input),
         Button(Const("⏭️ Пропустить"), id="note_skip", on_click=on_note_skip),
         Cancel(Const("⬅️ Отмена")),
-        state=AdminSG.ride_create_note,
+        state=RideCreateSG.note,
     ),
     Window(
         Format("{confirm_text}"),
         Button(Format("{create_btn}"), id="create", on_click=on_create),
-        SwitchTo(Format("{back_btn}"), id="back", state=AdminSG.ride_create_departure),
-        state=AdminSG.ride_create_confirm,
+        SwitchTo(Format("{back_btn}"), id="back", state=RideCreateSG.departure),
+        state=RideCreateSG.confirm,
         getter=get_confirm_data,
     ),
 )

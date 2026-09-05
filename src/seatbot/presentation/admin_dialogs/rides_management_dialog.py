@@ -10,7 +10,7 @@ from seatbot.domain.schemas import RideStatus
 from seatbot.infrastructure.database.dao import RidesDAO
 from seatbot.infrastructure.notifications import MessageBuilder
 
-from ..user_dialogs.states import AdminSG
+from ..user_dialogs.states import RideBookingsSG, RidesMgmtSG
 
 _STATUS_EMOJI = {
     RideStatus.OPEN: "🟢",
@@ -80,13 +80,12 @@ async def on_complete(
     manager: DialogManager,
     rides_dao: FromDishka[RidesDAO],
 ):
-
     ride_id: int = manager.dialog_data["ride_id"]
-    container = manager.middleware_data["dishka_container"]  # type: ignore[index]
+    container = manager.middleware_data["dishka_container"]
     ride_service: RideService = await container.get(RideService)
     await ride_service.complete_ride(ride_id)
     await callback.answer("Поездка завершена", show_alert=True)
-    await manager.switch_to(AdminSG.rides_list)
+    await manager.switch_to(RidesMgmtSG.rides_list)
 
 
 @inject
@@ -95,13 +94,12 @@ async def on_cancel_ride(
     button: Button,
     manager: DialogManager,
 ):
-
     ride_id: int = manager.dialog_data["ride_id"]
-    container = manager.middleware_data["dishka_container"]  # type: ignore[index]
+    container = manager.middleware_data["dishka_container"]
     ride_service: RideService = await container.get(RideService)
     await ride_service.cancel_ride(ride_id)
     await callback.answer("Поездка отменена, возврат выполнен", show_alert=True)
-    await manager.switch_to(AdminSG.rides_list)
+    await manager.switch_to(RidesMgmtSG.rides_list)
 
 
 @inject
@@ -138,18 +136,18 @@ rides_management_dialog = Dialog(
         List(Format("{item[title]}"), items="rides", id="rides_list", when="has_rides"),
         Const("{empty_text}", when="not has_rides"),
         Cancel(Const("{back_btn}")),
-        state=AdminSG.rides_list,
+        state=RidesMgmtSG.rides_list,
         getter=get_rides_list,
     ),
     Window(
         Format("{ride_text}"),
-        Button(Format("{bookings_btn}"), id="to_bookings", on_click=lambda c, b, m: m.start(AdminSG.ride_bookings_list, mode=StartMode.NORMAL)),
+        Button(Format("{bookings_btn}"), id="to_bookings", on_click=lambda c, b, m: m.start(RideBookingsSG.bookings_list, mode=StartMode.NORMAL)),
         Button(Format("{toggle_vis_btn}"), id="toggle_vis", on_click=on_toggle_visibility, when="is_open"),
         Button(Format("{toggle_auto_btn}"), id="toggle_auto", on_click=on_toggle_auto_approve, when="is_open"),
         Button(Format("{complete_btn}"), id="complete", on_click=on_complete, when="is_active"),
         Button(Format("{cancel_btn}"), id="cancel_ride", on_click=on_cancel_ride, when="is_active"),
-        SwitchTo(Const("{back_btn}"), id="back", state=AdminSG.rides_list),
-        state=AdminSG.ride_detail,
+        SwitchTo(Const("{back_btn}"), id="back", state=RidesMgmtSG.rides_list),
+        state=RidesMgmtSG.ride_detail,
         getter=get_ride_detail,
     ),
 )
