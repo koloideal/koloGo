@@ -24,6 +24,6 @@ class CreateOrGetUserInteractor:
             return
 
         user = await self._users_dao.create(user_id=cmd.user_id, username=cmd.username)
-        await self._bot_service.send_log_to_admin_channel(
+        await self._bot_service.send_log_to_admin(
             MessageBuilder.new_user_admin_log(user)
         )

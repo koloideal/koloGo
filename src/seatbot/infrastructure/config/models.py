@@ -24,7 +24,6 @@ class RedisConfig:
 class BotConfig:
     token: str
     creator_id: int
-    admin_channel: int
     seats_per_ride: int = 4
 
 

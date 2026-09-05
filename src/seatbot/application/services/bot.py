@@ -20,9 +20,9 @@ class BotService:
         ]
         await self._bot.set_my_commands(commands)
 
-    async def send_log_to_admin_channel(self, text: str) -> None:
+    async def send_log_to_admin(self, text: str) -> None:
         await self._bot.send_message(
-            chat_id=self._config.bot.admin_channel,
+            chat_id=self._config.bot.creator_id,
             text=text,
         )
 

@@ -164,7 +164,7 @@ class RideService:
                 user.user_id, MessageBuilder.booking_approved_notification(ride)
             )
 
-        await self._bot_service.send_log_to_admin_channel(
+        await self._bot_service.send_log_to_admin(
             MessageBuilder.new_booking_admin_log(booking, user, ride)
         )
         return booking
