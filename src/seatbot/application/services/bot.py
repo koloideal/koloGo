@@ -15,10 +15,7 @@ class BotService:
 
     async def process_set_commands(self) -> None:
         commands = [
-            BotCommand(command="start", description="Запустить бота / главное меню"),
-            BotCommand(command="rides", description="Ближайшие поездки"),
-            BotCommand(command="mybookings", description="Мои брони"),
-            BotCommand(command="balance", description="Мой депозит"),
+            BotCommand(command="start", description="Главное меню"),
             BotCommand(command="admin", description="Панель водителя (только админ)"),
         ]
         await self._bot.set_my_commands(commands)
