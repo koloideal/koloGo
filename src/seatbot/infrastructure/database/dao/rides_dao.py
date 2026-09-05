@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from decimal import Decimal
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from seatbot.domain.schemas import Ride, RideStatus, RideWithStats
@@ -85,7 +85,19 @@ class RidesDAO:
         return out
 
     async def list_all(self, limit: int = 50) -> list[RideWithStats]:
-        query = select(OrmRide).order_by(OrmRide.departure_at.desc()).limit(limit)
+        """Сортировка: активные (ближайшие по времени) → завершённые → отменённые."""
+        status_order = case(
+            (OrmRide.status == RideStatus.OPEN.value, 0),
+            (OrmRide.status == RideStatus.CLOSED.value, 1),
+            (OrmRide.status == RideStatus.COMPLETED.value, 2),
+            (OrmRide.status == RideStatus.CANCELLED.value, 3),
+            else_=4,
+        )
+        query = (
+            select(OrmRide)
+            .order_by(status_order, OrmRide.departure_at.asc())
+            .limit(limit)
+        )
         result = await self.session.execute(query)
         rides = [self._map_to_domain(r) for r in result.scalars().all()]
         out: list[RideWithStats] = []

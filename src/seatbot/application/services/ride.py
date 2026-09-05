@@ -1,9 +1,8 @@
 from datetime import UTC, datetime, timedelta
 
 from seatbot.application.services.bot import BotService
-from seatbot.domain.exceptions import (AlreadyBookedError, InsufficientBalanceError,
-                                       NoFreeSeatsError, RideNotBookableError,
-                                       UserBannedError)
+from seatbot.domain.exceptions import (AlreadyBookedError, NoFreeSeatsError,
+                                       RideNotBookableError, UserBannedError)
 from seatbot.domain.schemas import (Booking, BookingStatus, Ride, RideStatus,
                                     TransactionType, User)
 from seatbot.infrastructure.database.dao import (BookingsDAO, RidesDAO, TransactionsDAO,
@@ -172,12 +171,20 @@ class RideService:
 
         is_vip = user.is_vip
         is_free = ride.is_free or is_vip
-        paid_amount = 0.0 if is_free else ride.price
+        ride_price = float(ride.price)
 
-        if not is_free and user.balance < paid_amount:
-            raise InsufficientBalanceError(required=paid_amount, available=user.balance)
+        # Депозит — только для предоплаты. Если баланса не хватает,
+        # бронь всё равно создаётся (налик при встрече), paid_amount=0.
+        # С депозита списываем только если баланс покрывает полную цену.
+        if is_free:
+            paid_amount = 0.0
+        elif user.balance >= ride_price:
+            paid_amount = ride_price
+        else:
+            # Налик — ничего не списываем
+            paid_amount = 0.0
 
-        if not is_free:
+        if paid_amount > 0:
             await self._users_dao.decrease_balance(user.user_id, paid_amount)
             await self._transactions_dao.create(
                 user_id=user.user_id,
