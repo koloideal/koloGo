@@ -109,6 +109,26 @@ class RidesDAO:
         result = await self.session.execute(query)
         return [self._map_to_domain(r) for r in result.scalars().all()]
 
+    async def list_templates(self, limit: int = 10) -> list[Ride]:
+        """Последние поездки как шаблоны (уникальные по цене + заметке)."""
+        query = (
+            select(OrmRide)
+            .order_by(OrmRide.departure_at.desc())
+            .limit(limit * 3)
+        )
+        result = await self.session.execute(query)
+        rides = [self._map_to_domain(r) for r in result.scalars().all()]
+        seen: set[tuple[float, str | None]] = set()
+        unique: list[Ride] = []
+        for ride in rides:
+            key = (float(ride.price), ride.note)
+            if key not in seen:
+                seen.add(key)
+                unique.append(ride)
+            if len(unique) >= limit:
+                break
+        return unique
+
     async def set_status(self, ride_id: int, status: RideStatus) -> Ride | None:
         result = await self.session.execute(select(OrmRide).where(OrmRide.id == ride_id))
         orm_ride = result.scalar_one_or_none()
@@ -179,4 +199,5 @@ class RidesDAO:
             auto_approve=orm_ride.auto_approve,
             status=RideStatus(orm_ride.status),
             created_at=orm_ride.created_at,
+            note=orm_ride.note,
         )

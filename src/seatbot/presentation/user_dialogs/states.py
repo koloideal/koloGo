@@ -34,12 +34,14 @@ class RidesMgmtSG(StatesGroup):
 
 
 class RideCreateSG(StatesGroup):
-    departure = State()
+    select_template = State()
+    calendar = State()
+    time = State()
     price = State()
-    seats = State()
     auto_approve = State()
     visibility = State()
     note = State()
+    repeat_days = State()
     confirm = State()
 
 

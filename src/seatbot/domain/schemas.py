@@ -47,6 +47,7 @@ class Ride:
     auto_approve: bool
     status: RideStatus
     created_at: datetime
+    note: str | None = None
 
     @property
     def is_free(self) -> bool:

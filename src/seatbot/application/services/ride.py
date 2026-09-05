@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from seatbot.application.services.bot import BotService
 from seatbot.domain.exceptions import (AlreadyBookedError, InsufficientBalanceError,
@@ -32,18 +32,53 @@ class RideService:
         self,
         departure_at: datetime,
         price: float,
-        seats_total: int,
         auto_approve: bool,
+        seats_total: int = 4,
         note: str | None = None,
         is_visible: bool = True,
-    ) -> Ride:
-        return await self._rides_dao.create(
+        repeat_days: int = 1,
+    ) -> list[Ride]:
+        """Создаёт поездку. Если repeat_days > 1, создаёт несколько подряд."""
+        rides = []
+        for i in range(repeat_days):
+            dep = departure_at + timedelta(days=i)
+            ride = await self._rides_dao.create(
+                departure_at=dep,
+                price=price,
+                seats_total=seats_total,
+                auto_approve=auto_approve,
+                note=note,
+                is_visible=is_visible,
+            )
+            rides.append(ride)
+        return rides
+
+    async def create_ride_from_template(
+        self,
+        template_ride_id: int,
+        start_date: datetime,
+        repeat_days: int = 1,
+    ) -> list[Ride] | None:
+        """Создаёт поездки из шаблона (прошлой поездки), меняя только дату."""
+        template = await self._rides_dao.get_by_id(template_ride_id)
+        if not template:
+            return None
+        # Берем время из шаблона, дату из start_date
+        departure_at = start_date.replace(
+            hour=template.departure_at.hour,
+            minute=template.departure_at.minute,
+            second=0,
+            microsecond=0,
+            tzinfo=UTC,
+        )
+        return await self.create_ride(
             departure_at=departure_at,
-            price=price,
-            seats_total=seats_total,
-            auto_approve=auto_approve,
-            note=note,
-            is_visible=is_visible,
+            price=float(template.price),
+            auto_approve=template.auto_approve,
+            seats_total=template.seats_total,
+            note=template.note,
+            is_visible=template.is_visible,
+            repeat_days=repeat_days,
         )
 
     async def cancel_ride(self, ride_id: int) -> Ride | None:

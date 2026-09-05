@@ -13,7 +13,7 @@ admin_panel_dialog = Dialog(
         ),
         Row(
             Start(Const("🚗 Поездки"), id="rides_mgmt", state=RidesMgmtSG.rides_list),
-            Start(Const("➕ Создать"), id="ride_create", state=RideCreateSG.departure),
+            Start(Const("➕ Создать"), id="ride_create", state=RideCreateSG.select_template),
         ),
         Row(
             Start(Const("👥 Клиенты"), id="users", state=UsersSG.users_list),
