@@ -61,6 +61,8 @@ class MessageBuilder:
             lines.append("⚡ Авто-одобрение включено")
         if not r.is_visible:
             lines.append("👁️ Скрытая (видна только забронировавшим)")
+        if r.note:
+            lines.append(f"📝 {escape(r.note)}")
         return "\n".join(lines)
 
     @staticmethod
@@ -90,12 +92,15 @@ class MessageBuilder:
             BookingStatus.NO_SHOW: "🙅 Неявка",
         }
         payment = MessageBuilder.payment_full(booking.paid_amount, float(ride.price), ride.is_free or is_vip)
-        return (
-            f"<b>Бронь #{booking.booking_id}</b>\n"
-            f"🕒 {_fmt_dt(ride.departure_at)}\n"
-            f"{payment}\n"
-            f"📋 Статус: {status_map.get(booking.status, BOOKING_STATUS_RU.get(booking.status, '—'))}"
-        )
+        lines = [
+            f"<b>Бронь #{booking.booking_id}</b>",
+            f"🕒 {_fmt_dt(ride.departure_at)}",
+            payment,
+            f"📋 Статус: {status_map.get(booking.status, BOOKING_STATUS_RU.get(booking.status, '—'))}",
+        ]
+        if ride.note:
+            lines.append(f"📝 {escape(ride.note)}")
+        return "\n".join(lines)
 
     @staticmethod
     def booking_approved_notification(ride: Ride, due_amount: float = 0.0) -> str:

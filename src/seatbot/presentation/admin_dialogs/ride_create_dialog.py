@@ -166,10 +166,13 @@ async def on_date_selected(
         )
         if isinstance(event, CallbackQuery):
             if rides:
-                await event.answer("✅ Поездка создана из шаблона", show_alert=True)
+                await manager.start(RidesMgmtSG.rides_list, mode=StartMode.RESET_STACK)
+                await event.answer("✅ Поездка создана из шаблона")
             else:
                 await event.answer("❌ Шаблон не найден", show_alert=True)
-        await manager.start(RidesMgmtSG.rides_list, mode=StartMode.RESET_STACK)
+                return
+        else:
+            await manager.start(RidesMgmtSG.rides_list, mode=StartMode.RESET_STACK)
         return
     if isinstance(event, CallbackQuery):
         await event.answer(f"Выбрана дата: {selected_date.strftime('%d.%m.%Y')}")
@@ -307,8 +310,8 @@ async def on_create(
         template_ride_id=manager.dialog_data.get("template_ride_id"),
     )
     count = len(rides)
-    await callback.answer(f"✅ Создано поездок: {count}!", show_alert=True)
     await manager.start(RidesMgmtSG.rides_list, mode=StartMode.RESET_STACK)
+    await callback.answer(f"✅ Создано поездок: {count}!")
 
 
 async def on_template_selected(
