@@ -14,6 +14,7 @@ from dishka.integrations.aiogram_dialog import inject
 
 from seatbot.application.services.ride import RideService
 from seatbot.infrastructure.database.dao import RidesDAO
+from seatbot.infrastructure.notifications import fmt_amount
 
 from ..user_dialogs.states import RideCreateSG, RidesMgmtSG
 
@@ -29,7 +30,7 @@ async def get_templates(
         return {"has_templates": False, "empty_text": "🚫 Шаблонов пока нет.", "back_btn": "⬅️ В панель"}
     items = []
     for t in templates:
-        price_str = "бесплатно" if t.is_free else f"{t.price:.2f} BYN"
+        price_str = "бесплатно" if t.is_free else f"{fmt_amount(t.price)} BYN"
         time_str = t.departure_at.strftime("%H:%M")
         note_str = f" • {t.note}" if t.note else ""
         items.append(
@@ -126,7 +127,7 @@ async def get_confirm_data(
     note = dialog_manager.dialog_data.get("note")
     repeat_days = dialog_manager.dialog_data.get("repeat_days", 1)
     remind_minutes = dialog_manager.dialog_data.get("remind_minutes", 30)
-    price_str = "Бесплатно" if price <= 0 else f"{price:.2f} BYN"
+    price_str = "Бесплатно" if price <= 0 else f"{fmt_amount(price)} BYN"
     repeat_str = f"{repeat_days} дн." if repeat_days > 1 else "1 день"
     remind_str = f"{remind_minutes} мин." if remind_minutes > 0 else "выключено"
     text = (
@@ -288,6 +289,7 @@ async def on_create(
         is_visible=is_visible,
         repeat_days=repeat_days,
         remind_minutes=remind_minutes,
+        template_ride_id=manager.dialog_data.get("template_ride_id"),
     )
     count = len(rides)
     await callback.answer(f"✅ Создано поездок: {count}!", show_alert=True)

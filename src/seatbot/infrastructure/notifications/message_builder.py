@@ -19,6 +19,12 @@ def _fmt_dt(dt: datetime) -> str:
     return dt.strftime("%d.%m.%Y %H:%M")
 
 
+def fmt_amount(value: float) -> str:
+    if value == int(value):
+        return str(int(value))
+    return f"{value:.2f}"
+
+
 def user_display(username: str | None, first_name: str | None, user_id: int) -> str:
     if username:
         return f"@{username}"
@@ -39,7 +45,7 @@ class MessageBuilder:
             r = ride
             free = free_seats if free_seats is not None else r.seats_total
             approved = pending = 0
-        price_str = "Бесплатно" if r.is_free else f"{r.price:.2f} BYN"
+        price_str = "Бесплатно" if r.is_free else f"{fmt_amount(r.price)} BYN"
         status_emoji = {"open": "🟢", "closed": "🟡", "completed": "✅", "cancelled": "❌"}.get(
             r.status.value, "•"
         )
@@ -62,16 +68,16 @@ class MessageBuilder:
         if is_free:
             return "бесплатно"
         if paid_amount > 0:
-            return f"деп {paid_amount:.2f} BYN"
-        return f"по факту {price:.2f} BYN"
+            return f"деп {fmt_amount(paid_amount)} BYN"
+        return f"по факту {fmt_amount(price)} BYN"
 
     @staticmethod
     def payment_full(paid_amount: float, price: float, is_free: bool) -> str:
         if is_free:
             return "💰 Оплата: <b>Бесплатно</b>"
         if paid_amount > 0:
-            return f"💰 Списано с депозита: <b>{paid_amount:.2f} BYN</b>"
-        return f"💰 Оплата по факту: <b>{price:.2f} BYN</b>"
+            return f"💰 Списано с депозита: <b>{fmt_amount(paid_amount)} BYN</b>"
+        return f"💰 Оплата по факту: <b>{fmt_amount(price)} BYN</b>"
 
     @staticmethod
     def booking_card(booking: Booking, ride: Ride, is_vip: bool = False) -> str:
@@ -99,7 +105,7 @@ class MessageBuilder:
             f"Жду вас, место закреплено."
         )
         if due_amount > 0:
-            text += f"\n💰 Оплата по факту: <b>{due_amount:.2f} BYN</b>"
+            text += f"\n💰 Оплата по факту: <b>{fmt_amount(due_amount)} BYN</b>"
         return text
 
     @staticmethod
@@ -141,9 +147,9 @@ class MessageBuilder:
         if is_free:
             payment = "бесплатно" if ride.is_free else "бесплатно (VIP)"
         elif booking.paid_amount > 0:
-            payment = f"списано с депозита {booking.paid_amount:.2f} BYN"
+            payment = f"списано с депозита {fmt_amount(booking.paid_amount)} BYN"
         else:
-            payment = f"по факту {float(ride.price):.2f} BYN"
+            payment = f"по факту {fmt_amount(float(ride.price))} BYN"
         return (
             f"🆕 <b>Новая бронь</b>\n"
             f"Поездка {_fmt_dt(ride.departure_at)}\n"
@@ -174,16 +180,16 @@ class MessageBuilder:
     def deposit_topup_notification(amount: float, new_balance: float) -> str:
         return (
             f"💰 <b>Депозит пополнен</b>\n\n"
-            f"Зачислено: <b>+{amount:.2f} BYN</b>\n"
-            f"Текущий баланс: <b>{new_balance:.2f} BYN</b>"
+            f"Зачислено: <b>+{fmt_amount(amount)} BYN</b>\n"
+            f"Текущий баланс: <b>{fmt_amount(new_balance)} BYN</b>"
         )
 
     @staticmethod
     def deposit_decrease_notification(amount: float, new_balance: float) -> str:
         return (
             f"💸 <b>Депозит списан</b>\n\n"
-            f"Списано: <b>-{amount:.2f} BYN</b>\n"
-            f"Текущий баланс: <b>{new_balance:.2f} BYN</b>"
+            f"Списано: <b>-{fmt_amount(amount)} BYN</b>\n"
+            f"Текущий баланс: <b>{fmt_amount(new_balance)} BYN</b>"
         )
 
     @staticmethod
@@ -213,7 +219,7 @@ class MessageBuilder:
             f"Место закреплено за вами. Жду вас!"
         )
         if due_amount > 0:
-            text += f"\n💰 Оплата по факту: <b>{due_amount:.2f} BYN</b>"
+            text += f"\n💰 Оплата по факту: <b>{fmt_amount(due_amount)} BYN</b>"
         return text
 
     @staticmethod

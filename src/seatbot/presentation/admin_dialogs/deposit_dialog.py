@@ -8,6 +8,7 @@ from dishka.integrations.aiogram_dialog import inject
 
 from seatbot.application.services.deposit import DepositService
 from seatbot.domain.exceptions import InsufficientBalanceError
+from seatbot.infrastructure.notifications import fmt_amount
 
 from ..user_dialogs.states import DepositSG, UsersSG
 
@@ -51,7 +52,7 @@ async def on_topup_input(
     if not user:
         await message.answer("❌ Пользователь не найден.")
         return
-    await message.answer(f"✅ Депозит пополнен на {amount:.2f} BYN. Баланс: {user.balance:.2f} BYN")
+    await message.answer(f"✅ Депозит пополнен на {fmt_amount(amount)} BYN. Баланс: {fmt_amount(user.balance)} BYN")
     await manager.start(UsersSG.user_detail, data={"user_id": user_id}, mode=StartMode.RESET_STACK)
 
 
@@ -78,7 +79,7 @@ async def on_decrease_input(
     if not user:
         await message.answer("❌ Пользователь не найден.")
         return
-    await message.answer(f"✅ Списано {amount:.2f} BYN. Баланс: {user.balance:.2f} BYN")
+    await message.answer(f"✅ Списано {fmt_amount(amount)} BYN. Баланс: {fmt_amount(user.balance)} BYN")
     await manager.start(UsersSG.user_detail, data={"user_id": user_id}, mode=StartMode.RESET_STACK)
 
 

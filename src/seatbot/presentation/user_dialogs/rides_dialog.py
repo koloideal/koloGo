@@ -10,7 +10,7 @@ from seatbot.domain.exceptions import (AlreadyBookedError, NoFreeSeatsError,
                                        RideNotBookableError, UserBannedError)
 from seatbot.domain.schemas import BookingStatus
 from seatbot.infrastructure.database.dao import BookingsDAO, RidesDAO, UsersDAO
-from seatbot.infrastructure.notifications import MessageBuilder
+from seatbot.infrastructure.notifications import MessageBuilder, fmt_amount
 
 from .states import MainMenuSG, RidesSG
 
@@ -30,7 +30,7 @@ async def get_rides_list(
         }
     items = []
     for rws in rides:
-        price_str = "Бесплатно" if rws.ride.is_free else f"{rws.ride.price:.2f} BYN"
+        price_str = "Бесплатно" if rws.ride.is_free else f"{fmt_amount(rws.ride.price)} BYN"
         items.append(
             {
                 "ride_id": rws.ride.ride_id,
@@ -69,9 +69,9 @@ async def get_ride_detail(
         if user and user.is_vip:
             ride_text += "\n⭐ Для вас поездка бесплатна (VIP)"
         elif user and user.balance >= price:
-            ride_text += f"\n💳 При бронировании спишется с депозита: <b>{price:.2f} BYN</b>"
+            ride_text += f"\n💳 При бронировании спишется с депозита: <b>{fmt_amount(price)} BYN</b>"
         else:
-            ride_text += f"\n💵 Оплата по факту поездки: <b>{price:.2f} BYN</b>"
+            ride_text += f"\n💵 Оплата по факту поездки: <b>{fmt_amount(price)} BYN</b>"
     can_book = (
         rws.free_seats > 0
         and rws.ride.status.value == "open"
@@ -142,9 +142,9 @@ async def on_book_click(
         if ride.is_free or user.is_vip:
             msg += "\n💰 Поездка бесплатная."
         elif booking.paid_amount > 0:
-            msg += f"\n💰 С депозита списано {booking.paid_amount:.2f} BYN."
+            msg += f"\n💰 С депозита списано {fmt_amount(booking.paid_amount)} BYN."
         else:
-            msg += f"\n💵 Оплата по факту поездки: {float(ride.price):.2f} BYN."
+            msg += f"\n💵 Оплата по факту поездки: {fmt_amount(float(ride.price))} BYN."
     await callback.answer(msg, show_alert=True)
     await manager.start(MainMenuSG.main, mode=StartMode.RESET_STACK)
 

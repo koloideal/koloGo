@@ -5,6 +5,7 @@ from dishka import FromDishka
 from dishka.integrations.aiogram_dialog import inject
 
 from seatbot.application.services.statistics import StatisticsService
+from seatbot.infrastructure.notifications import fmt_amount
 
 from ..user_dialogs.states import AdminStatsSG
 
@@ -22,9 +23,9 @@ async def get_admin_stats(
         f"🚗 Поездок создано: <b>{stats.total_rides_created}</b>\n"
         f"✅ Завершено поездок: <b>{stats.total_completed_rides}</b>\n"
         f"🟢 Открытых поездок: <b>{stats.active_rides}</b>\n\n"
-        f"💰 Доход с депозита: <b>{stats.deposit_revenue:.2f} BYN</b>\n"
-        f"💵 Оплачено по факту: <b>{stats.fact_revenue:.2f} BYN</b>\n"
-        f"Σ Итого: <b>{stats.total_revenue:.2f} BYN</b>"
+        f"💰 Доход с депозита: <b>{fmt_amount(stats.deposit_revenue)} BYN</b>\n"
+        f"💵 Оплачено по факту: <b>{fmt_amount(stats.fact_revenue)} BYN</b>\n"
+        f"Σ Итого: <b>{fmt_amount(stats.total_revenue)} BYN</b>"
     )
     return {"stats_text": text, "back_btn": "⬅️ В панель"}
 

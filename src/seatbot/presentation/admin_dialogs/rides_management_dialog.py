@@ -8,7 +8,7 @@ from dishka.integrations.aiogram_dialog import inject
 from seatbot.application.services.ride import RideService
 from seatbot.domain.schemas import RideStatus
 from seatbot.infrastructure.database.dao import RidesDAO
-from seatbot.infrastructure.notifications import MessageBuilder
+from seatbot.infrastructure.notifications import MessageBuilder, fmt_amount
 
 from ..user_dialogs.states import RideBookingsSG, RidesMgmtSG
 
@@ -32,7 +32,7 @@ async def get_rides_list(
     items = []
     for rws in rides:
         emoji = _STATUS_EMOJI.get(rws.ride.status, "•")
-        price_str = "бесплатно" if rws.ride.is_free else f"{rws.ride.price:.2f} BYN"
+        price_str = "бесплатно" if rws.ride.is_free else f"{fmt_amount(rws.ride.price)} BYN"
         items.append(
             {
                 "ride_id": rws.ride.ride_id,
@@ -66,9 +66,9 @@ async def get_ride_detail(
         "auto_approve": rws.ride.auto_approve,
         "bookings_btn": "📋 Брони",
         "complete_btn": "🏁 Завершить",
-        "cancel_btn": "❌ Отменить поездку",
+        "cancel_btn": "❌ Отменить",
         "toggle_vis_btn": "👁️ Скрыть" if rws.ride.is_visible else "👁️ Показать",
-        "toggle_auto_btn": "⚡ Авто-апрув: ВКЛ" if rws.ride.auto_approve else "⚡ Авто-апрув: ВЫКЛ",
+        "toggle_auto_btn": "⚡ Авто-апрув ✅" if rws.ride.auto_approve else "⚡ Авто-апрув ❌",
         "back_btn": "⬅️ К поездкам",
     }
 

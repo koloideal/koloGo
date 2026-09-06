@@ -18,10 +18,10 @@ admin_panel_dialog = Dialog(
         ),
         Row(
             Start(Const("👥 Клиенты"), id="users", state=UsersSG.users_list),
-            Start(Const("� Статистика"), id="stats", state=AdminStatsSG.stats),
+            Start(Const("📊 Статистика"), id="stats", state=AdminStatsSG.stats),
         ),
         Row(
-            Start(Const("� Рассылка"), id="broadcast", state=BroadcastSG.text),
+            Start(Const("📢 Рассылка"), id="broadcast", state=BroadcastSG.text),
         ),
         state=AdminPanelSG.main,
     ),

@@ -12,7 +12,7 @@ from seatbot.domain.schemas import BookingStatus, RideStatus
 from seatbot.infrastructure.config.models import Config
 from seatbot.infrastructure.database.dao import BookingsDAO, RidesDAO, UsersDAO
 from seatbot.infrastructure.notifications import (BOOKING_STATUS_RU, MessageBuilder,
-                                                  user_display)
+                                                  fmt_amount, user_display)
 
 from ..user_dialogs.states import RideBookingsSG
 
@@ -72,7 +72,7 @@ async def get_ride_bookings(
                 ride.is_free or bool(user and user.is_vip),
             )
             if ride
-            else f"{b.paid_amount:.2f}"
+            else fmt_amount(b.paid_amount)
         )
         items.append(
             {
@@ -204,7 +204,7 @@ async def get_passengers_list(
         items.append(
             {
                 "user_id": s.user_id,
-                "title": f"{uname}{badge_str} • {s.balance:.2f} BYN",
+                "title": f"{uname}{badge_str} • {fmt_amount(s.balance)} BYN",
             }
         )
     if not items:

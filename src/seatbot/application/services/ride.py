@@ -35,6 +35,7 @@ class RideService:
         is_visible: bool = True,
         repeat_days: int = 1,
         remind_minutes: int = 30,
+        template_ride_id: int | None = None,
     ) -> list[Ride]:
         rides = []
         for i in range(repeat_days):
@@ -49,6 +50,8 @@ class RideService:
                 remind_minutes=remind_minutes,
             )
             rides.append(ride)
+        if template_ride_id is not None:
+            await self._copy_vips_from_template(template_ride_id, rides)
         return rides
 
     async def create_ride_from_template(
@@ -76,7 +79,21 @@ class RideService:
             is_visible=template.is_visible,
             repeat_days=repeat_days,
             remind_minutes=template.remind_minutes,
+            template_ride_id=template_ride_id,
         )
+
+    async def _copy_vips_from_template(self, template_ride_id: int, rides: list[Ride]) -> None:
+        bookings = await self._bookings_dao.list_for_ride_with_status(
+            template_ride_id, {BookingStatus.APPROVED}
+        )
+        vip_ids: list[int] = []
+        for b in bookings:
+            user = await self._users_dao.get_by_id(b.user_id)
+            if user and user.is_vip and b.user_id not in vip_ids:
+                vip_ids.append(b.user_id)
+        for ride in rides:
+            for vip_id in vip_ids:
+                await self.add_passenger(ride.ride_id, vip_id)
 
     async def cancel_ride(self, ride_id: int) -> Ride | None:
         ride = await self._rides_dao.get_by_id(ride_id)

@@ -9,7 +9,7 @@ from seatbot.application.services.statistics import StatisticsService
 from seatbot.application.services.user import UserService
 from seatbot.infrastructure.config.models import Config
 from seatbot.infrastructure.database.dao import UsersDAO
-from seatbot.infrastructure.notifications import user_display
+from seatbot.infrastructure.notifications import fmt_amount, user_display
 
 from ..user_dialogs.states import DepositSG, UsersSG
 
@@ -36,7 +36,7 @@ async def get_users_list(
         items.append(
             {
                 "user_id": s.user_id,
-                "title": f"{uname}{badge_str} • {s.total_rides} поездок • {s.balance:.2f} BYN",
+                "title": f"{uname}{badge_str} • {s.total_rides} поездок • {fmt_amount(s.balance)} BYN",
             }
         )
     return {"has_users": True, "users": items, "back_btn": "⬅️ В панель"}
@@ -65,9 +65,9 @@ async def get_user_detail(
         f"<b>👤 Клиент</b>\n\n"
         f"ID: <code>{user.user_id}</code>\n"
         f"Имя: {uname}\n"
-        f"💳 Депозит: <b>{user.balance:.2f} BYN</b>\n"
+        f"💳 Депозит: <b>{fmt_amount(user.balance)} BYN</b>\n"
         f"🚗 Поездок завершено: <b>{stats.total_rides}</b>\n"
-        f"💰 Всего потрачено: <b>{stats.total_spent:.2f} BYN</b>\n"
+        f"💰 Всего потрачено: <b>{fmt_amount(stats.total_spent)} BYN</b>\n"
         f"📅 Последняя бронь: {last_ride}\n"
         f"⭐ VIP: {'да' if user.is_vip else 'нет'}\n"
         f"🚫 В ЧС: {'да' if user.is_banned else 'нет'}"
