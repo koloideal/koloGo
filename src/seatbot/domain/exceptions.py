@@ -1,5 +1,5 @@
 class SeatBotError(Exception):
-    """Базовая доменная ошибка."""
+    pass
 
 
 class InsufficientBalanceError(SeatBotError):
@@ -33,19 +33,3 @@ class AlreadyBookedError(SeatBotError):
         super().__init__(f"User {user_id} already booked ride {ride_id}")
         self.ride_id = ride_id
         self.user_id = user_id
-
-
-class BookingNotFoundError(SeatBotError):
-    pass
-
-
-class RideNotFoundError(SeatBotError):
-    pass
-
-
-class UserNotFoundError(SeatBotError):
-    pass
-
-
-class InvalidInputError(SeatBotError):
-    pass

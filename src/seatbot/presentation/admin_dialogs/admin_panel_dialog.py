@@ -1,20 +1,29 @@
 from aiogram_dialog import Dialog, Window
-from aiogram_dialog.widgets.kbd import Start
+from aiogram_dialog.widgets.kbd import Row, Start
 from aiogram_dialog.widgets.text import Const
 
-from ..user_dialogs.states import AdminSG
+from ..user_dialogs.states import (AdminPanelSG, AdminRequisitesSG, AdminStatsSG,
+                                   BroadcastSG, RideCreateSG, RidesMgmtSG, UsersSG)
 
 admin_panel_dialog = Dialog(
     Window(
         Const(
-            "<b>🚗 Панель водителя</b>\n\n"
-            "Управление поездками, клиентами и депозитами."
+            "🚗 <b>Панель водителя</b>\n\n"
+            "Создавай поездки, управляй бронями и клиентами.\n\n"
+            "<i><b>made by kolo</b></i>"
         ),
-        Start(Const("🚗 Мои поездки"), id="rides_mgmt", state=AdminSG.rides_list),
-        Start(Const("➕ Создать поездку"), id="ride_create", state=AdminSG.ride_create_departure),
-        Start(Const("👥 Клиенты"), id="users", state=AdminSG.users_list),
-        Start(Const("📢 Рассылка"), id="broadcast", state=AdminSG.broadcast_text),
-        Start(Const("📊 Статистика"), id="stats", state=AdminSG.stats),
-        state=AdminSG.main,
+        Row(
+            Start(Const("➕ Создать поездку"), id="ride_create", state=RideCreateSG.select_template),
+            Start(Const("🚗 Мои поездки"), id="rides_mgmt", state=RidesMgmtSG.rides_list),
+        ),
+        Row(
+            Start(Const("👥 Клиенты"), id="users", state=UsersSG.users_list),
+            Start(Const("📊 Статистика"), id="stats", state=AdminStatsSG.stats),
+        ),
+        Row(
+            Start(Const("💸 Реквизиты"), id="requisites", state=AdminRequisitesSG.list),
+            Start(Const("💬 Рассылка"), id="broadcast", state=BroadcastSG.text),
+        ),
+        state=AdminPanelSG.main,
     ),
 )

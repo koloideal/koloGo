@@ -1,4 +1,3 @@
-
 from seatbot.domain.schemas import OverallStats, RideStatus, UserStats
 from seatbot.infrastructure.database.dao import (BookingsDAO, RidesDAO, TransactionsDAO,
                                                  UsersDAO)
@@ -34,24 +33,28 @@ class StatisticsService:
             is_vip=user.is_vip,
             is_banned=user.is_banned,
             last_ride_at=last_ride_at,
+            first_name=user.first_name,
         )
 
     async def overall_stats(self) -> OverallStats:
         total_users = await self._users_dao.count_total_users()
         total_rides = await self._rides_dao.count_total()
         completed = await self._rides_dao.count_by_status(RideStatus.COMPLETED)
-        revenue = await self._transactions_dao.sum_total_revenue()
+        deposit_revenue = await self._transactions_dao.sum_total_revenue()
+        fact_revenue = await self._bookings_dao.sum_fact_revenue()
         active = await self._rides_dao.count_by_status(RideStatus.OPEN)
         return OverallStats(
             total_users=total_users,
             total_rides_created=total_rides,
             total_completed_rides=completed,
-            total_revenue=revenue,
             active_rides=active,
+            deposit_revenue=deposit_revenue,
+            fact_revenue=fact_revenue,
+            total_revenue=deposit_revenue + fact_revenue,
         )
 
-    async def all_users_stats(self, limit: int = 100) -> list[UserStats]:
-        users = await self._users_dao.get_all(limit=limit)
+    async def all_users_stats(self, limit: int = 100, exclude_user_id: int | None = None) -> list[UserStats]:
+        users = await self._users_dao.get_all(limit=limit, exclude_user_id=exclude_user_id)
         out: list[UserStats] = []
         for user in users:
             total_rides = await self._bookings_dao.count_completed_for_user(user.user_id)
@@ -68,6 +71,7 @@ class StatisticsService:
                     is_vip=user.is_vip,
                     is_banned=user.is_banned,
                     last_ride_at=last_ride_at,
+                    first_name=user.first_name,
                 )
             )
         return out

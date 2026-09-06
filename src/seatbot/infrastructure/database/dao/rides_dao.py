@@ -1,7 +1,6 @@
 from datetime import UTC, datetime
-from decimal import Decimal
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from seatbot.domain.schemas import Ride, RideStatus, RideWithStats
@@ -21,6 +20,7 @@ class RidesDAO:
         auto_approve: bool,
         note: str | None = None,
         is_visible: bool = True,
+        remind_minutes: int = 30,
     ) -> Ride:
         orm_ride = OrmRide(
             departure_at=departure_at,
@@ -30,6 +30,7 @@ class RidesDAO:
             is_visible=is_visible,
             status=RideStatus.OPEN.value,
             note=note,
+            remind_minutes=remind_minutes,
         )
         self.session.add(orm_ride)
         await self.session.flush()
@@ -83,7 +84,14 @@ class RidesDAO:
         return out
 
     async def list_all(self, limit: int = 50) -> list[RideWithStats]:
-        query = select(OrmRide).order_by(OrmRide.departure_at.desc()).limit(limit)
+        status_order = case(
+            (OrmRide.status == RideStatus.OPEN.value, 0),
+            (OrmRide.status == RideStatus.CLOSED.value, 1),
+            (OrmRide.status == RideStatus.COMPLETED.value, 2),
+            (OrmRide.status == RideStatus.CANCELLED.value, 3),
+            else_=4,
+        )
+        query = select(OrmRide).order_by(status_order, OrmRide.departure_at.asc()).limit(limit)
         result = await self.session.execute(query)
         rides = [self._map_to_domain(r) for r in result.scalars().all()]
         out: list[RideWithStats] = []
@@ -109,6 +117,21 @@ class RidesDAO:
         result = await self.session.execute(query)
         return [self._map_to_domain(r) for r in result.scalars().all()]
 
+    async def list_templates(self, limit: int = 10) -> list[Ride]:
+        query = select(OrmRide).order_by(OrmRide.departure_at.desc()).limit(limit * 3)
+        result = await self.session.execute(query)
+        rides = [self._map_to_domain(r) for r in result.scalars().all()]
+        seen: set[tuple[float, str | None]] = set()
+        unique: list[Ride] = []
+        for ride in rides:
+            key = (float(ride.price), ride.note)
+            if key not in seen:
+                seen.add(key)
+                unique.append(ride)
+            if len(unique) >= limit:
+                break
+        return unique
+
     async def set_status(self, ride_id: int, status: RideStatus) -> Ride | None:
         result = await self.session.execute(select(OrmRide).where(OrmRide.id == ride_id))
         orm_ride = result.scalar_one_or_none()
@@ -133,25 +156,20 @@ class RidesDAO:
         orm_ride.auto_approve = auto_approve
         return self._map_to_domain(orm_ride)
 
-    async def set_price(self, ride_id: int, price: float) -> Ride | None:
-        result = await self.session.execute(select(OrmRide).where(OrmRide.id == ride_id))
-        orm_ride = result.scalar_one_or_none()
-        if not orm_ride:
-            return None
-        orm_ride.price = Decimal(str(price))
-        return self._map_to_domain(orm_ride)
-
-    async def set_departure(self, ride_id: int, departure_at: datetime) -> Ride | None:
-        result = await self.session.execute(select(OrmRide).where(OrmRide.id == ride_id))
-        orm_ride = result.scalar_one_or_none()
-        if not orm_ride:
-            return None
-        orm_ride.departure_at = departure_at
-        return self._map_to_domain(orm_ride)
-
     async def count_total(self) -> int:
         result = await self.session.execute(select(func.count(OrmRide.id)))
         return int(result.scalar_one() or 0)
+
+    async def is_remind_sent(self, ride_id: int) -> bool:
+        result = await self.session.execute(select(OrmRide.remind_sent).where(OrmRide.id == ride_id))
+        return bool(result.scalar_one_or_none())
+
+    async def mark_remind_sent(self, ride_id: int) -> None:
+        result = await self.session.execute(select(OrmRide).where(OrmRide.id == ride_id))
+        orm_ride = result.scalar_one_or_none()
+        if orm_ride:
+            orm_ride.remind_sent = True
+            await self.session.flush()
 
     async def count_by_status(self, status: RideStatus) -> int:
         result = await self.session.execute(
@@ -179,4 +197,6 @@ class RidesDAO:
             auto_approve=orm_ride.auto_approve,
             status=RideStatus(orm_ride.status),
             created_at=orm_ride.created_at,
+            note=orm_ride.note,
+            remind_minutes=orm_ride.remind_minutes,
         )

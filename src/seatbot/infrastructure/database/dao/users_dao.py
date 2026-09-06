@@ -19,56 +19,45 @@ class UsersDAO:
         orm_user = result.scalar_one_or_none()
         return self._map_to_domain(orm_user) if orm_user else None
 
-    async def create(self, user_id: int, username: str | None) -> User:
+    async def create(self, user_id: int, username: str | None, first_name: str | None = None) -> User:
         stmt = (
             insert(OrmUser)
-            .values(user_id=user_id, username=username, balance=0)
+            .values(user_id=user_id, username=username, first_name=first_name, balance=0)
             .on_conflict_do_nothing(index_elements=["user_id"])
         )
         await self.session.execute(stmt)
         await self.session.flush()
-        orm_user = await self.session.scalar(select(OrmUser).where(OrmUser.user_id == user_id))
-        return self._map_to_domain(orm_user)  # type: ignore[arg-type]
+        result = await self.session.execute(select(OrmUser).where(OrmUser.user_id == user_id))
+        orm_user = result.scalar_one()
+        return self._map_to_domain(orm_user)
 
-    async def get_or_create(self, user_id: int, username: str | None) -> User:
-        user = await self.get_by_id(user_id)
-        if user:
-            return user
-        return await self.create(user_id, username)
-
-    async def update_username(self, user_id: int, username: str | None) -> User | None:
+    async def update_profile(self, user_id: int, username: str | None, first_name: str | None) -> User | None:
         result = await self.session.execute(select(OrmUser).where(OrmUser.user_id == user_id))
         orm_user = result.scalar_one_or_none()
         if not orm_user:
             return None
         orm_user.username = username
-        return self._map_to_domain(orm_user)  # type: ignore[arg-type]
+        orm_user.first_name = first_name
+        return self._map_to_domain(orm_user)
 
     async def increase_balance(self, user_id: int, amount: float) -> User | None:
         result = await self.session.execute(select(OrmUser).where(OrmUser.user_id == user_id))
         orm_user = result.scalar_one_or_none()
         if not orm_user:
             return None
-        orm_user.balance += Decimal(str(amount))
-        return self._map_to_domain(orm_user)  # type: ignore[arg-type]
+        orm_user.balance = Decimal(str(orm_user.balance)) + Decimal(str(amount))
+        return self._map_to_domain(orm_user)
 
     async def decrease_balance(self, user_id: int, amount: float) -> User | None:
         result = await self.session.execute(select(OrmUser).where(OrmUser.user_id == user_id))
         orm_user = result.scalar_one_or_none()
         if not orm_user:
             return None
-        if orm_user.balance < amount:
-            raise InsufficientBalanceError(required=amount, available=float(orm_user.balance))
-        orm_user.balance -= Decimal(str(amount))
-        return self._map_to_domain(orm_user)  # type: ignore[arg-type]
-
-    async def set_balance(self, user_id: int, new_balance: float) -> User | None:
-        result = await self.session.execute(select(OrmUser).where(OrmUser.user_id == user_id))
-        orm_user = result.scalar_one_or_none()
-        if not orm_user:
-            return None
-        orm_user.balance = Decimal(str(new_balance))
-        return self._map_to_domain(orm_user)  # type: ignore[arg-type]
+        current = Decimal(str(orm_user.balance))
+        if current < Decimal(str(amount)):
+            raise InsufficientBalanceError(required=amount, available=float(current))
+        orm_user.balance = current - Decimal(str(amount))
+        return self._map_to_domain(orm_user)
 
     async def ban_user(self, user_id: int) -> User | None:
         result = await self.session.execute(select(OrmUser).where(OrmUser.user_id == user_id))
@@ -76,7 +65,7 @@ class UsersDAO:
         if not orm_user:
             return None
         orm_user.is_banned = True
-        return self._map_to_domain(orm_user)  # type: ignore[arg-type]
+        return self._map_to_domain(orm_user)
 
     async def unban_user(self, user_id: int) -> User | None:
         result = await self.session.execute(select(OrmUser).where(OrmUser.user_id == user_id))
@@ -84,7 +73,7 @@ class UsersDAO:
         if not orm_user:
             return None
         orm_user.is_banned = False
-        return self._map_to_domain(orm_user)  # type: ignore[arg-type]
+        return self._map_to_domain(orm_user)
 
     async def set_vip(self, user_id: int, is_vip: bool) -> User | None:
         result = await self.session.execute(select(OrmUser).where(OrmUser.user_id == user_id))
@@ -92,17 +81,31 @@ class UsersDAO:
         if not orm_user:
             return None
         orm_user.is_vip = is_vip
-        return self._map_to_domain(orm_user)  # type: ignore[arg-type]
+        return self._map_to_domain(orm_user)
 
-    async def get_all(self, limit: int = -1) -> list[User]:
+    async def set_notify_new_rides(self, user_id: int, enabled: bool) -> User | None:
+        result = await self.session.execute(select(OrmUser).where(OrmUser.user_id == user_id))
+        orm_user = result.scalar_one_or_none()
+        if not orm_user:
+            return None
+        orm_user.notify_new_rides = enabled
+        return self._map_to_domain(orm_user)
+
+    async def list_new_ride_subscribers(self) -> list[User]:
+        result = await self.session.execute(
+            select(OrmUser).where(
+                OrmUser.notify_new_rides.is_(True),
+                OrmUser.is_banned.is_(False),
+            )
+        )
+        return [self._map_to_domain(user) for user in result.scalars().all()]
+
+    async def get_all(self, limit: int = -1, exclude_user_id: int | None = None) -> list[User]:
         query = select(OrmUser).order_by(OrmUser.registration_date.desc())
+        if exclude_user_id is not None:
+            query = query.where(OrmUser.user_id != exclude_user_id)
         if limit != -1:
             query = query.limit(limit)
-        result = await self.session.execute(query)
-        return [self._map_to_domain(u) for u in result.scalars().all()]
-
-    async def search_by_username(self, username_part: str) -> list[User]:
-        query = select(OrmUser).where(OrmUser.username.ilike(f"%{username_part}%"))
         result = await self.session.execute(query)
         return [self._map_to_domain(u) for u in result.scalars().all()]
 
@@ -125,4 +128,6 @@ class UsersDAO:
             is_admin=orm_user.is_admin,
             is_banned=orm_user.is_banned,
             is_vip=orm_user.is_vip,
+            first_name=orm_user.first_name,
+            notify_new_rides=orm_user.notify_new_rides,
         )

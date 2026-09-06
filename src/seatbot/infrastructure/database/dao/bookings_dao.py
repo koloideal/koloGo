@@ -5,6 +5,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from seatbot.domain.schemas import Booking, BookingStatus
 from seatbot.infrastructure.database.models import Booking as OrmBooking
+from seatbot.infrastructure.database.models import Ride as OrmRide
+from seatbot.infrastructure.database.models import User as OrmUser
 
 
 class BookingsDAO:
@@ -36,9 +38,7 @@ class BookingsDAO:
         )
         if only_active:
             query = query.where(
-                OrmBooking.status.in_(
-                    [BookingStatus.PENDING.value, BookingStatus.APPROVED.value]
-                )
+                OrmBooking.status.in_([BookingStatus.PENDING.value, BookingStatus.APPROVED.value])
             )
         result = await self.session.execute(query)
         orm = result.scalar_one_or_none()
@@ -46,9 +46,7 @@ class BookingsDAO:
 
     async def list_for_ride(self, ride_id: int) -> list[Booking]:
         result = await self.session.execute(
-            select(OrmBooking)
-            .where(OrmBooking.ride_id == ride_id)
-            .order_by(OrmBooking.created_at.asc())
+            select(OrmBooking).where(OrmBooking.ride_id == ride_id).order_by(OrmBooking.created_at.asc())
         )
         return [self._map_to_domain(b) for b in result.scalars().all()]
 
@@ -61,9 +59,7 @@ class BookingsDAO:
         )
         return [self._map_to_domain(b) for b in result.scalars().all()]
 
-    async def list_for_ride_with_status(
-        self, ride_id: int, statuses: set[BookingStatus]
-    ) -> list[Booking]:
+    async def list_for_ride_with_status(self, ride_id: int, statuses: set[BookingStatus]) -> list[Booking]:
         status_values = [s.value for s in statuses]
         result = await self.session.execute(
             select(OrmBooking)
@@ -109,13 +105,37 @@ class BookingsDAO:
         )
         return float(result.scalar_one() or 0)
 
+    async def sum_fact_revenue(self) -> float:
+        result = await self.session.execute(
+            select(func.coalesce(func.sum(OrmRide.price), 0))
+            .select_from(OrmBooking)
+            .join(OrmRide, OrmBooking.ride_id == OrmRide.id)
+            .join(OrmUser, OrmBooking.user_id == OrmUser.user_id)
+            .where(
+                OrmBooking.status == BookingStatus.COMPLETED.value,
+                OrmBooking.paid_amount == 0,
+                OrmRide.price > 0,
+                OrmUser.is_vip.is_(False),
+            )
+        )
+        return float(result.scalar_one() or 0)
+
+    async def has_approved_for_user(self, user_id: int) -> bool:
+        result = await self.session.execute(
+            select(OrmBooking.id)
+            .where(
+                OrmBooking.user_id == user_id,
+                OrmBooking.status == BookingStatus.APPROVED.value,
+            )
+            .limit(1)
+        )
+        return result.scalar_one_or_none() is not None
+
     async def count_active_for_ride(self, ride_id: int) -> int:
         result = await self.session.execute(
             select(func.count(OrmBooking.id)).where(
                 OrmBooking.ride_id == ride_id,
-                OrmBooking.status.in_(
-                    [BookingStatus.PENDING.value, BookingStatus.APPROVED.value]
-                ),
+                OrmBooking.status.in_([BookingStatus.PENDING.value, BookingStatus.APPROVED.value]),
             )
         )
         return int(result.scalar_one() or 0)

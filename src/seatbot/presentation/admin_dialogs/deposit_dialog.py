@@ -8,8 +8,18 @@ from dishka.integrations.aiogram_dialog import inject
 
 from seatbot.application.services.deposit import DepositService
 from seatbot.domain.exceptions import InsufficientBalanceError
+from seatbot.infrastructure.notifications import fmt_amount
 
-from ..user_dialogs.states import AdminSG
+from ..user_dialogs.states import DepositSG, UsersSG
+
+
+def _get_user_id(manager: DialogManager) -> int | None:
+    start_data = manager.start_data
+    if isinstance(start_data, dict) and "user_id" in start_data:
+        uid = start_data["user_id"]
+        manager.dialog_data["user_id"] = uid
+        return uid
+    return manager.dialog_data.get("user_id")
 
 
 async def _parse_amount(text: str) -> float | None:
@@ -34,13 +44,16 @@ async def on_topup_input(
     if amount is None:
         await message.answer("❌ Введите положительное число (например, <code>50.00</code>).")
         return
-    user_id: int = manager.dialog_data["user_id"]
+    user_id = _get_user_id(manager)
+    if not user_id:
+        await message.answer("❌ Пользователь не определён.")
+        return
     user = await deposit_service.topup(user_id, amount)
     if not user:
         await message.answer("❌ Пользователь не найден.")
         return
-    await message.answer(f"✅ Депозит пополнен на {amount:.2f} BYN. Баланс: {user.balance:.2f} BYN")
-    await manager.start(AdminSG.user_detail, mode=StartMode.RESET_STACK)
+    await message.answer(f"✅ Депозит пополнен на {fmt_amount(amount)} BYN. Баланс: {fmt_amount(user.balance)} BYN")
+    await manager.start(UsersSG.user_detail, data={"user_id": user_id}, mode=StartMode.RESET_STACK)
 
 
 @inject
@@ -54,7 +67,10 @@ async def on_decrease_input(
     if amount is None:
         await message.answer("❌ Введите положительное число (например, <code>10.00</code>).")
         return
-    user_id: int = manager.dialog_data["user_id"]
+    user_id = _get_user_id(manager)
+    if not user_id:
+        await message.answer("❌ Пользователь не определён.")
+        return
     try:
         user = await deposit_service.decrease(user_id, amount)
     except InsufficientBalanceError:
@@ -63,8 +79,8 @@ async def on_decrease_input(
     if not user:
         await message.answer("❌ Пользователь не найден.")
         return
-    await message.answer(f"✅ Списано {amount:.2f} BYN. Баланс: {user.balance:.2f} BYN")
-    await manager.start(AdminSG.user_detail, mode=StartMode.RESET_STACK)
+    await message.answer(f"✅ Списано {fmt_amount(amount)} BYN. Баланс: {fmt_amount(user.balance)} BYN")
+    await manager.start(UsersSG.user_detail, data={"user_id": user_id}, mode=StartMode.RESET_STACK)
 
 
 deposit_dialog = Dialog(
@@ -72,12 +88,12 @@ deposit_dialog = Dialog(
         Const("💰 <b>Пополнение депозита</b>\n\nВведите сумму в BYN:"),
         MessageInput(on_topup_input),
         Cancel(Const("⬅️ Отмена")),
-        state=AdminSG.user_deposit_amount,
+        state=DepositSG.deposit_amount,
     ),
     Window(
         Const("💸 <b>Списание с депозита</b>\n\nВведите сумму в BYN:"),
         MessageInput(on_decrease_input),
         Cancel(Const("⬅️ Отмена")),
-        state=AdminSG.user_decrease_amount,
+        state=DepositSG.decrease_amount,
     ),
 )

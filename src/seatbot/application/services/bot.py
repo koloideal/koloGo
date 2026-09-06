@@ -1,7 +1,7 @@
 from aiogram import Bot
 from aiogram.exceptions import (TelegramBadRequest, TelegramForbiddenError,
                                 TelegramRetryAfter)
-from aiogram.types import BotCommand
+from aiogram.types import BotCommand, BotCommandScopeChat, InlineKeyboardMarkup
 
 from seatbot.infrastructure.config.models import Config
 from seatbot.infrastructure.database.dao import UsersDAO
@@ -14,19 +14,21 @@ class BotService:
         self._users_dao = users_dao
 
     async def process_set_commands(self) -> None:
-        commands = [
-            BotCommand(command="start", description="Запустить бота / главное меню"),
-            BotCommand(command="rides", description="Ближайшие поездки"),
-            BotCommand(command="mybookings", description="Мои брони"),
-            BotCommand(command="balance", description="Мой депозит"),
-            BotCommand(command="admin", description="Панель водителя (только админ)"),
-        ]
-        await self._bot.set_my_commands(commands)
+        start_command = BotCommand(command="start", description="Главное меню")
+        await self._bot.set_my_commands([start_command])
+        await self._bot.set_my_commands(
+            [
+                start_command,
+                BotCommand(command="admin", description="Панель водителя"),
+            ],
+            scope=BotCommandScopeChat(chat_id=self._config.bot.creator_id),
+        )
 
-    async def send_log_to_admin_channel(self, text: str) -> None:
+    async def send_log_to_admin(self, text: str, reply_markup: InlineKeyboardMarkup | None = None) -> None:
         await self._bot.send_message(
-            chat_id=self._config.bot.admin_channel,
+            chat_id=self._config.bot.creator_id,
             text=text,
+            reply_markup=reply_markup,
         )
 
     async def notify_user(self, user_id: int, text: str) -> None:

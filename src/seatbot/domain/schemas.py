@@ -35,6 +35,8 @@ class User:
     is_admin: bool
     is_banned: bool
     is_vip: bool
+    first_name: str | None = None
+    notify_new_rides: bool = False
 
 
 @dataclass
@@ -47,6 +49,8 @@ class Ride:
     auto_approve: bool
     status: RideStatus
     created_at: datetime
+    note: str | None = None
+    remind_minutes: int = 30
 
     @property
     def is_free(self) -> bool:
@@ -74,8 +78,15 @@ class Transaction:
 
 
 @dataclass
+class Requisite:
+    requisite_id: int
+    title: str
+    value: str
+    created_at: datetime
+
+
+@dataclass
 class RideWithStats:
-    """Ride + агрегированная информация для отображения."""
     ride: Ride
     booked_seats: int
     approved_seats: int
@@ -96,6 +107,7 @@ class UserStats:
     is_vip: bool
     is_banned: bool
     last_ride_at: datetime | None
+    first_name: str | None = None
 
 
 @dataclass
@@ -103,5 +115,7 @@ class OverallStats:
     total_users: int
     total_rides_created: int
     total_completed_rides: int
-    total_revenue: float
     active_rides: int
+    deposit_revenue: float = 0.0
+    fact_revenue: float = 0.0
+    total_revenue: float = 0.0

@@ -9,7 +9,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from seatbot.application.interactors.user.create_or_get_user import \
     CreateOrGetUserInteractor
-from seatbot.application.interactors.user.facade import UserFacade
 from seatbot.application.services.bot import BotService
 from seatbot.application.services.broadcast import BroadcastService
 from seatbot.application.services.deposit import DepositService
@@ -19,13 +18,10 @@ from seatbot.application.services.user import UserService
 from seatbot.infrastructure.cache import CacheKeys, RedisService
 from seatbot.infrastructure.config.models import Config
 from seatbot.infrastructure.database.config import new_session_maker
-from seatbot.infrastructure.database.dao import (BookingsDAO, RidesDAO, TransactionsDAO,
-                                                 UsersDAO)
-from seatbot.infrastructure.scheduling.tasks import auto_close_past_rides
-
-# ==========================================
-# 1. INFRASTRUCTURE LAYER
-# ==========================================
+from seatbot.infrastructure.database.dao import (BookingsDAO, RequisitesDAO, RidesDAO,
+                                                 TransactionsDAO, UsersDAO)
+from seatbot.infrastructure.scheduling.tasks import (auto_close_past_rides,
+                                                     send_ride_reminders)
 
 
 class DatabaseProvider(Provider):
@@ -57,6 +53,10 @@ class DatabaseProvider(Provider):
     @provide
     def get_transactions_dao(self, session: AsyncSession) -> TransactionsDAO:
         return TransactionsDAO(session)
+
+    @provide
+    def get_requisites_dao(self, session: AsyncSession) -> RequisitesDAO:
+        return RequisitesDAO(session)
 
 
 class RedisProvider(Provider):
@@ -93,12 +93,13 @@ class SchedulerProvider(Provider):
             kwargs={"container": async_container},
             name="auto_close_past_rides",
         )
+        scheduler.add_job(
+            func=send_ride_reminders,
+            trigger=IntervalTrigger(minutes=1),
+            kwargs={"container": async_container},
+            name="send_ride_reminders",
+        )
         return scheduler
-
-
-# ==========================================
-# 2. APPLICATION LAYER
-# ==========================================
 
 
 class ServicesProvider(Provider):
@@ -141,10 +142,8 @@ class ServicesProvider(Provider):
         return StatisticsService(users_dao, rides_dao, bookings_dao, transactions_dao)
 
     @provide
-    def get_broadcast_service(
-        self, bot: Bot, users_dao: UsersDAO
-    ) -> BroadcastService:
-        return BroadcastService(bot, users_dao)
+    def get_broadcast_service(self, bot: Bot, config: Config, users_dao: UsersDAO) -> BroadcastService:
+        return BroadcastService(bot, config, users_dao)
 
     @provide
     def get_bot_service(self, bot: Bot, config: Config, users_dao: UsersDAO) -> BotService:
@@ -155,11 +154,5 @@ class UserAppProvider(Provider):
     scope = Scope.REQUEST
 
     @provide
-    def create_or_get_user(
-        self, users_dao: UsersDAO, bot_service: BotService
-    ) -> CreateOrGetUserInteractor:
+    def create_or_get_user(self, users_dao: UsersDAO, bot_service: BotService) -> CreateOrGetUserInteractor:
         return CreateOrGetUserInteractor(users_dao, bot_service)
-
-    @provide
-    def user_facade(self, create_or_get_user: CreateOrGetUserInteractor) -> UserFacade:
-        return UserFacade(create_or_get_user)

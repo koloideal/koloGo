@@ -1,17 +1,16 @@
-
 from aiogram.types import CallbackQuery
 from aiogram_dialog import Dialog, DialogManager, StartMode, Window
-from aiogram_dialog.widgets.kbd import Button, Cancel, SwitchTo
-from aiogram_dialog.widgets.text import Const, Format, List
+from aiogram_dialog.widgets.kbd import Button, Cancel, Column, Select, SwitchTo
+from aiogram_dialog.widgets.text import Const, Format
 from dishka import FromDishka
 from dishka.integrations.aiogram_dialog import inject
 
 from seatbot.application.services.ride import RideService
-from seatbot.domain.exceptions import (AlreadyBookedError, InsufficientBalanceError,
-                                       NoFreeSeatsError, RideNotBookableError,
-                                       UserBannedError)
+from seatbot.domain.exceptions import (AlreadyBookedError, NoFreeSeatsError,
+                                       RideNotBookableError, UserBannedError)
+from seatbot.domain.schemas import BookingStatus
 from seatbot.infrastructure.database.dao import BookingsDAO, RidesDAO, UsersDAO
-from seatbot.infrastructure.notifications import MessageBuilder
+from seatbot.infrastructure.notifications import MessageBuilder, fmt_amount
 
 from .states import MainMenuSG, RidesSG
 
@@ -31,13 +30,12 @@ async def get_rides_list(
         }
     items = []
     for rws in rides:
-        price_str = "Бесплатно" if rws.ride.is_free else f"{rws.ride.price:.2f} BYN"
+        price_str = "Бесплатно" if rws.ride.is_free else f"{fmt_amount(rws.ride.price)} BYN"
         items.append(
             {
                 "ride_id": rws.ride.ride_id,
                 "title": (
-                    f"#{rws.ride.ride_id} • {rws.ride.departure_at.strftime('%d.%m %H:%M')} • "
-                    f"{price_str} • {rws.free_seats} мест"
+                    f"{rws.ride.departure_at.strftime('%d.%m %H:%M')} • {price_str} • {rws.free_seats} мест"
                 ),
             }
         )
@@ -66,6 +64,14 @@ async def get_ride_detail(
     existing = await bookings_dao.get_by_ride_and_user(ride_id, user_id)
 
     ride_text = MessageBuilder.ride_card(rws)
+    if not rws.ride.is_free:
+        price = float(rws.ride.price)
+        if user and user.is_vip:
+            ride_text += "\n⭐ Для вас поездка бесплатна (VIP)"
+        elif user and user.balance >= price:
+            ride_text += f"\n💳 При бронировании спишется с депозита: <b>{fmt_amount(price)} BYN</b>"
+        else:
+            ride_text += f"\n💵 Оплата по факту поездки: <b>{fmt_amount(price)} BYN</b>"
     can_book = (
         rws.free_seats > 0
         and rws.ride.status.value == "open"
@@ -85,12 +91,23 @@ async def get_ride_detail(
     }
 
 
+async def on_ride_selected(
+    callback: CallbackQuery,
+    select: Select,
+    manager: DialogManager,
+    item_id: str,
+):
+    manager.dialog_data["ride_id"] = int(item_id)
+    await manager.next()
+
+
 @inject
 async def on_book_click(
     callback: CallbackQuery,
     button: Button,
     manager: DialogManager,
     ride_service: FromDishka[RideService],
+    rides_dao: FromDishka[RidesDAO],
     users_dao: FromDishka[UsersDAO],
 ):
     ride_id: int = manager.dialog_data["ride_id"]
@@ -101,12 +118,6 @@ async def on_book_click(
         return
     try:
         booking = await ride_service.book_ride(ride_id, user)
-    except InsufficientBalanceError as e:
-        await callback.answer(
-            f"Недостаточно депозита: нужно {e.required:.2f}, есть {e.available:.2f}",
-            show_alert=True,
-        )
-        return
     except NoFreeSeatsError:
         await callback.answer("Мест больше нет", show_alert=True)
         return
@@ -120,31 +131,48 @@ async def on_book_click(
         await callback.answer(f"Нельзя забронировать: {e.reason}", show_alert=True)
         return
 
-    status_text = "✅ Одобрено автоматически!" if booking.status.value == "approved" else "⏳ Ожидает подтверждения водителем."
-    await callback.answer(f"Бронь #{booking.booking_id} создана. {status_text}", show_alert=True)
+    status_text = (
+        "✅ Одобрено автоматически!"
+        if booking.status == BookingStatus.APPROVED
+        else "⏳ Ожидает подтверждения водителем."
+    )
+    msg = f"Бронь #{booking.booking_id} создана. {status_text}"
+    ride = await rides_dao.get_by_id(ride_id)
+    if ride:
+        if ride.is_free or user.is_vip:
+            msg += "\n💰 Поездка бесплатная."
+        elif booking.paid_amount > 0:
+            msg += f"\n💰 С депозита списано {fmt_amount(booking.paid_amount)} BYN."
+        else:
+            msg += f"\n💵 Оплата по факту поездки: {fmt_amount(float(ride.price))} BYN."
+    await callback.answer(msg, show_alert=True)
     await manager.start(MainMenuSG.main, mode=StartMode.RESET_STACK)
 
 
 rides_dialog = Dialog(
     Window(
         Const("🚗 <b>Ближайшие поездки</b>\n\nВыберите поездку:"),
-        List(
-            Format("{item[title]}"),
-            items="rides",
-            id="rides_list",
-            when="has_rides",
+        Column(
+            Select(
+                Format("{item[title]}"),
+                id="rides_sel",
+                item_id_getter=lambda item: str(item["ride_id"]),
+                items="rides",
+                on_click=on_ride_selected,
+                when="has_rides",
+            ),
         ),
-        Const("{empty_text}", when="not has_rides"),
-        Cancel(Const("{back_btn}")),
+        Format("{empty_text}", when="not has_rides"),
+        Cancel(Format("{back_btn}")),
         state=RidesSG.list,
         getter=get_rides_list,
     ),
     Window(
         Format("{ride_text}"),
         Button(Format("{book_btn}"), id="book", on_click=on_book_click, when="can_book"),
-        Const("{already_booked_text}", when="already_booked"),
-        Const("{no_seats_text}", when="not can_book and not already_booked"),
-        SwitchTo(Const("{back_btn}"), id="back", state=RidesSG.list),
+        Format("{already_booked_text}", when="already_booked"),
+        Format("{no_seats_text}", when="not can_book and not already_booked"),
+        SwitchTo(Format("{back_btn}"), id="back", state=RidesSG.list),
         state=RidesSG.detail,
         getter=get_ride_detail,
     ),

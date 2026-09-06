@@ -47,6 +47,8 @@ def upgrade() -> None:
         sa.Column("auto_approve", sa.Boolean(), nullable=False, server_default="false"),
         sa.Column("status", sa.String(length=16), nullable=False, server_default="open"),
         sa.Column("note", sa.String(length=512), nullable=True),
+        sa.Column("remind_minutes", sa.Integer(), nullable=False, server_default="30"),
+        sa.Column("remind_sent", sa.Boolean(), nullable=False, server_default="false"),
         sa.Column(
             "created_at",
             sa.TIMESTAMP(timezone=True),

@@ -1,9 +1,8 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from seatbot.application.services.bot import BotService
-from seatbot.domain.exceptions import (AlreadyBookedError, InsufficientBalanceError,
-                                       NoFreeSeatsError, RideNotBookableError,
-                                       UserBannedError)
+from seatbot.domain.exceptions import (AlreadyBookedError, NoFreeSeatsError,
+                                       RideNotBookableError, UserBannedError)
 from seatbot.domain.schemas import (Booking, BookingStatus, Ride, RideStatus,
                                     TransactionType, User)
 from seatbot.infrastructure.database.dao import (BookingsDAO, RidesDAO, TransactionsDAO,
@@ -26,25 +25,85 @@ class RideService:
         self._transactions_dao = transactions_dao
         self._bot_service = bot_service
 
-    # ── создание/управление поездками ────────────────────────────────────────
-
     async def create_ride(
         self,
         departure_at: datetime,
         price: float,
-        seats_total: int,
         auto_approve: bool,
+        seats_total: int = 4,
         note: str | None = None,
         is_visible: bool = True,
-    ) -> Ride:
-        return await self._rides_dao.create(
-            departure_at=departure_at,
-            price=price,
-            seats_total=seats_total,
-            auto_approve=auto_approve,
-            note=note,
-            is_visible=is_visible,
+        repeat_days: int = 1,
+        remind_minutes: int = 30,
+        template_ride_id: int | None = None,
+    ) -> list[Ride]:
+        rides = []
+        for i in range(repeat_days):
+            dep = departure_at + timedelta(days=i)
+            ride = await self._rides_dao.create(
+                departure_at=dep,
+                price=price,
+                seats_total=seats_total,
+                auto_approve=auto_approve,
+                note=note,
+                is_visible=is_visible,
+                remind_minutes=remind_minutes,
+            )
+            rides.append(ride)
+        if template_ride_id is not None:
+            await self._copy_vips_from_template(template_ride_id, rides)
+        await self._notify_new_rides(rides)
+        return rides
+
+    async def create_ride_from_template(
+        self,
+        template_ride_id: int,
+        start_date: datetime,
+        repeat_days: int = 1,
+    ) -> list[Ride] | None:
+        template = await self._rides_dao.get_by_id(template_ride_id)
+        if not template:
+            return None
+        departure_at = start_date.replace(
+            hour=template.departure_at.hour,
+            minute=template.departure_at.minute,
+            second=0,
+            microsecond=0,
+            tzinfo=UTC,
         )
+        return await self.create_ride(
+            departure_at=departure_at,
+            price=float(template.price),
+            auto_approve=template.auto_approve,
+            seats_total=template.seats_total,
+            note=template.note,
+            is_visible=template.is_visible,
+            repeat_days=repeat_days,
+            remind_minutes=template.remind_minutes,
+            template_ride_id=template_ride_id,
+        )
+
+    async def _copy_vips_from_template(self, template_ride_id: int, rides: list[Ride]) -> None:
+        bookings = await self._bookings_dao.list_for_ride_with_status(
+            template_ride_id, {BookingStatus.APPROVED}
+        )
+        vip_ids: list[int] = []
+        for b in bookings:
+            user = await self._users_dao.get_by_id(b.user_id)
+            if user and user.is_vip and b.user_id not in vip_ids:
+                vip_ids.append(b.user_id)
+        for ride in rides:
+            for vip_id in vip_ids:
+                await self.add_passenger(ride.ride_id, vip_id)
+
+    async def _notify_new_rides(self, rides: list[Ride]) -> None:
+        subscribers = await self._users_dao.list_new_ride_subscribers()
+        for ride in rides:
+            if not ride.is_visible:
+                continue
+            message = MessageBuilder.new_ride_notification(ride)
+            for user in subscribers:
+                await self._bot_service.notify_user(user.user_id, message)
 
     async def cancel_ride(self, ride_id: int) -> Ride | None:
         ride = await self._rides_dao.get_by_id(ride_id)
@@ -76,17 +135,13 @@ class RideService:
         if not ride:
             return None
         await self._rides_dao.set_status(ride_id, RideStatus.COMPLETED)
-        approved = await self._bookings_dao.list_for_ride_with_status(
-            ride_id, {BookingStatus.APPROVED}
-        )
+        approved = await self._bookings_dao.list_for_ride_with_status(ride_id, {BookingStatus.APPROVED})
         for booking in approved:
             await self._bookings_dao.set_status(booking.booking_id, BookingStatus.COMPLETED)
             await self._bot_service.notify_user(
                 booking.user_id, MessageBuilder.ride_completed_notification(ride)
             )
-        pending = await self._bookings_dao.list_for_ride_with_status(
-            ride_id, {BookingStatus.PENDING}
-        )
+        pending = await self._bookings_dao.list_for_ride_with_status(ride_id, {BookingStatus.PENDING})
         for booking in pending:
             await self._bookings_dao.set_status(booking.booking_id, BookingStatus.CANCELLED)
             if booking.paid_amount > 0:
@@ -106,12 +161,8 @@ class RideService:
         await self._bookings_dao.set_status(booking_id, BookingStatus.NO_SHOW)
         ride = await self._rides_dao.get_by_id(booking.ride_id)
         if ride:
-            await self._bot_service.notify_user(
-                booking.user_id, MessageBuilder.no_show_notification(ride)
-            )
+            await self._bot_service.notify_user(booking.user_id, MessageBuilder.no_show_notification(ride))
         return await self._bookings_dao.get_by_id(booking_id)
-
-    # ── бронирование ──────────────────────────────────────────────────────────
 
     async def book_ride(self, ride_id: int, user: User) -> Booking:
         ride = await self._rides_dao.get_by_id(ride_id)
@@ -135,12 +186,16 @@ class RideService:
 
         is_vip = user.is_vip
         is_free = ride.is_free or is_vip
-        paid_amount = 0.0 if is_free else ride.price
+        ride_price = float(ride.price)
 
-        if not is_free and user.balance < paid_amount:
-            raise InsufficientBalanceError(required=paid_amount, available=user.balance)
+        if is_free:
+            paid_amount = 0.0
+        elif user.balance >= ride_price:
+            paid_amount = ride_price
+        else:
+            paid_amount = 0.0
 
-        if not is_free:
+        if paid_amount > 0:
             await self._users_dao.decrease_balance(user.user_id, paid_amount)
             await self._transactions_dao.create(
                 user_id=user.user_id,
@@ -160,16 +215,61 @@ class RideService:
             updated = await self._bookings_dao.get_by_id(booking.booking_id)
             if updated:
                 booking = updated
+            due_amount = 0.0 if is_free else ride_price - booking.paid_amount
             await self._bot_service.notify_user(
-                user.user_id, MessageBuilder.booking_approved_notification(ride)
+                user.user_id, MessageBuilder.booking_approved_notification(ride, due_amount)
             )
 
-        await self._bot_service.send_log_to_admin_channel(
-            MessageBuilder.new_booking_admin_log(booking, user, ride)
+        await self._bot_service.send_log_to_admin(
+            MessageBuilder.new_booking_admin_log(booking, user, ride),
+            reply_markup=(
+                MessageBuilder.booking_approve_keyboard(booking.booking_id)
+                if booking.status == BookingStatus.PENDING
+                else None
+            ),
         )
         return booking
 
-    # ── апрув / реджект ───────────────────────────────────────────────────────
+    async def add_passenger(self, ride_id: int, user_id: int) -> Booking | None:
+        ride = await self._rides_dao.get_by_id(ride_id)
+        if not ride or ride.status != RideStatus.OPEN:
+            return None
+        user = await self._users_dao.get_by_id(user_id)
+        if not user:
+            return None
+        existing = await self._bookings_dao.get_by_ride_and_user(ride_id, user_id)
+        if existing:
+            return existing
+        active_count = await self._bookings_dao.count_active_for_ride(ride_id)
+        if active_count >= ride.seats_total:
+            raise NoFreeSeatsError(ride_id)
+
+        is_free = ride.is_free or user.is_vip
+        ride_price = float(ride.price)
+        if is_free or user.balance < ride_price:
+            paid_amount = 0.0
+        else:
+            paid_amount = ride_price
+        if paid_amount > 0:
+            await self._users_dao.decrease_balance(user_id, paid_amount)
+            await self._transactions_dao.create(
+                user_id=user_id,
+                amount=paid_amount,
+                type=TransactionType.RIDE_PAYMENT,
+                ride_id=ride_id,
+            )
+
+        booking = await self._bookings_dao.create(
+            ride_id=ride_id,
+            user_id=user_id,
+            paid_amount=paid_amount,
+        )
+        await self._bookings_dao.set_status(booking.booking_id, BookingStatus.APPROVED)
+        due_amount = 0.0 if is_free else ride_price - paid_amount
+        await self._bot_service.notify_user(
+            user_id, MessageBuilder.added_by_admin_notification(ride, due_amount)
+        )
+        return await self._bookings_dao.get_by_id(booking.booking_id)
 
     async def approve_booking(self, booking_id: int) -> Booking | None:
         booking = await self._bookings_dao.get_by_id(booking_id)
@@ -178,8 +278,12 @@ class RideService:
         await self._bookings_dao.set_status(booking_id, BookingStatus.APPROVED)
         ride = await self._rides_dao.get_by_id(booking.ride_id)
         if ride:
+            user = await self._users_dao.get_by_id(booking.user_id)
+            due_amount = (
+                0.0 if ride.is_free or (user and user.is_vip) else float(ride.price) - booking.paid_amount
+            )
             await self._bot_service.notify_user(
-                booking.user_id, MessageBuilder.booking_approved_notification(ride)
+                booking.user_id, MessageBuilder.booking_approved_notification(ride, due_amount)
             )
         return await self._bookings_dao.get_by_id(booking_id)
 
@@ -217,5 +321,11 @@ class RideService:
                 amount=booking.paid_amount,
                 type=TransactionType.REFUND,
                 ride_id=booking.ride_id,
+            )
+        ride = await self._rides_dao.get_by_id(booking.ride_id)
+        user = await self._users_dao.get_by_id(user_id)
+        if ride and user:
+            await self._bot_service.send_log_to_admin(
+                MessageBuilder.booking_cancelled_by_user_admin_log(booking, user, ride)
             )
         return await self._bookings_dao.get_by_id(booking_id)

@@ -8,21 +8,31 @@ from dishka.integrations.aiogram_dialog import inject
 
 from seatbot.application.services.broadcast import BroadcastService
 
-from ..user_dialogs.states import AdminSG
+from ..user_dialogs.states import AdminPanelSG, BroadcastSG
 
 
-async def on_broadcast_text_input(message: Message, widget: MessageInput, manager: DialogManager):
-    text = (message.text or "").strip()
-    if not text or len(text) > 4096:
-        await message.answer("❌ Текст пустой или слишком длинный (макс. 4096 символов).")
+async def on_broadcast_message_input(
+    message: Message,
+    widget: MessageInput,
+    manager: DialogManager,
+):
+    if not message or not message.message_id:
+        await message.answer("❌ Не удалось получить сообщение.")
         return
-    manager.dialog_data["broadcast_text"] = text
+    manager.dialog_data["from_chat_id"] = message.chat.id
+    manager.dialog_data["message_id"] = message.message_id
     await manager.next()
 
 
 async def get_broadcast_confirm(dialog_manager: DialogManager, **_kwargs):
-    text: str = dialog_manager.dialog_data.get("broadcast_text", "")
-    return {"preview_text": text, "send_btn": "📢 Отправить всем", "back_btn": "⬅️ Назад"}
+    from_chat_id: int = dialog_manager.dialog_data.get("from_chat_id", 0)
+    message_id: int = dialog_manager.dialog_data.get("message_id", 0)
+    has_msg = bool(from_chat_id and message_id)
+    return {
+        "has_msg": has_msg,
+        "send_btn": "📢 Отправить всем",
+        "back_btn": "⬅️ Назад",
+    }
 
 
 @inject
@@ -32,30 +42,29 @@ async def on_send_broadcast(
     manager: DialogManager,
     broadcast_service: FromDishka[BroadcastService],
 ):
-    text: str = manager.dialog_data["broadcast_text"]
-    await callback.answer("📤 Рассылка началась...")
-    success, total = await broadcast_service.broadcast(text)
-    if callback.message:
-        await callback.message.answer(f"✅ Рассылка завершена.\nОтправлено: {success}/{total}")
-    await manager.start(AdminSG.main, mode=StartMode.RESET_STACK)
+    from_chat_id: int = manager.dialog_data["from_chat_id"]
+    message_id: int = manager.dialog_data["message_id"]
+    await callback.answer("📤 Рассылка запущена в фоне. Статистика придёт позже.")
+    broadcast_service.start_broadcast(from_chat_id, message_id)
+    await manager.start(AdminPanelSG.main, mode=StartMode.RESET_STACK)
 
 
 broadcast_dialog = Dialog(
     Window(
         Const(
             "📢 <b>Рассылка</b>\n\n"
-            "Введите текст сообщения для всех пользователей:"
+            "Отправьте любое сообщение — текст, фото, видео, голосовое, файл.\n"
+            "Оно будет скопировано и отправлено всем пользователям."
         ),
-        MessageInput(on_broadcast_text_input),
+        MessageInput(on_broadcast_message_input),
         Cancel(Const("⬅️ Отмена")),
-        state=AdminSG.broadcast_text,
+        state=BroadcastSG.text,
     ),
     Window(
-        Const("📋 <b>Предпросмотр:</b>\n\n"),
-        Format("{preview_text}"),
-        Button(Format("{send_btn}"), id="send", on_click=on_send_broadcast),
-        SwitchTo(Format("{back_btn}"), id="back", state=AdminSG.broadcast_text),
-        state=AdminSG.broadcast_confirm,
+        Const("📋 <b>Сообщение получено.</b>\n\nОтправляем всем пользователям?"),
+        Button(Format("{send_btn}"), id="send", on_click=on_send_broadcast, when="has_msg"),
+        SwitchTo(Format("{back_btn}"), id="back", state=BroadcastSG.text),
+        state=BroadcastSG.confirm,
         getter=get_broadcast_confirm,
     ),
 )
