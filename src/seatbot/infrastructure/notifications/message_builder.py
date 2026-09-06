@@ -211,25 +211,6 @@ class MessageBuilder:
         )
 
     @staticmethod
-    def ban_notification() -> str:
-        return "🚫 Вы добавлены в чёрный список. Бронирование поездок недоступно."
-
-    @staticmethod
-    def unban_notification() -> str:
-        return "✅ Вы удалены из чёрного списка. Бронирование снова доступно."
-
-    @staticmethod
-    def vip_granted_notification() -> str:
-        return (
-            "⭐ Вам выдан VIP-статус!\n\n"
-            "Все поездки для вас бесплатны, бронирования одобряются автоматически."
-        )
-
-    @staticmethod
-    def vip_revoked_notification() -> str:
-        return "⭐ VIP-статус снят."
-
-    @staticmethod
     def new_ride_notification(ride: Ride) -> str:
         price = "Бесплатно" if ride.is_free else f"{fmt_amount(ride.price)} BYN"
         note = f"\n📝 {escape(ride.note)}" if ride.note else ""

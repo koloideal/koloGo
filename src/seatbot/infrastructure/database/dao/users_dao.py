@@ -31,12 +31,6 @@ class UsersDAO:
         orm_user = result.scalar_one()
         return self._map_to_domain(orm_user)
 
-    async def get_or_create(self, user_id: int, username: str | None, first_name: str | None = None) -> User:
-        user = await self.get_by_id(user_id)
-        if user:
-            return user
-        return await self.create(user_id, username, first_name)
-
     async def update_profile(self, user_id: int, username: str | None, first_name: str | None) -> User | None:
         result = await self.session.execute(select(OrmUser).where(OrmUser.user_id == user_id))
         orm_user = result.scalar_one_or_none()
@@ -63,14 +57,6 @@ class UsersDAO:
         if current < Decimal(str(amount)):
             raise InsufficientBalanceError(required=amount, available=float(current))
         orm_user.balance = current - Decimal(str(amount))
-        return self._map_to_domain(orm_user)
-
-    async def set_balance(self, user_id: int, new_balance: float) -> User | None:
-        result = await self.session.execute(select(OrmUser).where(OrmUser.user_id == user_id))
-        orm_user = result.scalar_one_or_none()
-        if not orm_user:
-            return None
-        orm_user.balance = Decimal(str(new_balance))
         return self._map_to_domain(orm_user)
 
     async def ban_user(self, user_id: int) -> User | None:
@@ -120,11 +106,6 @@ class UsersDAO:
             query = query.where(OrmUser.user_id != exclude_user_id)
         if limit != -1:
             query = query.limit(limit)
-        result = await self.session.execute(query)
-        return [self._map_to_domain(u) for u in result.scalars().all()]
-
-    async def search_by_username(self, username_part: str) -> list[User]:
-        query = select(OrmUser).where(OrmUser.username.ilike(f"%{username_part}%"))
         result = await self.session.execute(query)
         return [self._map_to_domain(u) for u in result.scalars().all()]
 

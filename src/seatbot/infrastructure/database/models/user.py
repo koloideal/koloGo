@@ -1,18 +1,13 @@
-from __future__ import annotations
-
 from datetime import datetime
 from decimal import Decimal
-from typing import TYPE_CHECKING
 
 from sqlalchemy import BigInteger, Boolean, Numeric, String, func
 from sqlalchemy.dialects.postgresql import TIMESTAMP
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-if TYPE_CHECKING:
-    from .booking import Booking
-    from .transaction import Transaction
-
 from .base import Base
+from .booking import Booking
+from .transaction import Transaction
 
 
 class User(Base):

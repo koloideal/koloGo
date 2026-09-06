@@ -28,6 +28,8 @@ async def get_main_menu(
         lines.append("⭐ <b>VIP:</b> поездки бесплатно, апрув автоматически.")
     if user and user.balance > 0:
         lines.append(f"💰 На депозите: <b>{fmt_amount(user.balance)} BYN</b>")
+    else:
+        lines[0] = lines[0].rstrip("\n")
     lines.append("\n<i><b>made by kolo</b></i>")
     return {
         "menu_text": "\n".join(lines),
