@@ -189,7 +189,9 @@ async def on_price_input(message: Message, widget: MessageInput, manager: Dialog
         if price < 0:
             raise ValueError
     except ValueError:
-        await message.answer("❌ Введите неотрицательное число (например, <code>15.50</code> или <code>0</code>).")
+        await message.answer(
+            "❌ Введите неотрицательное число (например, <code>15.50</code> или <code>0</code>)."
+        )
         return
     manager.dialog_data["price"] = price
     await manager.next()
@@ -270,8 +272,12 @@ async def on_create(
 
     d = date.fromisoformat(date_str)
     departure_at = datetime(
-        year=d.year, month=d.month, day=d.day,
-        hour=hour, minute=minute, tzinfo=UTC,
+        year=d.year,
+        month=d.month,
+        day=d.day,
+        hour=hour,
+        minute=minute,
+        tzinfo=UTC,
     )
 
     rides = await ride_service.create_ride(
@@ -391,8 +397,7 @@ ride_create_dialog = Dialog(
     # 7. Видимость
     Window(
         Const(
-            "👁️ <b>Видимость</b>\n\n"
-            "Сделать поездку видимой всем, или скрытой (видна только забронировавшим)?"
+            "👁️ <b>Видимость</b>\n\nСделать поездку видимой всем, или скрытой (видна только забронировавшим)?"
         ),
         Row(
             Button(Const("👁️ Видна всем"), id="vis_yes", on_click=on_vis_yes),

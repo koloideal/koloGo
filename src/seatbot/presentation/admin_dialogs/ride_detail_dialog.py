@@ -11,7 +11,8 @@ from seatbot.domain.exceptions import NoFreeSeatsError
 from seatbot.domain.schemas import BookingStatus, RideStatus
 from seatbot.infrastructure.config.models import Config
 from seatbot.infrastructure.database.dao import BookingsDAO, RidesDAO, UsersDAO
-from seatbot.infrastructure.notifications import BOOKING_STATUS_RU, MessageBuilder
+from seatbot.infrastructure.notifications import (BOOKING_STATUS_RU, MessageBuilder,
+                                                  user_display)
 
 from ..user_dialogs.states import RideBookingsSG
 
@@ -35,24 +36,34 @@ async def get_ride_bookings(
 ):
     start_data = dialog_manager.start_data
     ride_id: int | None = (
-        start_data.get("ride_id") if isinstance(start_data, dict) else dialog_manager.dialog_data.get("ride_id")
+        start_data.get("ride_id")
+        if isinstance(start_data, dict)
+        else dialog_manager.dialog_data.get("ride_id")
     )
     if ride_id is None:
-        return {"has_bookings": False, "empty_text": "🚫 Нет броней.", "back_btn": "⬅️ Назад",
-                "can_add_passenger": False}
+        return {
+            "has_bookings": False,
+            "empty_text": "🚫 Нет броней.",
+            "back_btn": "⬅️ Назад",
+            "can_add_passenger": False,
+        }
     dialog_manager.dialog_data["ride_id"] = ride_id
     ride = await rides_dao.get_by_id(ride_id)
     can_add = ride is not None and ride.status == RideStatus.OPEN
     bookings = await bookings_dao.list_for_ride(ride_id)
     if not bookings:
-        return {"has_bookings": False, "empty_text": "🚫 На эту поездку нет броней.", "back_btn": "⬅️ Назад",
-                "can_add_passenger": can_add}
+        return {
+            "has_bookings": False,
+            "empty_text": "🚫 На эту поездку нет броней.",
+            "back_btn": "⬅️ Назад",
+            "can_add_passenger": can_add,
+        }
     items = []
     for b in bookings:
         user = await users_dao.get_by_id(b.user_id)
         emoji = _STATUS_EMOJI.get(b.status, "•")
         vip = " ⭐" if (user and user.is_vip) else ""
-        uname = f"@{user.username}" if user and user.username else f"id:{b.user_id}"
+        uname = user_display(user.username, user.first_name, b.user_id) if user else f"id:{b.user_id}"
         status_ru = BOOKING_STATUS_RU.get(b.status, b.status.value)
         pay = (
             MessageBuilder.payment_short(
@@ -69,8 +80,7 @@ async def get_ride_bookings(
                 "title": f"{emoji} #{b.booking_id} • {uname}{vip} • {status_ru} • {pay}",
             }
         )
-    return {"has_bookings": True, "bookings": items, "back_btn": "⬅️ К поездке",
-            "can_add_passenger": can_add}
+    return {"has_bookings": True, "bookings": items, "back_btn": "⬅️ К поездке", "can_add_passenger": can_add}
 
 
 @inject
@@ -87,21 +97,21 @@ async def get_booking_detail(
         return {"booking_text": "🚫 Бронь не найдена", "back_btn": "⬅️ Назад"}
     user = await users_dao.get_by_id(booking.user_id)
     ride = await rides_dao.get_by_id(booking.ride_id)
-    uname = f"@{user.username}" if user and user.username else f"id:{booking.user_id}"
+    uname = user_display(user.username, user.first_name, booking.user_id) if user else f"id:{booking.user_id}"
     vip = " ⭐VIP" if (user and user.is_vip) else ""
-    text = (
-        f"<b>Бронь #{booking.booking_id}</b>\n\n"
-        f"👤 Пользователь: {uname}{vip} ({booking.user_id})\n"
-    )
+    text = f"<b>Бронь #{booking.booking_id}</b>\n\n👤 Пользователь: {uname}{vip} ({booking.user_id})\n"
     if ride:
         text += f"🚗 Поездка: {ride.departure_at.strftime('%d.%m.%Y %H:%M')}\n"
-        text += MessageBuilder.payment_full(
-            booking.paid_amount,
-            float(ride.price),
-            ride.is_free or bool(user and user.is_vip),
-        ) + "\n"
+        text += (
+            MessageBuilder.payment_full(
+                booking.paid_amount,
+                float(ride.price),
+                ride.is_free or bool(user and user.is_vip),
+            )
+            + "\n"
+        )
     status_ru = BOOKING_STATUS_RU.get(booking.status, booking.status.value)
-    text += f"� Статус: {_STATUS_EMOJI.get(booking.status, '•')} {status_ru.capitalize()}"
+    text += f"📋 Статус: {_STATUS_EMOJI.get(booking.status, '•')} {status_ru.capitalize()}"
     is_pending = booking.status == BookingStatus.PENDING
     is_approved = booking.status == BookingStatus.APPROVED
     return {
@@ -190,7 +200,7 @@ async def get_passengers_list(
         if s.is_banned:
             badges.append("🚫")
         badge_str = " " + "".join(badges) if badges else ""
-        uname = f"@{s.username}" if s.username else f"id:{s.user_id}"
+        uname = user_display(s.username, s.first_name, s.user_id)
         items.append(
             {
                 "user_id": s.user_id,

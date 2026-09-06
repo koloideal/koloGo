@@ -78,7 +78,6 @@ async def main() -> None:
     from seatbot.presentation.admin_dialogs import users_dialog as users_dialog_mod
     from seatbot.presentation.admin_handlers import admin_router
     from seatbot.presentation.error_handlers import error_router
-    from seatbot.presentation.user_dialogs import balance_dialog as balance_dialog_mod
     from seatbot.presentation.user_dialogs import main_menu_dialog as main_menu_dialog_mod
     from seatbot.presentation.user_dialogs import \
         my_bookings_dialog as my_bookings_dialog_mod
@@ -91,7 +90,6 @@ async def main() -> None:
         main_menu_dialog_mod.main_menu_dialog,
         rides_dialog_mod.rides_dialog,
         my_bookings_dialog_mod.my_bookings_dialog,
-        balance_dialog_mod.balance_dialog,
         stats_dialog_mod.stats_dialog,
     )
     dp.include_routers(

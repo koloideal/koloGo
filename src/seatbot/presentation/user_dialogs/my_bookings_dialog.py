@@ -50,9 +50,7 @@ async def get_my_bookings(
         items.append(
             {
                 "booking_id": b.booking_id,
-                "title": (
-                    f"{emoji} {ride.departure_at.strftime('%d.%m %H:%M')} • {pay}"
-                ),
+                "title": (f"{emoji} {ride.departure_at.strftime('%d.%m %H:%M')} • {pay}"),
             }
         )
     return {
@@ -80,9 +78,7 @@ async def get_booking_detail(
     user = await users_dao.get_by_id(booking.user_id)
     can_cancel = booking.status in (BookingStatus.PENDING, BookingStatus.APPROVED)
     return {
-        "booking_text": MessageBuilder.booking_card(
-            booking, ride, is_vip=bool(user and user.is_vip)
-        ),
+        "booking_text": MessageBuilder.booking_card(booking, ride, is_vip=bool(user and user.is_vip)),
         "can_cancel": can_cancel,
         "cancel_btn": "🚫 Отменить бронь",
         "back_btn": "⬅️ К броням",

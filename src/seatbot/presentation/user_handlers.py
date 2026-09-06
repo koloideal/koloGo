@@ -20,6 +20,8 @@ async def cmd_start(
 ):
     from_user = dialog_manager.middleware_data["event_from_user"]
     await create_or_get_user.execute(
-        CreateOrGetUserCommand(user_id=from_user.id, username=from_user.username)
+        CreateOrGetUserCommand(
+            user_id=from_user.id, username=from_user.username, first_name=from_user.first_name
+        )
     )
     await dialog_manager.start(MainMenuSG.main, mode=StartMode.RESET_STACK)

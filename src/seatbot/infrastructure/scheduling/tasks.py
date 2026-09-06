@@ -33,9 +33,7 @@ async def send_ride_reminders(container: AsyncContainer) -> None:
                 continue
             if await rides_dao.is_remind_sent(ride.ride_id):
                 continue
-            approved = await bookings_dao.list_for_ride_with_status(
-                ride.ride_id, {BookingStatus.APPROVED}
-            )
+            approved = await bookings_dao.list_for_ride_with_status(ride.ride_id, {BookingStatus.APPROVED})
             for booking in approved:
                 await bot_service.notify_user(
                     booking.user_id, MessageBuilder.ride_reminder_notification(ride)

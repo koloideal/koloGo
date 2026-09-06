@@ -1,4 +1,5 @@
 from datetime import datetime
+from html import escape
 
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
@@ -16,6 +17,14 @@ BOOKING_STATUS_RU = {
 
 def _fmt_dt(dt: datetime) -> str:
     return dt.strftime("%d.%m.%Y %H:%M")
+
+
+def user_display(username: str | None, first_name: str | None, user_id: int) -> str:
+    if username:
+        return f"@{username}"
+    if first_name:
+        return escape(first_name)
+    return f"id{user_id}"
 
 
 class MessageBuilder:
@@ -54,7 +63,7 @@ class MessageBuilder:
             return "бесплатно"
         if paid_amount > 0:
             return f"деп {paid_amount:.2f} BYN"
-        return f"нал {price:.2f} BYN"
+        return f"по факту {price:.2f} BYN"
 
     @staticmethod
     def payment_full(paid_amount: float, price: float, is_free: bool) -> str:
@@ -62,7 +71,7 @@ class MessageBuilder:
             return "💰 Оплата: <b>Бесплатно</b>"
         if paid_amount > 0:
             return f"💰 Списано с депозита: <b>{paid_amount:.2f} BYN</b>"
-        return f"💰 К оплате налом при встрече: <b>{price:.2f} BYN</b>"
+        return f"💰 Оплата по факту: <b>{price:.2f} BYN</b>"
 
     @staticmethod
     def booking_card(booking: Booking, ride: Ride, is_vip: bool = False) -> str:
@@ -74,9 +83,7 @@ class MessageBuilder:
             BookingStatus.COMPLETED: "🏁 Завершено",
             BookingStatus.NO_SHOW: "🙅 Неявка",
         }
-        payment = MessageBuilder.payment_full(
-            booking.paid_amount, float(ride.price), ride.is_free or is_vip
-        )
+        payment = MessageBuilder.payment_full(booking.paid_amount, float(ride.price), ride.is_free or is_vip)
         return (
             f"<b>Бронь #{booking.booking_id}</b>\n"
             f"🕒 {_fmt_dt(ride.departure_at)}\n"
@@ -92,7 +99,7 @@ class MessageBuilder:
             f"Жду вас, место закреплено."
         )
         if due_amount > 0:
-            text += f"\n💰 К оплате на месте: <b>{due_amount:.2f} BYN</b> (наличными)"
+            text += f"\n💰 Оплата по факту: <b>{due_amount:.2f} BYN</b>"
         return text
 
     @staticmethod
@@ -136,11 +143,12 @@ class MessageBuilder:
         elif booking.paid_amount > 0:
             payment = f"списано с депозита {booking.paid_amount:.2f} BYN"
         else:
-            payment = f"нал при встрече {float(ride.price):.2f} BYN"
+            payment = f"по факту {float(ride.price):.2f} BYN"
         return (
             f"🆕 <b>Новая бронь</b>\n"
             f"Поездка {_fmt_dt(ride.departure_at)}\n"
-            f"Пользователь: @{user.username or '—'} ({user.user_id}){vip_marker}\n"
+            f"Пользователь: {user_display(user.username, user.first_name, user.user_id)} "
+            f"({user.user_id}){vip_marker}\n"
             f"Бронь #{booking.booking_id}, оплата: {payment}"
         )
 
@@ -149,12 +157,8 @@ class MessageBuilder:
         return InlineKeyboardMarkup(
             inline_keyboard=[
                 [
-                    InlineKeyboardButton(
-                        text="✅ Одобрить", callback_data=f"adm_approve:{booking_id}"
-                    ),
-                    InlineKeyboardButton(
-                        text="❌ Отклонить", callback_data=f"adm_reject:{booking_id}"
-                    ),
+                    InlineKeyboardButton(text="✅ Одобрить", callback_data=f"adm_approve:{booking_id}"),
+                    InlineKeyboardButton(text="❌ Отклонить", callback_data=f"adm_reject:{booking_id}"),
                 ]
             ]
         )
@@ -163,7 +167,7 @@ class MessageBuilder:
     def new_user_admin_log(user: User) -> str:
         return (
             f"👋 <b>Новый пользователь</b>\n"
-            f"@{user.username or '—'} ({user.user_id})"
+            f"{user_display(user.username, user.first_name, user.user_id)} ({user.user_id})"
         )
 
     @staticmethod
@@ -209,7 +213,7 @@ class MessageBuilder:
             f"Место закреплено за вами. Жду вас!"
         )
         if due_amount > 0:
-            text += f"\n💰 К оплате на месте: <b>{due_amount:.2f} BYN</b> (наличными)"
+            text += f"\n💰 Оплата по факту: <b>{due_amount:.2f} BYN</b>"
         return text
 
     @staticmethod

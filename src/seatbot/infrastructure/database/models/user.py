@@ -20,6 +20,7 @@ class User(Base):
 
     user_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, unique=True, autoincrement=False)
     username: Mapped[str | None] = mapped_column(String, nullable=True)
+    first_name: Mapped[str | None] = mapped_column(String, nullable=True)
     balance: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False, default=Decimal(0))
     registration_date: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()

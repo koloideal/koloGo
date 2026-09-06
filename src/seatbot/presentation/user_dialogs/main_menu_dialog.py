@@ -1,24 +1,46 @@
-from aiogram_dialog import Dialog, Window
+from aiogram_dialog import Dialog, DialogManager, Window
 from aiogram_dialog.widgets.kbd import Row, Start
-from aiogram_dialog.widgets.text import Const
+from aiogram_dialog.widgets.text import Const, Format
+from dishka import FromDishka
+from dishka.integrations.aiogram_dialog import inject
 
-from .states import BalanceSG, MainMenuSG, MyBookingsSG, RidesSG, StatsSG
+from seatbot.infrastructure.database.dao import UsersDAO
+
+from .states import MainMenuSG, MyBookingsSG, RidesSG, StatsSG
+
+
+@inject
+async def get_main_menu(
+    dialog_manager: DialogManager,
+    users_dao: FromDishka[UsersDAO],
+    **_kwargs,
+):
+    user_id = dialog_manager.middleware_data["event_from_user"].id
+    user = await users_dao.get_by_id(user_id)
+    lines = [
+        "🚗 <b>SeatBot — поездки в Минск</b>\n",
+        "Подкидываю до Минска после пар. Мест всего 4 — бронируй заранее.",
+        "Оплата с депозита или по факту поездки.",
+    ]
+    if user and user.is_vip:
+        lines.append("⭐ <b>VIP:</b> поездки бесплатно, апрув автоматически.")
+    if user and user.balance > 0:
+        lines.append(f"💰 На депозите: <b>{user.balance:.2f} BYN</b>")
+    lines.append("\n<i><b>made by kolo</b></i>")
+    return {"menu_text": "\n".join(lines)}
+
 
 main_menu_dialog = Dialog(
     Window(
-        Const(
-            "<b>🚗 SeatBot — поездки в Минск</b>\n\n"
-            "Я — студент колледжа, подкидываю людей до Минска после пар.\n"
-            "Всего 4 места на поездку. Бронируй заранее!"
-        ),
+        Format("{menu_text}"),
         Row(
             Start(Const("🚗 Поездки"), id="rides", state=RidesSG.list),
             Start(Const("📋 Мои брони"), id="mybookings", state=MyBookingsSG.list),
         ),
         Row(
-            Start(Const("💰 Депозит"), id="balance", state=BalanceSG.balance),
             Start(Const("📊 Статистика"), id="stats", state=StatsSG.stats),
         ),
         state=MainMenuSG.main,
+        getter=get_main_menu,
     ),
 )

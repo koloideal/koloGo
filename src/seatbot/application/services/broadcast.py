@@ -66,6 +66,4 @@ class BroadcastService:
         from_chat_id: int,
         message_id: int,
     ) -> asyncio.Task[None]:
-        return asyncio.create_task(
-            self.broadcast_message_and_report(from_chat_id, message_id)
-        )
+        return asyncio.create_task(self.broadcast_message_and_report(from_chat_id, message_id))

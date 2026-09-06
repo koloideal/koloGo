@@ -20,7 +20,9 @@ class Booking(Base):
 
     ride_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("rides.id"), nullable=False, index=True)
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.user_id"), nullable=False, index=True)
-    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending", server_default="pending")
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="pending", server_default="pending"
+    )
     paid_amount: Mapped[Decimal] = mapped_column(
         Numeric(10, 2), nullable=False, default=Decimal(0), server_default="0"
     )
@@ -32,4 +34,6 @@ class Booking(Base):
     user: Mapped[User] = relationship("User", back_populates="bookings")
 
     def __repr__(self) -> str:
-        return f"<Booking(id={self.id}, ride_id={self.ride_id}, user_id={self.user_id}, status={self.status})>"
+        return (
+            f"<Booking(id={self.id}, ride_id={self.ride_id}, user_id={self.user_id}, status={self.status})>"
+        )

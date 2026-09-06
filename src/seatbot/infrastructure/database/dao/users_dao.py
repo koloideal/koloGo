@@ -19,10 +19,10 @@ class UsersDAO:
         orm_user = result.scalar_one_or_none()
         return self._map_to_domain(orm_user) if orm_user else None
 
-    async def create(self, user_id: int, username: str | None) -> User:
+    async def create(self, user_id: int, username: str | None, first_name: str | None = None) -> User:
         stmt = (
             insert(OrmUser)
-            .values(user_id=user_id, username=username, balance=0)
+            .values(user_id=user_id, username=username, first_name=first_name, balance=0)
             .on_conflict_do_nothing(index_elements=["user_id"])
         )
         await self.session.execute(stmt)
@@ -31,18 +31,19 @@ class UsersDAO:
         orm_user = result.scalar_one()
         return self._map_to_domain(orm_user)
 
-    async def get_or_create(self, user_id: int, username: str | None) -> User:
+    async def get_or_create(self, user_id: int, username: str | None, first_name: str | None = None) -> User:
         user = await self.get_by_id(user_id)
         if user:
             return user
-        return await self.create(user_id, username)
+        return await self.create(user_id, username, first_name)
 
-    async def update_username(self, user_id: int, username: str | None) -> User | None:
+    async def update_profile(self, user_id: int, username: str | None, first_name: str | None) -> User | None:
         result = await self.session.execute(select(OrmUser).where(OrmUser.user_id == user_id))
         orm_user = result.scalar_one_or_none()
         if not orm_user:
             return None
         orm_user.username = username
+        orm_user.first_name = first_name
         return self._map_to_domain(orm_user)
 
     async def increase_balance(self, user_id: int, amount: float) -> User | None:
@@ -128,4 +129,5 @@ class UsersDAO:
             is_admin=orm_user.is_admin,
             is_banned=orm_user.is_banned,
             is_vip=orm_user.is_vip,
+            first_name=orm_user.first_name,
         )

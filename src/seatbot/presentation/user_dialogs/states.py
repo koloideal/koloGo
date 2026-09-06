@@ -16,10 +16,6 @@ class MyBookingsSG(StatesGroup):
     detail = State()
 
 
-class BalanceSG(StatesGroup):
-    balance = State()
-
-
 class StatsSG(StatesGroup):
     stats = State()
 

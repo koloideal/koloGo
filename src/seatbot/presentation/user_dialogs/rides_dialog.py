@@ -1,4 +1,3 @@
-
 from aiogram.types import CallbackQuery
 from aiogram_dialog import Dialog, DialogManager, StartMode, Window
 from aiogram_dialog.widgets.kbd import Button, Cancel, Column, Select, SwitchTo
@@ -36,8 +35,7 @@ async def get_rides_list(
             {
                 "ride_id": rws.ride.ride_id,
                 "title": (
-                    f"{rws.ride.departure_at.strftime('%d.%m %H:%M')} • "
-                    f"{price_str} • {rws.free_seats} мест"
+                    f"{rws.ride.departure_at.strftime('%d.%m %H:%M')} • {price_str} • {rws.free_seats} мест"
                 ),
             }
         )
@@ -73,7 +71,7 @@ async def get_ride_detail(
         elif user and user.balance >= price:
             ride_text += f"\n💳 При бронировании спишется с депозита: <b>{price:.2f} BYN</b>"
         else:
-            ride_text += f"\n💵 Оплата налом при встрече: <b>{price:.2f} BYN</b>"
+            ride_text += f"\n💵 Оплата по факту поездки: <b>{price:.2f} BYN</b>"
     can_book = (
         rws.free_seats > 0
         and rws.ride.status.value == "open"
@@ -146,7 +144,7 @@ async def on_book_click(
         elif booking.paid_amount > 0:
             msg += f"\n💰 С депозита списано {booking.paid_amount:.2f} BYN."
         else:
-            msg += f"\n💵 Оплата налом при встрече: {float(ride.price):.2f} BYN."
+            msg += f"\n💵 Оплата по факту поездки: {float(ride.price):.2f} BYN."
     await callback.answer(msg, show_alert=True)
     await manager.start(MainMenuSG.main, mode=StartMode.RESET_STACK)
 

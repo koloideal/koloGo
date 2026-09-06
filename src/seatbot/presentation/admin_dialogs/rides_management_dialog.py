@@ -171,12 +171,18 @@ rides_management_dialog = Dialog(
         Format("{ride_text}"),
         Button(Format("{bookings_btn}"), id="to_bookings", on_click=on_to_bookings),
         Group(
-            Button(Format("{toggle_vis_btn}"), id="toggle_vis", on_click=on_toggle_visibility, when="is_open"),
-            Button(Format("{toggle_auto_btn}"), id="toggle_auto", on_click=on_toggle_auto_approve, when="is_open"),
+            Button(
+                Format("{toggle_vis_btn}"), id="toggle_vis", on_click=on_toggle_visibility, when="is_open"
+            ),
+            Button(
+                Format("{toggle_auto_btn}"), id="toggle_auto", on_click=on_toggle_auto_approve, when="is_open"
+            ),
             width=2,
         ),
         Group(
-            SwitchTo(Format("{complete_btn}"), id="complete", state=RidesMgmtSG.complete_confirm, when="is_active"),
+            SwitchTo(
+                Format("{complete_btn}"), id="complete", state=RidesMgmtSG.complete_confirm, when="is_active"
+            ),
             Button(Format("{cancel_btn}"), id="cancel_ride", on_click=on_cancel_ride, when="is_active"),
             width=2,
         ),

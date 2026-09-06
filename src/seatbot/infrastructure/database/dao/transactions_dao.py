@@ -42,9 +42,7 @@ class TransactionsDAO:
 
     async def _sum_by_type(self, type: TransactionType) -> float:
         result = await self.session.execute(
-            select(func.coalesce(func.sum(OrmTransaction.amount), 0)).where(
-                OrmTransaction.type == type.value
-            )
+            select(func.coalesce(func.sum(OrmTransaction.amount), 0)).where(OrmTransaction.type == type.value)
         )
         return float(result.scalar_one() or 0)
 

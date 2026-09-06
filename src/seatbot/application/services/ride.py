@@ -108,17 +108,13 @@ class RideService:
         if not ride:
             return None
         await self._rides_dao.set_status(ride_id, RideStatus.COMPLETED)
-        approved = await self._bookings_dao.list_for_ride_with_status(
-            ride_id, {BookingStatus.APPROVED}
-        )
+        approved = await self._bookings_dao.list_for_ride_with_status(ride_id, {BookingStatus.APPROVED})
         for booking in approved:
             await self._bookings_dao.set_status(booking.booking_id, BookingStatus.COMPLETED)
             await self._bot_service.notify_user(
                 booking.user_id, MessageBuilder.ride_completed_notification(ride)
             )
-        pending = await self._bookings_dao.list_for_ride_with_status(
-            ride_id, {BookingStatus.PENDING}
-        )
+        pending = await self._bookings_dao.list_for_ride_with_status(ride_id, {BookingStatus.PENDING})
         for booking in pending:
             await self._bookings_dao.set_status(booking.booking_id, BookingStatus.CANCELLED)
             if booking.paid_amount > 0:
@@ -138,9 +134,7 @@ class RideService:
         await self._bookings_dao.set_status(booking_id, BookingStatus.NO_SHOW)
         ride = await self._rides_dao.get_by_id(booking.ride_id)
         if ride:
-            await self._bot_service.notify_user(
-                booking.user_id, MessageBuilder.no_show_notification(ride)
-            )
+            await self._bot_service.notify_user(booking.user_id, MessageBuilder.no_show_notification(ride))
         return await self._bookings_dao.get_by_id(booking_id)
 
     async def book_ride(self, ride_id: int, user: User) -> Booking:
@@ -259,9 +253,7 @@ class RideService:
         if ride:
             user = await self._users_dao.get_by_id(booking.user_id)
             due_amount = (
-                0.0
-                if ride.is_free or (user and user.is_vip)
-                else float(ride.price) - booking.paid_amount
+                0.0 if ride.is_free or (user and user.is_vip) else float(ride.price) - booking.paid_amount
             )
             await self._bot_service.notify_user(
                 booking.user_id, MessageBuilder.booking_approved_notification(ride, due_amount)

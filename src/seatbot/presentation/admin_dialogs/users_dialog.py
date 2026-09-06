@@ -9,6 +9,7 @@ from seatbot.application.services.statistics import StatisticsService
 from seatbot.application.services.user import UserService
 from seatbot.infrastructure.config.models import Config
 from seatbot.infrastructure.database.dao import UsersDAO
+from seatbot.infrastructure.notifications import user_display
 
 from ..user_dialogs.states import DepositSG, UsersSG
 
@@ -31,7 +32,7 @@ async def get_users_list(
         if s.is_banned:
             badges.append("🚫")
         badge_str = " " + "".join(badges) if badges else ""
-        uname = f"@{s.username}" if s.username else f"id:{s.user_id}"
+        uname = user_display(s.username, s.first_name, s.user_id)
         items.append(
             {
                 "user_id": s.user_id,
@@ -59,10 +60,11 @@ async def get_user_detail(
     if not stats or not user:
         return {"user_text": "🚫 Пользователь не найден", "back_btn": "⬅️ Назад"}
     last_ride = stats.last_ride_at.strftime("%d.%m.%Y") if stats.last_ride_at else "—"
+    uname = user_display(user.username, user.first_name, user.user_id)
     text = (
         f"<b>👤 Клиент</b>\n\n"
         f"ID: <code>{user.user_id}</code>\n"
-        f"Username: @{user.username or '—'}\n"
+        f"Имя: {uname}\n"
         f"💳 Депозит: <b>{user.balance:.2f} BYN</b>\n"
         f"🚗 Поездок завершено: <b>{stats.total_rides}</b>\n"
         f"💰 Всего потрачено: <b>{stats.total_spent:.2f} BYN</b>\n"

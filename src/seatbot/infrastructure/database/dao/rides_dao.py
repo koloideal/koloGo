@@ -92,11 +92,7 @@ class RidesDAO:
             (OrmRide.status == RideStatus.CANCELLED.value, 3),
             else_=4,
         )
-        query = (
-            select(OrmRide)
-            .order_by(status_order, OrmRide.departure_at.asc())
-            .limit(limit)
-        )
+        query = select(OrmRide).order_by(status_order, OrmRide.departure_at.asc()).limit(limit)
         result = await self.session.execute(query)
         rides = [self._map_to_domain(r) for r in result.scalars().all()]
         out: list[RideWithStats] = []
@@ -123,11 +119,7 @@ class RidesDAO:
         return [self._map_to_domain(r) for r in result.scalars().all()]
 
     async def list_templates(self, limit: int = 10) -> list[Ride]:
-        query = (
-            select(OrmRide)
-            .order_by(OrmRide.departure_at.desc())
-            .limit(limit * 3)
-        )
+        query = select(OrmRide).order_by(OrmRide.departure_at.desc()).limit(limit * 3)
         result = await self.session.execute(query)
         rides = [self._map_to_domain(r) for r in result.scalars().all()]
         seen: set[tuple[float, str | None]] = set()

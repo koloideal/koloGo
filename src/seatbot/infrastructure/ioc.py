@@ -138,9 +138,7 @@ class ServicesProvider(Provider):
         return StatisticsService(users_dao, rides_dao, bookings_dao, transactions_dao)
 
     @provide
-    def get_broadcast_service(
-        self, bot: Bot, config: Config, users_dao: UsersDAO
-    ) -> BroadcastService:
+    def get_broadcast_service(self, bot: Bot, config: Config, users_dao: UsersDAO) -> BroadcastService:
         return BroadcastService(bot, config, users_dao)
 
     @provide
@@ -152,7 +150,5 @@ class UserAppProvider(Provider):
     scope = Scope.REQUEST
 
     @provide
-    def create_or_get_user(
-        self, users_dao: UsersDAO, bot_service: BotService
-    ) -> CreateOrGetUserInteractor:
+    def create_or_get_user(self, users_dao: UsersDAO, bot_service: BotService) -> CreateOrGetUserInteractor:
         return CreateOrGetUserInteractor(users_dao, bot_service)

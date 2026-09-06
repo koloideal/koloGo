@@ -35,6 +35,7 @@ class User:
     is_admin: bool
     is_banned: bool
     is_vip: bool
+    first_name: str | None = None
 
 
 @dataclass
@@ -97,6 +98,7 @@ class UserStats:
     is_vip: bool
     is_banned: bool
     last_ride_at: datetime | None
+    first_name: str | None = None
 
 
 @dataclass
@@ -104,5 +106,7 @@ class OverallStats:
     total_users: int
     total_rides_created: int
     total_completed_rides: int
-    total_revenue: float
     active_rides: int
+    deposit_revenue: float = 0.0
+    fact_revenue: float = 0.0
+    total_revenue: float = 0.0

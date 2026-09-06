@@ -9,6 +9,7 @@ from seatbot.infrastructure.notifications import MessageBuilder
 class CreateOrGetUserCommand:
     user_id: int
     username: str | None
+    first_name: str | None = None
 
 
 class CreateOrGetUserInteractor:
@@ -19,11 +20,11 @@ class CreateOrGetUserInteractor:
     async def execute(self, cmd: CreateOrGetUserCommand) -> None:
         existing = await self._users_dao.get_by_id(cmd.user_id)
         if existing:
-            if existing.username != cmd.username:
-                await self._users_dao.update_username(cmd.user_id, cmd.username)
+            if existing.username != cmd.username or existing.first_name != cmd.first_name:
+                await self._users_dao.update_profile(cmd.user_id, cmd.username, cmd.first_name)
             return
 
-        user = await self._users_dao.create(user_id=cmd.user_id, username=cmd.username)
-        await self._bot_service.send_log_to_admin(
-            MessageBuilder.new_user_admin_log(user)
+        user = await self._users_dao.create(
+            user_id=cmd.user_id, username=cmd.username, first_name=cmd.first_name
         )
+        await self._bot_service.send_log_to_admin(MessageBuilder.new_user_admin_log(user))
