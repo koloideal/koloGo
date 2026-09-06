@@ -5,7 +5,6 @@ description = "SeatBot — каршеринг-менеджер поездок и
 readme = "README.md"
 requires-python = ">=3.13,<3.15"
 dependencies = [
-    "adaptix>=3.0.0b12",
     "aiogram>=3.22.0",
     "aiogram-dialog>=2.4.0",
     "apscheduler>=3.11.1",
