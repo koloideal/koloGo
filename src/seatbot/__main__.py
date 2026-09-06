@@ -28,7 +28,7 @@ from seatbot.presentation.middlewares.reject_not_admin import RejectNotAdminMidd
 config: Config = load_config("secret_data/config.toml")
 bot_token: str = config.bot.token
 
-session = AiohttpSession()
+session = AiohttpSession(timeout=30)
 bot: Bot = Bot(
     token=bot_token,
     default=DefaultBotProperties(parse_mode=ParseMode.HTML),
@@ -48,7 +48,7 @@ container = make_async_container(
     context={Config: config, Bot: bot},
 )
 
-fsm_redis: Redis = Redis.from_url(config.redis.fsm_dsn, decode_responses=True)
+fsm_redis: Redis = Redis.from_url(config.redis.fsm_dsn, decode_responses=True, max_connections=5)
 storage: RedisStorage = RedisStorage(
     fsm_redis,
     key_builder=DefaultKeyBuilder(with_destiny=True),

@@ -67,7 +67,7 @@ class RedisProvider(Provider):
         redis: Redis = Redis.from_url(
             config.redis.cache_dsn,
             decode_responses=True,
-            max_connections=20,
+            max_connections=5,
         )
         try:
             yield redis
