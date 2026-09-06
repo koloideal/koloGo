@@ -52,6 +52,7 @@ class RideService:
             rides.append(ride)
         if template_ride_id is not None:
             await self._copy_vips_from_template(template_ride_id, rides)
+        await self._notify_new_rides(rides)
         return rides
 
     async def create_ride_from_template(
@@ -94,6 +95,15 @@ class RideService:
         for ride in rides:
             for vip_id in vip_ids:
                 await self.add_passenger(ride.ride_id, vip_id)
+
+    async def _notify_new_rides(self, rides: list[Ride]) -> None:
+        subscribers = await self._users_dao.list_new_ride_subscribers()
+        for ride in rides:
+            if not ride.is_visible:
+                continue
+            message = MessageBuilder.new_ride_notification(ride)
+            for user in subscribers:
+                await self._bot_service.notify_user(user.user_id, message)
 
     async def cancel_ride(self, ride_id: int) -> Ride | None:
         ride = await self._rides_dao.get_by_id(ride_id)
@@ -311,5 +321,11 @@ class RideService:
                 amount=booking.paid_amount,
                 type=TransactionType.REFUND,
                 ride_id=booking.ride_id,
+            )
+        ride = await self._rides_dao.get_by_id(booking.ride_id)
+        user = await self._users_dao.get_by_id(user_id)
+        if ride and user:
+            await self._bot_service.send_log_to_admin(
+                MessageBuilder.booking_cancelled_by_user_admin_log(booking, user, ride)
             )
         return await self._bookings_dao.get_by_id(booking_id)

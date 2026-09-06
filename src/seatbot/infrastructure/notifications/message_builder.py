@@ -141,6 +141,24 @@ class MessageBuilder:
         )
 
     @staticmethod
+    def booking_cancelled_by_user_admin_log(booking: Booking, user: User, ride: Ride) -> str:
+        vip_marker = " ⭐VIP" if user.is_vip else ""
+        is_free = ride.is_free or user.is_vip
+        if is_free:
+            payment = "бесплатно"
+        elif booking.paid_amount > 0:
+            payment = f"возврат с депозита {fmt_amount(booking.paid_amount)} BYN"
+        else:
+            payment = "по факту (возврат не требуется)"
+        return (
+            f"🚫 <b>Пользователь отменил бронь</b>\n"
+            f"Поездка {_fmt_dt(ride.departure_at)}\n"
+            f"Пользователь: {user_display(user.username, user.first_name, user.user_id)} "
+            f"({user.user_id}){vip_marker}\n"
+            f"Бронь #{booking.booking_id}, оплата: {payment}"
+        )
+
+    @staticmethod
     def new_booking_admin_log(booking: Booking, user: User, ride: Ride) -> str:
         vip_marker = " ⭐VIP" if user.is_vip else ""
         is_free = ride.is_free or user.is_vip
@@ -210,6 +228,17 @@ class MessageBuilder:
     @staticmethod
     def vip_revoked_notification() -> str:
         return "⭐ VIP-статус снят."
+
+    @staticmethod
+    def new_ride_notification(ride: Ride) -> str:
+        price = "Бесплатно" if ride.is_free else f"{fmt_amount(ride.price)} BYN"
+        note = f"\n📝 {escape(ride.note)}" if ride.note else ""
+        return (
+            "🚗 <b>Новая поездка!</b>\n\n"
+            f"🕒 Отправление: <b>{_fmt_dt(ride.departure_at)}</b>\n"
+            f"💰 Цена: <b>{price}</b>{note}\n\n"
+            "Откройте раздел «Поездки», чтобы забронировать место."
+        )
 
     @staticmethod
     def added_by_admin_notification(ride: Ride, due_amount: float = 0.0) -> str:

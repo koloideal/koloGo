@@ -36,6 +36,7 @@ class User:
     is_banned: bool
     is_vip: bool
     first_name: str | None = None
+    notify_new_rides: bool = False
 
 
 @dataclass
@@ -73,6 +74,14 @@ class Transaction:
     amount: float
     type: TransactionType
     ride_id: int | None
+    created_at: datetime
+
+
+@dataclass
+class Requisite:
+    requisite_id: int
+    title: str
+    value: str
     created_at: datetime
 
 

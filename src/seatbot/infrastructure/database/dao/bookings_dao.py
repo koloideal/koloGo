@@ -120,6 +120,17 @@ class BookingsDAO:
         )
         return float(result.scalar_one() or 0)
 
+    async def has_approved_for_user(self, user_id: int) -> bool:
+        result = await self.session.execute(
+            select(OrmBooking.id)
+            .where(
+                OrmBooking.user_id == user_id,
+                OrmBooking.status == BookingStatus.APPROVED.value,
+            )
+            .limit(1)
+        )
+        return result.scalar_one_or_none() is not None
+
     async def count_active_for_ride(self, ride_id: int) -> int:
         result = await self.session.execute(
             select(func.count(OrmBooking.id)).where(

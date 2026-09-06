@@ -18,8 +18,8 @@ from seatbot.application.services.user import UserService
 from seatbot.infrastructure.cache import CacheKeys, RedisService
 from seatbot.infrastructure.config.models import Config
 from seatbot.infrastructure.database.config import new_session_maker
-from seatbot.infrastructure.database.dao import (BookingsDAO, RidesDAO, TransactionsDAO,
-                                                 UsersDAO)
+from seatbot.infrastructure.database.dao import (BookingsDAO, RequisitesDAO, RidesDAO,
+                                                 TransactionsDAO, UsersDAO)
 from seatbot.infrastructure.scheduling.tasks import (auto_close_past_rides,
                                                      send_ride_reminders)
 
@@ -53,6 +53,10 @@ class DatabaseProvider(Provider):
     @provide
     def get_transactions_dao(self, session: AsyncSession) -> TransactionsDAO:
         return TransactionsDAO(session)
+
+    @provide
+    def get_requisites_dao(self, session: AsyncSession) -> RequisitesDAO:
+        return RequisitesDAO(session)
 
 
 class RedisProvider(Provider):

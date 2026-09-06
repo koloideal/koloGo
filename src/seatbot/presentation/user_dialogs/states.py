@@ -20,6 +20,10 @@ class StatsSG(StatesGroup):
     stats = State()
 
 
+class RequisitesSG(StatesGroup):
+    list = State()
+
+
 class AdminPanelSG(StatesGroup):
     main = State()
 
@@ -66,3 +70,10 @@ class BroadcastSG(StatesGroup):
 
 class AdminStatsSG(StatesGroup):
     stats = State()
+
+
+class AdminRequisitesSG(StatesGroup):
+    list = State()
+    title = State()
+    value = State()
+    detail = State()

@@ -156,6 +156,21 @@ async def on_date_selected(
 ):
     manager.dialog_data["selected_date"] = selected_date.strftime("%d.%m.%Y")
     manager.dialog_data["selected_date_obj"] = selected_date.isoformat()
+    template_ride_id = manager.dialog_data.get("template_ride_id")
+    if template_ride_id is not None:
+        container = manager.middleware_data["dishka_container"]
+        ride_service: RideService = await container.get(RideService)
+        rides = await ride_service.create_ride_from_template(
+            template_ride_id,
+            datetime.combine(selected_date, time.min, tzinfo=UTC),
+        )
+        if isinstance(event, CallbackQuery):
+            if rides:
+                await event.answer("✅ Поездка создана из шаблона", show_alert=True)
+            else:
+                await event.answer("❌ Шаблон не найден", show_alert=True)
+        await manager.start(RidesMgmtSG.rides_list, mode=StartMode.RESET_STACK)
+        return
     if isinstance(event, CallbackQuery):
         await event.answer(f"Выбрана дата: {selected_date.strftime('%d.%m.%Y')}")
     await manager.next()

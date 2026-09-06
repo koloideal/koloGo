@@ -68,6 +68,8 @@ async def main() -> None:
         broadcast_dialog as broadcast_dialog_mod
     from seatbot.presentation.admin_dialogs import deposit_dialog as deposit_dialog_mod
     from seatbot.presentation.admin_dialogs import \
+        requisites_dialog as admin_requisites_dialog_mod
+    from seatbot.presentation.admin_dialogs import \
         ride_create_dialog as ride_create_dialog_mod
     from seatbot.presentation.admin_dialogs import \
         ride_detail_dialog as ride_detail_dialog_mod
@@ -81,6 +83,8 @@ async def main() -> None:
     from seatbot.presentation.user_dialogs import main_menu_dialog as main_menu_dialog_mod
     from seatbot.presentation.user_dialogs import \
         my_bookings_dialog as my_bookings_dialog_mod
+    from seatbot.presentation.user_dialogs import \
+        requisites_dialog as user_requisites_dialog_mod
     from seatbot.presentation.user_dialogs import rides_dialog as rides_dialog_mod
     from seatbot.presentation.user_dialogs import stats_dialog as stats_dialog_mod
     from seatbot.presentation.user_handlers import user_router
@@ -90,6 +94,7 @@ async def main() -> None:
         main_menu_dialog_mod.main_menu_dialog,
         rides_dialog_mod.rides_dialog,
         my_bookings_dialog_mod.my_bookings_dialog,
+        user_requisites_dialog_mod.requisites_dialog,
         stats_dialog_mod.stats_dialog,
     )
     dp.include_routers(
@@ -99,6 +104,7 @@ async def main() -> None:
         ride_detail_dialog_mod.ride_detail_dialog,
         users_dialog_mod.users_dialog,
         deposit_dialog_mod.deposit_dialog,
+        admin_requisites_dialog_mod.requisites_dialog,
         broadcast_dialog_mod.broadcast_dialog,
         statistics_dialog_mod.statistics_dialog,
     )

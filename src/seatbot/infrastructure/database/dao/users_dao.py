@@ -96,6 +96,23 @@ class UsersDAO:
         orm_user.is_vip = is_vip
         return self._map_to_domain(orm_user)
 
+    async def set_notify_new_rides(self, user_id: int, enabled: bool) -> User | None:
+        result = await self.session.execute(select(OrmUser).where(OrmUser.user_id == user_id))
+        orm_user = result.scalar_one_or_none()
+        if not orm_user:
+            return None
+        orm_user.notify_new_rides = enabled
+        return self._map_to_domain(orm_user)
+
+    async def list_new_ride_subscribers(self) -> list[User]:
+        result = await self.session.execute(
+            select(OrmUser).where(
+                OrmUser.notify_new_rides.is_(True),
+                OrmUser.is_banned.is_(False),
+            )
+        )
+        return [self._map_to_domain(user) for user in result.scalars().all()]
+
     async def get_all(self, limit: int = -1, exclude_user_id: int | None = None) -> list[User]:
         query = select(OrmUser).order_by(OrmUser.registration_date.desc())
         if exclude_user_id is not None:
@@ -130,4 +147,5 @@ class UsersDAO:
             is_banned=orm_user.is_banned,
             is_vip=orm_user.is_vip,
             first_name=orm_user.first_name,
+            notify_new_rides=orm_user.notify_new_rides,
         )
