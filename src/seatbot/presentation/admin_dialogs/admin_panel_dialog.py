@@ -8,7 +8,7 @@ from ..user_dialogs.states import (AdminPanelSG, AdminRequisitesSG, AdminStatsSG
 admin_panel_dialog = Dialog(
     Window(
         Const(
-            "🚗 <b>Привет, Создатель, rewrite in Rust please\n\n"
+            "🚗 Привет, <b>Создатель</b>, rewrite in Rust please\n\n"
             "<i><b>made by kolo</b></i>"
         ),
         Row(
