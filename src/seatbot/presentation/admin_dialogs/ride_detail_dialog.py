@@ -202,18 +202,18 @@ async def get_passengers_list(
     return {"has_users": True, "users": items, "back_btn": "⬅️ К броням"}
 
 
-@inject
 async def on_passenger_selected(
     callback: CallbackQuery,
     select: Select,
     manager: DialogManager,
     item_id: str,
-    ride_service: FromDishka[RideService],
-    rides_dao: FromDishka[RidesDAO],
-    users_dao: FromDishka[UsersDAO],
 ):
     ride_id: int = manager.dialog_data.get("ride_id", 0)
     user_id = int(item_id)
+    container = manager.middleware_data["dishka_container"]
+    ride_service: RideService = await container.get(RideService)
+    rides_dao: RidesDAO = await container.get(RidesDAO)
+    users_dao: UsersDAO = await container.get(UsersDAO)
     try:
         booking = await ride_service.add_passenger(ride_id, user_id)
     except NoFreeSeatsError:

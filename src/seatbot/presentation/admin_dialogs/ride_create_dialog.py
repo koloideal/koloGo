@@ -288,15 +288,15 @@ async def on_create(
     await manager.start(RidesMgmtSG.rides_list, mode=StartMode.RESET_STACK)
 
 
-@inject
 async def on_template_selected(
     callback: CallbackQuery,
     select: Select,
     manager: DialogManager,
     item_id: str,
-    rides_dao: FromDishka[RidesDAO],
 ):
     ride_id = int(item_id)
+    container = manager.middleware_data["dishka_container"]
+    rides_dao: RidesDAO = await container.get(RidesDAO)
     template = await rides_dao.get_by_id(ride_id)
     if not template:
         await callback.answer("Шаблон не найден", show_alert=True)
