@@ -16,7 +16,6 @@ async def on_broadcast_message_input(
     widget: MessageInput,
     manager: DialogManager,
 ):
-    """Принимает любое сообщение — текст, фото, видео, голос, и т.д."""
     if not message or not message.message_id:
         await message.answer("❌ Не удалось получить сообщение.")
         return

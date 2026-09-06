@@ -37,7 +37,7 @@ async def get_rides_list(
             {
                 "ride_id": rws.ride.ride_id,
                 "title": (
-                    f"{emoji} #{rws.ride.ride_id} • {rws.ride.departure_at.strftime('%d.%m %H:%M')} • "
+                    f"{emoji} {rws.ride.departure_at.strftime('%d.%m %H:%M')} • "
                     f"{price_str} • {rws.free_seats}/{rws.ride.seats_total} мест"
                 ),
             }
@@ -176,12 +176,20 @@ rides_management_dialog = Dialog(
             width=2,
         ),
         Group(
-            Button(Format("{complete_btn}"), id="complete", on_click=on_complete, when="is_active"),
+            SwitchTo(Format("{complete_btn}"), id="complete", state=RidesMgmtSG.complete_confirm, when="is_active"),
             Button(Format("{cancel_btn}"), id="cancel_ride", on_click=on_cancel_ride, when="is_active"),
             width=2,
         ),
         SwitchTo(Format("{back_btn}"), id="back", state=RidesMgmtSG.rides_list),
         state=RidesMgmtSG.ride_detail,
+        getter=get_ride_detail,
+    ),
+    Window(
+        Format("{ride_text}"),
+        Const("\n🏁 <b>Завершить эту поездку?</b>\n\nВсе одобренные брони будут завершены."),
+        Button(Const("✅ Да, завершить"), id="confirm_complete", on_click=on_complete),
+        SwitchTo(Const("⬅️ Отмена"), id="back", state=RidesMgmtSG.ride_detail),
+        state=RidesMgmtSG.complete_confirm,
         getter=get_ride_detail,
     ),
 )

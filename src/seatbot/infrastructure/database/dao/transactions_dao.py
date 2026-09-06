@@ -36,7 +36,6 @@ class TransactionsDAO:
         return [self._map_to_domain(t) for t in result.scalars().all()]
 
     async def sum_total_revenue(self) -> float:
-        """Сумма реально списанных за поездки (RIDE_PAYMENT) минус возвраты (REFUND)."""
         paid = await self._sum_by_type(TransactionType.RIDE_PAYMENT)
         refunded = await self._sum_by_type(TransactionType.REFUND)
         return paid - refunded

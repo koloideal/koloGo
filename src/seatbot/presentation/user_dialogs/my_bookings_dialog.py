@@ -7,7 +7,7 @@ from dishka.integrations.aiogram_dialog import inject
 
 from seatbot.application.services.ride import RideService
 from seatbot.domain.schemas import BookingStatus
-from seatbot.infrastructure.database.dao import BookingsDAO, RidesDAO
+from seatbot.infrastructure.database.dao import BookingsDAO, RidesDAO, UsersDAO
 from seatbot.infrastructure.notifications import MessageBuilder
 
 from .states import MyBookingsSG
@@ -27,9 +27,12 @@ async def get_my_bookings(
     dialog_manager: DialogManager,
     bookings_dao: FromDishka[BookingsDAO],
     rides_dao: FromDishka[RidesDAO],
+    users_dao: FromDishka[UsersDAO],
     **_kwargs,
 ):
     user_id = dialog_manager.middleware_data["event_from_user"].id
+    user = await users_dao.get_by_id(user_id)
+    is_vip = bool(user and user.is_vip)
     bookings = await bookings_dao.list_for_user(user_id, limit=20)
     if not bookings:
         return {
@@ -43,13 +46,12 @@ async def get_my_bookings(
         if not ride:
             continue
         emoji = _STATUS_EMOJI.get(b.status, "•")
-        price_str = "бесплатно" if b.paid_amount <= 0 else f"{b.paid_amount:.2f} BYN"
+        pay = MessageBuilder.payment_short(b.paid_amount, float(ride.price), ride.is_free or is_vip)
         items.append(
             {
                 "booking_id": b.booking_id,
                 "title": (
-                    f"{emoji} #{b.booking_id} • поездка #{ride.ride_id} • "
-                    f"{ride.departure_at.strftime('%d.%m %H:%M')} • {price_str}"
+                    f"{emoji} {ride.departure_at.strftime('%d.%m %H:%M')} • {pay}"
                 ),
             }
         )
@@ -65,6 +67,7 @@ async def get_booking_detail(
     dialog_manager: DialogManager,
     bookings_dao: FromDishka[BookingsDAO],
     rides_dao: FromDishka[RidesDAO],
+    users_dao: FromDishka[UsersDAO],
     **_kwargs,
 ):
     booking_id: int = dialog_manager.dialog_data["booking_id"]
@@ -74,9 +77,12 @@ async def get_booking_detail(
     ride = await rides_dao.get_by_id(booking.ride_id)
     if not ride:
         return {"booking_text": "🚫 Поездка не найдена", "back_btn": "⬅️ Назад"}
+    user = await users_dao.get_by_id(booking.user_id)
     can_cancel = booking.status in (BookingStatus.PENDING, BookingStatus.APPROVED)
     return {
-        "booking_text": MessageBuilder.booking_card(booking, ride),
+        "booking_text": MessageBuilder.booking_card(
+            booking, ride, is_vip=bool(user and user.is_vip)
+        ),
         "can_cancel": can_cancel,
         "cancel_btn": "🚫 Отменить бронь",
         "back_btn": "⬅️ К броням",

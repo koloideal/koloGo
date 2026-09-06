@@ -48,8 +48,6 @@ def json_key(pattern: str, ttl: int) -> CacheKey[dict[str, Any]]:
 
 
 class CacheKeys:
-    """Типобезопасный реестр кэш-ключей. Не dataclass — значения вычисляются в __init__."""
-
     __slots__ = ("user_banned", "user_locale", "user_vip")
 
     def __init__(self) -> None:

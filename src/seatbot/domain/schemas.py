@@ -77,7 +77,6 @@ class Transaction:
 
 @dataclass
 class RideWithStats:
-    """Ride + агрегированная информация для отображения."""
     ride: Ride
     booked_seats: int
     approved_seats: int

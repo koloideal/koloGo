@@ -17,8 +17,6 @@ from seatbot.infrastructure.database.dao import RidesDAO
 
 from ..user_dialogs.states import RideCreateSG, RidesMgmtSG
 
-# ── getter'ы ─────────────────────────────────────────────────────────────────
-
 
 @inject
 async def get_templates(
@@ -37,7 +35,7 @@ async def get_templates(
         items.append(
             {
                 "ride_id": t.ride_id,
-                "title": f"#{t.ride_id} • {time_str} • {price_str}{note_str}",
+                "title": f"🕒 {time_str} • {price_str}{note_str}",
             }
         )
     return {"has_templates": True, "templates": items, "back_btn": "⬅️ В панель"}
@@ -163,8 +161,6 @@ async def on_date_selected(
 
 
 class TimeChangedHandler(OnValueChanged):
-    """Обработчик выбора времени для TimeSelect."""
-
     async def __call__(
         self,
         event: ChatEvent,

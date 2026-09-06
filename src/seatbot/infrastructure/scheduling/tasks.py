@@ -9,7 +9,6 @@ from seatbot.infrastructure.notifications import MessageBuilder
 
 
 async def auto_close_past_rides(container: AsyncContainer) -> None:
-    """Закрывает поездки, время отправления которых прошло более 30 минут назад."""
     async with container() as scope:
         rides_dao: RidesDAO = await scope.get(RidesDAO)
 
@@ -21,11 +20,6 @@ async def auto_close_past_rides(container: AsyncContainer) -> None:
 
 
 async def send_ride_reminders(container: AsyncContainer) -> None:
-    """Отправляет напоминания за remind_minutes минут до отправления.
-
-    Напоминания получают: approved, VIP, добавленные админом (все approved).
-    Каждой поездке — только одно напоминание (проверяем remind_sent).
-    """
     async with container() as scope:
         rides_dao: RidesDAO = await scope.get(RidesDAO)
         bookings_dao: BookingsDAO = await scope.get(BookingsDAO)

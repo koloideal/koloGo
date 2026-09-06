@@ -9,7 +9,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from seatbot.application.interactors.user.create_or_get_user import \
     CreateOrGetUserInteractor
-from seatbot.application.interactors.user.facade import UserFacade
 from seatbot.application.services.bot import BotService
 from seatbot.application.services.broadcast import BroadcastService
 from seatbot.application.services.deposit import DepositService
@@ -23,10 +22,6 @@ from seatbot.infrastructure.database.dao import (BookingsDAO, RidesDAO, Transact
                                                  UsersDAO)
 from seatbot.infrastructure.scheduling.tasks import (auto_close_past_rides,
                                                      send_ride_reminders)
-
-# ==========================================
-# 1. INFRASTRUCTURE LAYER
-# ==========================================
 
 
 class DatabaseProvider(Provider):
@@ -103,11 +98,6 @@ class SchedulerProvider(Provider):
         return scheduler
 
 
-# ==========================================
-# 2. APPLICATION LAYER
-# ==========================================
-
-
 class ServicesProvider(Provider):
     scope = Scope.REQUEST
 
@@ -166,7 +156,3 @@ class UserAppProvider(Provider):
         self, users_dao: UsersDAO, bot_service: BotService
     ) -> CreateOrGetUserInteractor:
         return CreateOrGetUserInteractor(users_dao, bot_service)
-
-    @provide
-    def user_facade(self, create_or_get_user: CreateOrGetUserInteractor) -> UserFacade:
-        return UserFacade(create_or_get_user)

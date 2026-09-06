@@ -13,7 +13,6 @@ from ..user_dialogs.states import DepositSG, UsersSG
 
 
 def _get_user_id(manager: DialogManager) -> int | None:
-    """Достаёт user_id из start_data или dialog_data."""
     start_data = manager.start_data
     if isinstance(start_data, dict) and "user_id" in start_data:
         uid = start_data["user_id"]

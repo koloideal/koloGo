@@ -1,5 +1,5 @@
 class SeatBotError(Exception):
-    """Базовая доменная ошибка."""
+    pass
 
 
 class InsufficientBalanceError(SeatBotError):

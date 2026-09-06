@@ -8,9 +8,10 @@ from dishka.integrations.aiogram_dialog import inject
 from seatbot.application.services.ride import RideService
 from seatbot.application.services.statistics import StatisticsService
 from seatbot.domain.exceptions import NoFreeSeatsError
-from seatbot.domain.schemas import BookingStatus
+from seatbot.domain.schemas import BookingStatus, RideStatus
 from seatbot.infrastructure.config.models import Config
 from seatbot.infrastructure.database.dao import BookingsDAO, RidesDAO, UsersDAO
+from seatbot.infrastructure.notifications import BOOKING_STATUS_RU, MessageBuilder
 
 from ..user_dialogs.states import RideBookingsSG
 
@@ -29,6 +30,7 @@ async def get_ride_bookings(
     dialog_manager: DialogManager,
     bookings_dao: FromDishka[BookingsDAO],
     users_dao: FromDishka[UsersDAO],
+    rides_dao: FromDishka[RidesDAO],
     **_kwargs,
 ):
     start_data = dialog_manager.start_data
@@ -37,26 +39,38 @@ async def get_ride_bookings(
     )
     if ride_id is None:
         return {"has_bookings": False, "empty_text": "🚫 Нет броней.", "back_btn": "⬅️ Назад",
-                "add_passenger_btn": "➕ Добавить клиента"}
+                "can_add_passenger": False}
     dialog_manager.dialog_data["ride_id"] = ride_id
+    ride = await rides_dao.get_by_id(ride_id)
+    can_add = ride is not None and ride.status == RideStatus.OPEN
     bookings = await bookings_dao.list_for_ride(ride_id)
     if not bookings:
         return {"has_bookings": False, "empty_text": "🚫 На эту поездку нет броней.", "back_btn": "⬅️ Назад",
-                "add_passenger_btn": "➕ Добавить клиента"}
+                "can_add_passenger": can_add}
     items = []
     for b in bookings:
         user = await users_dao.get_by_id(b.user_id)
         emoji = _STATUS_EMOJI.get(b.status, "•")
         vip = " ⭐" if (user and user.is_vip) else ""
         uname = f"@{user.username}" if user and user.username else f"id:{b.user_id}"
+        status_ru = BOOKING_STATUS_RU.get(b.status, b.status.value)
+        pay = (
+            MessageBuilder.payment_short(
+                b.paid_amount,
+                float(ride.price),
+                ride.is_free or bool(user and user.is_vip),
+            )
+            if ride
+            else f"{b.paid_amount:.2f}"
+        )
         items.append(
             {
                 "booking_id": b.booking_id,
-                "title": f"{emoji} #{b.booking_id} • {uname}{vip} • {b.status.value} • {b.paid_amount:.2f}",
+                "title": f"{emoji} #{b.booking_id} • {uname}{vip} • {status_ru} • {pay}",
             }
         )
     return {"has_bookings": True, "bookings": items, "back_btn": "⬅️ К поездке",
-            "add_passenger_btn": "➕ Добавить клиента"}
+            "can_add_passenger": can_add}
 
 
 @inject
@@ -78,11 +92,16 @@ async def get_booking_detail(
     text = (
         f"<b>Бронь #{booking.booking_id}</b>\n\n"
         f"👤 Пользователь: {uname}{vip} ({booking.user_id})\n"
-        f"🚗 Поездка #{booking.ride_id}"
     )
     if ride:
-        text += f" — {ride.departure_at.strftime('%d.%m.%Y %H:%M')}"
-    text += f"\n📋 Статус: {_STATUS_EMOJI.get(booking.status, '•')} {booking.status.value}\n💰 Списано: {booking.paid_amount:.2f} BYN"
+        text += f"🚗 Поездка: {ride.departure_at.strftime('%d.%m.%Y %H:%M')}\n"
+        text += MessageBuilder.payment_full(
+            booking.paid_amount,
+            float(ride.price),
+            ride.is_free or bool(user and user.is_vip),
+        ) + "\n"
+    status_ru = BOOKING_STATUS_RU.get(booking.status, booking.status.value)
+    text += f"� Статус: {_STATUS_EMOJI.get(booking.status, '•')} {status_ru.capitalize()}"
     is_pending = booking.status == BookingStatus.PENDING
     is_approved = booking.status == BookingStatus.APPROVED
     return {
@@ -91,7 +110,7 @@ async def get_booking_detail(
         "is_approved": is_approved,
         "approve_btn": "✅ Одобрить",
         "reject_btn": "❌ Отклонить",
-        "noshow_btn": "🙅 No-show",
+        "noshow_btn": "🙅 Неявка",
         "back_btn": "⬅️ К броням",
     }
 
@@ -141,7 +160,7 @@ async def on_noshow(
 ):
     booking_id: int = manager.dialog_data["booking_id"]
     await ride_service.mark_no_show(booking_id)
-    await callback.answer("Отмечено no-show", show_alert=True)
+    await callback.answer("Отмечена неявка", show_alert=True)
     await manager.switch_to(RideBookingsSG.bookings_list)
 
 
@@ -159,7 +178,6 @@ async def get_passengers_list(
     stats = await statistics_service.all_users_stats(limit=50, exclude_user_id=config.bot.creator_id)
     if not stats:
         return {"has_users": False, "empty_text": "🚫 Нет пользователей.", "back_btn": "⬅️ К броням"}
-    # Исключаем уже забронировавших
     existing = await bookings_dao.list_for_ride(ride_id)
     existing_ids = {b.user_id for b in existing}
     items = []
@@ -191,6 +209,8 @@ async def on_passenger_selected(
     manager: DialogManager,
     item_id: str,
     ride_service: FromDishka[RideService],
+    rides_dao: FromDishka[RidesDAO],
+    users_dao: FromDishka[UsersDAO],
 ):
     ride_id: int = manager.dialog_data.get("ride_id", 0)
     user_id = int(item_id)
@@ -199,10 +219,18 @@ async def on_passenger_selected(
     except NoFreeSeatsError:
         await callback.answer("Нет свободных мест", show_alert=True)
         return
-    if booking:
-        await callback.answer("Клиент добавлен, уведомление отправлено", show_alert=True)
-    else:
+    if not booking:
         await callback.answer("Не удалось добавить", show_alert=True)
+        await manager.switch_to(RideBookingsSG.bookings_list)
+        return
+    ride = await rides_dao.get_by_id(ride_id)
+    user = await users_dao.get_by_id(user_id)
+    pay = MessageBuilder.payment_short(
+        booking.paid_amount,
+        float(ride.price) if ride else booking.paid_amount,
+        bool(ride and (ride.is_free or (user and user.is_vip))),
+    )
+    await callback.answer(f"Клиент добавлен ({pay}), уведомление отправлено", show_alert=True)
     await manager.switch_to(RideBookingsSG.bookings_list)
 
 
@@ -220,7 +248,12 @@ ride_detail_dialog = Dialog(
             ),
         ),
         Format("{empty_text}", when="not has_bookings"),
-        SwitchTo(Format("{add_passenger_btn}"), id="add_passenger", state=RideBookingsSG.add_passenger),
+        SwitchTo(
+            Const("➕ Добавить клиента"),
+            id="add_passenger",
+            state=RideBookingsSG.add_passenger,
+            when="can_add_passenger",
+        ),
         Cancel(Format("{back_btn}")),
         state=RideBookingsSG.bookings_list,
         getter=get_ride_bookings,

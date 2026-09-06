@@ -7,9 +7,9 @@ from dishka import FromDishka
 from dishka.integrations.aiogram_dialog import inject
 
 from seatbot.application.services.ride import RideService
-from seatbot.domain.exceptions import (AlreadyBookedError, InsufficientBalanceError,
-                                       NoFreeSeatsError, RideNotBookableError,
-                                       UserBannedError)
+from seatbot.domain.exceptions import (AlreadyBookedError, NoFreeSeatsError,
+                                       RideNotBookableError, UserBannedError)
+from seatbot.domain.schemas import BookingStatus
 from seatbot.infrastructure.database.dao import BookingsDAO, RidesDAO, UsersDAO
 from seatbot.infrastructure.notifications import MessageBuilder
 
@@ -36,7 +36,7 @@ async def get_rides_list(
             {
                 "ride_id": rws.ride.ride_id,
                 "title": (
-                    f"#{rws.ride.ride_id} • {rws.ride.departure_at.strftime('%d.%m %H:%M')} • "
+                    f"{rws.ride.departure_at.strftime('%d.%m %H:%M')} • "
                     f"{price_str} • {rws.free_seats} мест"
                 ),
             }
@@ -66,6 +66,14 @@ async def get_ride_detail(
     existing = await bookings_dao.get_by_ride_and_user(ride_id, user_id)
 
     ride_text = MessageBuilder.ride_card(rws)
+    if not rws.ride.is_free:
+        price = float(rws.ride.price)
+        if user and user.is_vip:
+            ride_text += "\n⭐ Для вас поездка бесплатна (VIP)"
+        elif user and user.balance >= price:
+            ride_text += f"\n💳 При бронировании спишется с депозита: <b>{price:.2f} BYN</b>"
+        else:
+            ride_text += f"\n💵 Оплата налом при встрече: <b>{price:.2f} BYN</b>"
     can_book = (
         rws.free_seats > 0
         and rws.ride.status.value == "open"
@@ -101,6 +109,7 @@ async def on_book_click(
     button: Button,
     manager: DialogManager,
     ride_service: FromDishka[RideService],
+    rides_dao: FromDishka[RidesDAO],
     users_dao: FromDishka[UsersDAO],
 ):
     ride_id: int = manager.dialog_data["ride_id"]
@@ -111,12 +120,6 @@ async def on_book_click(
         return
     try:
         booking = await ride_service.book_ride(ride_id, user)
-    except InsufficientBalanceError as e:
-        await callback.answer(
-            f"Недостаточно депозита: нужно {e.required:.2f}, есть {e.available:.2f}",
-            show_alert=True,
-        )
-        return
     except NoFreeSeatsError:
         await callback.answer("Мест больше нет", show_alert=True)
         return
@@ -130,8 +133,21 @@ async def on_book_click(
         await callback.answer(f"Нельзя забронировать: {e.reason}", show_alert=True)
         return
 
-    status_text = "✅ Одобрено автоматически!" if booking.status.value == "approved" else "⏳ Ожидает подтверждения водителем."
-    await callback.answer(f"Бронь #{booking.booking_id} создана. {status_text}", show_alert=True)
+    status_text = (
+        "✅ Одобрено автоматически!"
+        if booking.status == BookingStatus.APPROVED
+        else "⏳ Ожидает подтверждения водителем."
+    )
+    msg = f"Бронь #{booking.booking_id} создана. {status_text}"
+    ride = await rides_dao.get_by_id(ride_id)
+    if ride:
+        if ride.is_free or user.is_vip:
+            msg += "\n💰 Поездка бесплатная."
+        elif booking.paid_amount > 0:
+            msg += f"\n💰 С депозита списано {booking.paid_amount:.2f} BYN."
+        else:
+            msg += f"\n💵 Оплата налом при встрече: {float(ride.price):.2f} BYN."
+    await callback.answer(msg, show_alert=True)
     await manager.start(MainMenuSG.main, mode=StartMode.RESET_STACK)
 
 

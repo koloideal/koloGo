@@ -22,10 +22,6 @@ class BroadcastService:
         from_chat_id: int,
         message_id: int,
     ) -> tuple[int, int]:
-        """Копирует сообщение всем пользователям через copy_message.
-
-        Возвращает (успешно, всего). Админу (creator_id) не отправляет.
-        """
         users = await self._users_dao.get_all(exclude_user_id=self._config.bot.creator_id)
         success = 0
         total = len(users)
@@ -49,7 +45,6 @@ class BroadcastService:
         from_chat_id: int,
         message_id: int,
     ) -> None:
-        """Запускает рассылку и отправляет стату админу по завершении."""
         success, total = await self.broadcast_message(from_chat_id, message_id)
         failed = total - success
         report = (
@@ -71,7 +66,6 @@ class BroadcastService:
         from_chat_id: int,
         message_id: int,
     ) -> asyncio.Task[None]:
-        """Запускает рассылку в фоне, не блокируя вызывающий код."""
         return asyncio.create_task(
             self.broadcast_message_and_report(from_chat_id, message_id)
         )

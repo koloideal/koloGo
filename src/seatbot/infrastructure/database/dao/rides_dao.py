@@ -85,7 +85,6 @@ class RidesDAO:
         return out
 
     async def list_all(self, limit: int = 50) -> list[RideWithStats]:
-        """Сортировка: активные (ближайшие по времени) → завершённые → отменённые."""
         status_order = case(
             (OrmRide.status == RideStatus.OPEN.value, 0),
             (OrmRide.status == RideStatus.CLOSED.value, 1),
@@ -124,7 +123,6 @@ class RidesDAO:
         return [self._map_to_domain(r) for r in result.scalars().all()]
 
     async def list_templates(self, limit: int = 10) -> list[Ride]:
-        """Последние поездки как шаблоны (уникальные по цене + заметке)."""
         query = (
             select(OrmRide)
             .order_by(OrmRide.departure_at.desc())

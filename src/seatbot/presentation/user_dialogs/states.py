@@ -31,6 +31,7 @@ class AdminPanelSG(StatesGroup):
 class RidesMgmtSG(StatesGroup):
     rides_list = State()
     ride_detail = State()
+    complete_confirm = State()
 
 
 class RideCreateSG(StatesGroup):
