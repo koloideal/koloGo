@@ -51,7 +51,7 @@ class UsersDAO:
         orm_user = result.scalar_one_or_none()
         if not orm_user:
             return None
-        orm_user.balance += Decimal(str(amount))
+        orm_user.balance = Decimal(str(orm_user.balance)) + Decimal(str(amount))
         return self._map_to_domain(orm_user)
 
     async def decrease_balance(self, user_id: int, amount: float) -> User | None:
@@ -59,9 +59,10 @@ class UsersDAO:
         orm_user = result.scalar_one_or_none()
         if not orm_user:
             return None
-        if orm_user.balance < amount:
-            raise InsufficientBalanceError(required=amount, available=float(orm_user.balance))
-        orm_user.balance -= Decimal(str(amount))
+        current = Decimal(str(orm_user.balance))
+        if current < Decimal(str(amount)):
+            raise InsufficientBalanceError(required=amount, available=float(current))
+        orm_user.balance = current - Decimal(str(amount))
         return self._map_to_domain(orm_user)
 
     async def set_balance(self, user_id: int, new_balance: float) -> User | None:

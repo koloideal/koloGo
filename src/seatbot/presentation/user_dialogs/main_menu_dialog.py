@@ -23,8 +23,6 @@ async def get_main_menu(
     has_approved_booking = await bookings_dao.has_approved_for_user(user_id)
     lines = [
         "🚗 <b>SeatBot — поездки в Минск</b>\n",
-        "Подкидываю до Минска после пар. Мест всего 4 — бронируй заранее.",
-        "Оплата с депозита или по факту поездки.",
     ]
     if user and user.is_vip:
         lines.append("⭐ <b>VIP:</b> поездки бесплатно, апрув автоматически.")
