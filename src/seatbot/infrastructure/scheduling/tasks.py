@@ -1,5 +1,7 @@
+import logging
 from datetime import UTC, datetime, timedelta
 
+from apscheduler.jobstores.base import JobLookupError
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from dishka import AsyncContainer
 
@@ -10,6 +12,8 @@ from seatbot.infrastructure.database.dao import (BookingsDAO, RidesDAO, Transact
 from seatbot.infrastructure.notifications import MessageBuilder
 from seatbot.infrastructure.payments import CryptoBotPaymentService
 from seatbot.infrastructure.time import LocalClock
+
+logger = logging.getLogger(__name__)
 
 
 async def auto_close_past_rides(container: AsyncContainer) -> None:
@@ -67,19 +71,18 @@ async def check_cryptobot_payment_status(
     cryptobot_service: CryptoBotPaymentService = await container.get(CryptoBotPaymentService)
     bot_service: BotService = await container.get(BotService)
     messages: MessageBuilder = await container.get(MessageBuilder)
+    paid = False
     async with container() as scope:
         transactions_dao: TransactionsDAO = await scope.get(TransactionsDAO)
         users_dao: UsersDAO = await scope.get(UsersDAO)
-        transaction = await transactions_dao.get_by_payment_id(payment_id)
+        transaction = await transactions_dao.get_by_payment_id_for_update(payment_id)
         if not transaction or transaction.status != TransactionStatus.PENDING:
-            scheduler.remove_job(f"check_payment_{payment_id}")
             return
         if (datetime.now(UTC) - created_at) > timedelta(minutes=15):
             await transactions_dao.update_status(payment_id, TransactionStatus.FAILED)
             user = await users_dao.get_by_id(user_id)
             if user:
                 await bot_service.notify_user(user_id, messages.payment_expired_notification())
-            scheduler.remove_job(f"check_payment_{payment_id}")
             return
         status = await cryptobot_service.check_payment(payment_id)
         if status == "paid":
@@ -90,5 +93,14 @@ async def check_cryptobot_payment_status(
                 await bot_service.notify_user(
                     user_id, messages.payment_success_notification(amount, user.balance)
                 )
-                scheduler.remove_job(f"check_payment_{payment_id}")
                 await bot_service.send_log_to_admin(messages.payment_admin_log(user, amount))
+                paid = True
+    try:
+        scheduler.remove_job(f"check_payment_{payment_id}")
+    except JobLookupError:
+        logger.debug("Job check_payment_%s already removed", payment_id)
+    if not paid:
+        try:
+            scheduler.remove_job(f"check_payment_{payment_id}")
+        except JobLookupError:
+            logger.debug("Job check_payment_%s already removed", payment_id)

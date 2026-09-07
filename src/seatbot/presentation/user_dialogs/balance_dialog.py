@@ -143,9 +143,13 @@ async def on_cancel_invoice_clicked(
     transactions_dao: FromDishka[TransactionsDAO],
 ):
     invoice_id: str = manager.dialog_data["invoice_id"]
-    transaction = await transactions_dao.get_by_payment_id(invoice_id)
+    transaction = await transactions_dao.get_by_payment_id_for_update(invoice_id)
     if transaction and transaction.status == TransactionStatus.COMPLETED:
-        await callback.answer("Платёж уже оплачен", show_alert=True)
+        await callback.answer("Платёж уже оплачен, баланс пополнен", show_alert=True)
+        await manager.start(MainMenuSG.main, mode=StartMode.RESET_STACK)
+        return
+    if not transaction or transaction.status != TransactionStatus.PENDING:
+        await callback.answer("Платёж уже отменён", show_alert=True)
         await manager.start(MainMenuSG.main, mode=StartMode.RESET_STACK)
         return
     await transactions_dao.update_status(invoice_id, TransactionStatus.FAILED)
