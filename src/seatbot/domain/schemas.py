@@ -25,6 +25,13 @@ class TransactionType(str, Enum):
     RIDE_PAYMENT = "RIDE_PAYMENT"
     REFUND = "REFUND"
     VIP_PURCHASE = "VIP_PURCHASE"
+    CRYPTOBOT_TOPUP = "CRYPTOBOT_TOPUP"
+
+
+class TransactionStatus(str, Enum):
+    PENDING = "pending"
+    COMPLETED = "completed"
+    FAILED = "failed"
 
 
 @dataclass
@@ -87,6 +94,9 @@ class Transaction:
     type: TransactionType
     ride_id: int | None
     created_at: datetime
+    payment_id: str | None = None
+    payment_url: str | None = None
+    status: TransactionStatus = TransactionStatus.COMPLETED
 
 
 @dataclass

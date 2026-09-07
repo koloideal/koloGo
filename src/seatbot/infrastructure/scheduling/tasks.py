@@ -1,11 +1,14 @@
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from dishka import AsyncContainer
 
 from seatbot.application.services.bot import BotService
-from seatbot.domain.schemas import BookingStatus, RideStatus
-from seatbot.infrastructure.database.dao import BookingsDAO, RidesDAO
+from seatbot.domain.schemas import BookingStatus, RideStatus, TransactionStatus
+from seatbot.infrastructure.database.dao import (BookingsDAO, RidesDAO, TransactionsDAO,
+                                                 UsersDAO)
 from seatbot.infrastructure.notifications import MessageBuilder
+from seatbot.infrastructure.payments import CryptoBotPaymentService
 from seatbot.infrastructure.time import LocalClock
 
 
@@ -51,3 +54,41 @@ async def send_ride_reminders(container: AsyncContainer) -> None:
                 messages.ride_reminder_admin_notification(ride, len(approved))
             )
             await rides_dao.mark_remind_sent(ride.ride_id)
+
+
+async def check_cryptobot_payment_status(
+    payment_id: str,
+    user_id: int,
+    amount: float,
+    created_at: datetime,
+    container: AsyncContainer,
+) -> None:
+    scheduler: AsyncIOScheduler = await container.get(AsyncIOScheduler)
+    cryptobot_service: CryptoBotPaymentService = await container.get(CryptoBotPaymentService)
+    bot_service: BotService = await container.get(BotService)
+    messages: MessageBuilder = await container.get(MessageBuilder)
+    async with container() as scope:
+        transactions_dao: TransactionsDAO = await scope.get(TransactionsDAO)
+        users_dao: UsersDAO = await scope.get(UsersDAO)
+        transaction = await transactions_dao.get_by_payment_id(payment_id)
+        if not transaction or transaction.status != TransactionStatus.PENDING:
+            scheduler.remove_job(f"check_payment_{payment_id}")
+            return
+        if (datetime.now(UTC) - created_at) > timedelta(minutes=15):
+            await transactions_dao.update_status(payment_id, TransactionStatus.FAILED)
+            user = await users_dao.get_by_id(user_id)
+            if user:
+                await bot_service.notify_user(user_id, messages.payment_expired_notification())
+            scheduler.remove_job(f"check_payment_{payment_id}")
+            return
+        status = await cryptobot_service.check_payment(payment_id)
+        if status == "paid":
+            await transactions_dao.update_status(payment_id, TransactionStatus.COMPLETED)
+            await users_dao.increase_balance(user_id, amount)
+            user = await users_dao.get_by_id(user_id)
+            if user:
+                await bot_service.notify_user(
+                    user_id, messages.payment_success_notification(amount, user.balance)
+                )
+                scheduler.remove_job(f"check_payment_{payment_id}")
+                await bot_service.send_log_to_admin(messages.payment_admin_log(user, amount))

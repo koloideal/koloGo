@@ -13,6 +13,7 @@ from seatbot.application.interactors.user.create_or_get_user import \
 from seatbot.application.services.bot import BotService
 from seatbot.application.services.broadcast import BroadcastService
 from seatbot.application.services.deposit import DepositService
+from seatbot.application.services.payment import PaymentService
 from seatbot.application.services.ride import RideService
 from seatbot.application.services.statistics import StatisticsService
 from seatbot.application.services.user import UserService
@@ -23,6 +24,7 @@ from seatbot.infrastructure.database.config import new_session_maker
 from seatbot.infrastructure.database.dao import (BookingsDAO, RequisitesDAO, RidesDAO,
                                                  SettingsDAO, TransactionsDAO, UsersDAO)
 from seatbot.infrastructure.notifications import MessageBuilder
+from seatbot.infrastructure.payments import CryptoBotPaymentService
 from seatbot.infrastructure.scheduling.tasks import (auto_close_past_rides,
                                                      send_ride_reminders)
 from seatbot.infrastructure.time import LocalClock
@@ -194,6 +196,20 @@ class ServicesProvider(Provider):
             cache,
             cache_keys,
         )
+
+    @provide(scope=Scope.APP)
+    def get_cryptobot_service(self, config: Config) -> CryptoBotPaymentService:
+        return CryptoBotPaymentService(config.cryptobot)
+
+    @provide
+    def get_payment_service(
+        self,
+        transactions_dao: TransactionsDAO,
+        cryptobot_service: CryptoBotPaymentService,
+        scheduler: AsyncIOScheduler,
+        async_container: AsyncContainer,
+    ) -> PaymentService:
+        return PaymentService(transactions_dao, cryptobot_service, scheduler, async_container)
 
 
 class UserAppProvider(Provider):

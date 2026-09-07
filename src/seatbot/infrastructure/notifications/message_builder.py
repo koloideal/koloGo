@@ -306,3 +306,37 @@ class MessageBuilder:
             f"⏳ Через: <b>{ride.remind_minutes} мин.</b>\n"
             f"🪑 Подтверждённых пассажиров: <b>{approved_count}</b>"
         )
+
+    def balance_info_text(self, balance: float, is_vip: bool) -> str:
+        lines = [
+            "💰 <b>Баланс</b>\n",
+            f"Текущий баланс: <b>{fmt_amount(balance)} BYN</b>\n",
+            "<b>Зачем нужен баланс:</b>",
+            "🚗 Оплата поездок — при бронировании сумма списывается с депозита",
+            "⭐ Покупка VIP-статуса — кнопка в главном меню",
+        ]
+        if is_vip:
+            lines.append("\n⭐ У вас уже есть VIP — поездки бесплатны!")
+        return "\n".join(lines)
+
+    def payment_success_notification(self, amount: float, new_balance: float) -> str:
+        return (
+            "✅ <b>Баланс пополнен!</b>\n\n"
+            f"Зачислено: <b>+{fmt_amount(amount)} BYN</b>\n"
+            f"Текущий баланс: <b>{fmt_amount(new_balance)} BYN</b>"
+        )
+
+    def payment_expired_notification(self) -> str:
+        return (
+            "⏰ <b>Время оплаты истекло</b>\n\n"
+            "Инвойс отменён. Попробуйте пополнить баланс снова."
+        )
+
+    def payment_admin_log(self, user: User, amount: float) -> str:
+        name = escape(user.first_name or user.username or str(user.user_id))
+        return (
+            f"💰 <b>Пополнение баланса</b>\n\n"
+            f"Пользователь: {name} (<code>{user.user_id}</code>)\n"
+            f"Сумма: <b>{fmt_amount(amount)} BYN</b>\n"
+            f"Способ: CryptoBot (USDT)"
+        )

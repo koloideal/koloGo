@@ -8,7 +8,8 @@ from dishka.integrations.aiogram_dialog import inject
 from seatbot.infrastructure.database.dao import BookingsDAO, UsersDAO
 from seatbot.infrastructure.notifications import fmt_amount
 
-from .states import MainMenuSG, MyBookingsSG, RequisitesSG, RidesSG, StatsSG, VipSG
+from .states import (BalanceSG, MainMenuSG, MyBookingsSG, RequisitesSG, RidesSG, StatsSG,
+                     VipSG)
 
 
 @inject
@@ -74,7 +75,10 @@ main_menu_dialog = Dialog(
                 when="has_requisites_access",
             ),
         ),
-        Start(Const("⭐ VIP"), id="vip", state=VipSG.info),
+        Row(
+            Start(Const("⭐ VIP"), id="vip", state=VipSG.info),
+            Start(Const("💰 Баланс"), id="balance", state=BalanceSG.balance),
+        ),
         Button(Format("{notifications_btn}"), id="notifications", on_click=on_toggle_notifications),
         state=MainMenuSG.main,
         getter=get_main_menu,

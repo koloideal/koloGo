@@ -9,6 +9,13 @@ class VipSG(StatesGroup):
     info = State()
 
 
+class BalanceSG(StatesGroup):
+    balance = State()
+    top_up_amount = State()
+    top_up_method = State()
+    invoice = State()
+
+
 class RidesSG(StatesGroup):
     list = State()
     detail = State()

@@ -14,3 +14,7 @@ token = ""
 creator_id = 123456789
 seats_per_ride = 4
 timezone = "Europe/Minsk"
+
+[cryptobot]
+api_token = ""
+api_url = "https://pay.crypt.bot/api/"

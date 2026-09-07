@@ -28,7 +28,14 @@ class BotConfig:
 
 
 @dataclass
+class CryptoBotConfig:
+    api_token: str
+    api_url: str = "https://pay.crypt.bot/api/"
+
+
+@dataclass
 class Config:
     postgres: PostgresConfig
     redis: RedisConfig
     bot: BotConfig
+    cryptobot: CryptoBotConfig
