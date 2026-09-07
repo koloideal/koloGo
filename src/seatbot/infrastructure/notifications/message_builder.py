@@ -107,19 +107,31 @@ class MessageBuilder:
             text += f"\n💰 Оплата по факту: <b>{fmt_amount(due_amount)} BYN</b>"
         return text
 
-    def booking_rejected_notification(self, ride: Ride) -> str:
-        return (
+    def booking_rejected_notification(self, ride: Ride, paid_amount: float = 0.0) -> str:
+        text = (
             f"❌ <b>Ваша бронь отклонена.</b>\n\n"
             f"Поездка в {self._clock.fmt(ride.departure_at)}.\n"
-            f"Депозит возвращён на ваш баланс."
         )
+        if paid_amount > 0:
+            text += f"Депозит <b>{fmt_amount(paid_amount)} BYN</b> возвращён на ваш баланс."
+        elif ride.is_free:
+            text += "Поездка была бесплатной."
+        else:
+            text += "С вас ничего не списывалось — оплата была по факту."
+        return text
 
-    def booking_cancelled_by_admin_notification(self, ride: Ride) -> str:
-        return (
+    def booking_cancelled_by_admin_notification(self, ride: Ride, paid_amount: float = 0.0) -> str:
+        text = (
             f"🚫 <b>Поездка отменена водителем.</b>\n\n"
             f"Поездка в {self._clock.fmt(ride.departure_at)}.\n"
-            f"Депозит возвращён на ваш баланс."
         )
+        if paid_amount > 0:
+            text += f"Депозит <b>{fmt_amount(paid_amount)} BYN</b> возвращён на ваш баланс."
+        elif ride.is_free:
+            text += "Поездка была бесплатной."
+        else:
+            text += "С вас ничего не списывалось — оплата была по факту."
+        return text
 
     def ride_completed_notification(self, ride: Ride) -> str:
         return (

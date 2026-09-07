@@ -41,6 +41,13 @@ class RidesDAO:
         orm_ride = result.scalar_one_or_none()
         return self._map_to_domain(orm_ride) if orm_ride else None
 
+    async def get_by_id_for_update(self, ride_id: int) -> Ride | None:
+        result = await self.session.execute(
+            select(OrmRide).where(OrmRide.id == ride_id).with_for_update()
+        )
+        orm_ride = result.scalar_one_or_none()
+        return self._map_to_domain(orm_ride) if orm_ride else None
+
     async def get_with_stats(self, ride_id: int) -> RideWithStats | None:
         ride = await self.get_by_id(ride_id)
         if not ride:

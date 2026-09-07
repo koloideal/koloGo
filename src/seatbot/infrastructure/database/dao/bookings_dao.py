@@ -29,6 +29,13 @@ class BookingsDAO:
         orm = result.scalar_one_or_none()
         return self._map_to_domain(orm) if orm else None
 
+    async def get_by_id_for_update(self, booking_id: int) -> Booking | None:
+        result = await self.session.execute(
+            select(OrmBooking).where(OrmBooking.id == booking_id).with_for_update()
+        )
+        orm = result.scalar_one_or_none()
+        return self._map_to_domain(orm) if orm else None
+
     async def get_by_ride_and_user(
         self, ride_id: int, user_id: int, only_active: bool = True
     ) -> Booking | None:
