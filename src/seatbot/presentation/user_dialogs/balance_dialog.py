@@ -57,20 +57,22 @@ async def get_top_up_method_data(**_kwargs):
 async def get_invoice_data(
     dialog_manager: DialogManager,
     transactions_dao: FromDishka[TransactionsDAO],
+    payment_service: FromDishka[PaymentService],
     **_kwargs,
 ):
     amount: float = dialog_manager.dialog_data["top_up_amount"]
     url: str = dialog_manager.dialog_data["invoice_url"]
     has_pending = dialog_manager.dialog_data.get("has_pending_transaction", False)
+    amount_usd = await payment_service.byn_to_usd(amount)
     pending_text = (
         "⏳ <b>У вас есть незавершённый платёж</b>\n\n"
-        f"Сумма: <b>{fmt_amount(amount)} BYN</b>\n"
+        f"Сумма: <b>{fmt_amount(amount)} BYN</b> → <b>{fmt_amount(amount_usd)} USDT</b>\n"
         "Нажмите «Оплатить» чтобы перейти к оплате, "
         "или «Отмена» чтобы отменить."
     )
     new_text = (
         "🤖 <b>CryptoBot (USDT)</b>\n\n"
-        f"Сумма: <b>{fmt_amount(amount)} BYN</b>\n\n"
+        f"Сумма: <b>{fmt_amount(amount)} BYN</b> → <b>{fmt_amount(amount_usd)} USDT</b>\n\n"
         "Нажмите «Оплатить» чтобы перейти к оплате в @CryptoBot.\n"
         "После оплаты баланс пополнится автоматически."
     )

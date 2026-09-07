@@ -205,11 +205,14 @@ class ServicesProvider(Provider):
     def get_payment_service(
         self,
         transactions_dao: TransactionsDAO,
+        settings_dao: SettingsDAO,
         cryptobot_service: CryptoBotPaymentService,
         scheduler: AsyncIOScheduler,
         async_container: AsyncContainer,
     ) -> PaymentService:
-        return PaymentService(transactions_dao, cryptobot_service, scheduler, async_container)
+        return PaymentService(
+            transactions_dao, settings_dao, cryptobot_service, scheduler, async_container
+        )
 
 
 class UserAppProvider(Provider):

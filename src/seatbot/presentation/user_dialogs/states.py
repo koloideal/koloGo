@@ -94,3 +94,4 @@ class AdminRequisitesSG(StatesGroup):
 class AdminSettingsSG(StatesGroup):
     main = State()
     vip_price = State()
+    byn_rate = State()
