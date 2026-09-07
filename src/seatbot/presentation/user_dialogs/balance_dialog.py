@@ -32,7 +32,7 @@ async def get_balance_data(
     }
 
 
-async def get_top_up_amount_data(_dialog_manager: DialogManager, **_kwargs):
+async def get_top_up_amount_data(**_kwargs):
     return {
         "amount_prompt": (
             "💳 <b>Пополнение баланса</b>\n\n"
@@ -43,7 +43,7 @@ async def get_top_up_amount_data(_dialog_manager: DialogManager, **_kwargs):
     }
 
 
-async def get_top_up_method_data(_dialog_manager: DialogManager, **_kwargs):
+async def get_top_up_method_data(**_kwargs):
     return {
         "method_prompt": (
             "💳 <b>Выберите способ оплаты</b>"
