@@ -13,6 +13,22 @@ class CryptoBotPaymentService:
     def __init__(self, config: CryptoBotConfig) -> None:
         self._token = config.api_token
         self._base_url = config.api_url.rstrip("/") + "/"
+        self._session: aiohttp.ClientSession | None = None
+
+    async def _get_session(self) -> aiohttp.ClientSession:
+        if self._session is None or self._session.closed:
+            self._session = aiohttp.ClientSession(
+                headers={
+                    "Content-Type": "application/json",
+                    "Crypto-Pay-API-Token": self._token,
+                },
+                timeout=aiohttp.ClientTimeout(total=15),
+            )
+        return self._session
+
+    async def close(self) -> None:
+        if self._session and not self._session.closed:
+            await self._session.close()
 
     async def _make_request(
         self,
@@ -20,12 +36,10 @@ class CryptoBotPaymentService:
         endpoint: str,
         params: dict[str, Any] | None = None,
     ) -> Any:
-        headers = {
-            "Content-Type": "application/json",
-            "Crypto-Pay-API-Token": self._token,
-        }
         url = self._base_url + endpoint.lstrip("/")
-        async with aiohttp.ClientSession(headers=headers) as session:
+        session = await self._get_session()
+        logger.debug("CryptoBot API %s %s params=%s", method, url, params)
+        try:
             if method.upper() == "GET":
                 async with session.get(url, params=params) as response:
                     return await self._parse_response(response, method, endpoint)
@@ -34,6 +48,12 @@ class CryptoBotPaymentService:
                     return await self._parse_response(response, method, endpoint)
             else:
                 raise ValueError(f"Unsupported HTTP method: {method}")
+        except aiohttp.ClientError:
+            # Reset session on network errors
+            if self._session and not self._session.closed:
+                await self._session.close()
+            self._session = None
+            raise
 
     async def _parse_response(
         self, response: aiohttp.ClientResponse, method: str, endpoint: str
@@ -43,6 +63,7 @@ class CryptoBotPaymentService:
             logger.error("CryptoBot API error %s %s → %d: %s", method, endpoint, response.status, text)
             response.raise_for_status()
         data = await response.json()
+        logger.debug("CryptoBot API response %s %s: %s", method, endpoint, data)
         if not data.get("ok"):
             error = data.get("error", {})
             raise ConnectionError(
@@ -56,7 +77,9 @@ class CryptoBotPaymentService:
             "asset": asset,
             "description": "Пополнение баланса SeatBot",
         }
+        logger.info("Creating CryptoBot invoice: amount=%s %s", amount, asset)
         result = await self._make_request("POST", "createInvoice", params=params)
+        logger.info("CryptoBot invoice created: invoice_id=%s", result.get("invoice_id"))
         return CryptoBotPayment.from_dict(result, status="waiting")
 
     async def check_payment(self, invoice_id: str) -> Literal["paid", "not_paid"]:
@@ -64,6 +87,11 @@ class CryptoBotPaymentService:
         invoices_data = await self._make_request("GET", "getInvoices", params=params)
         items = invoices_data.get("items", [])
         if not items:
+            logger.warning("CryptoBot getInvoices returned no items for invoice_id=%s", invoice_id)
             return "not_paid"
-        result: dict[str, str] = items[0]
-        return cast(Literal["paid", "not_paid"], "not_paid" if result["status"] == "active" else "paid")
+        result: dict[str, Any] = items[0]
+        invoice_status = result.get("status", "unknown")
+        logger.info(
+            "CryptoBot invoice %s status=%s", invoice_id, invoice_status
+        )
+        return cast(Literal["paid", "not_paid"], "not_paid" if invoice_status == "active" else "paid")

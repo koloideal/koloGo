@@ -67,40 +67,66 @@ async def check_cryptobot_payment_status(
     created_at: datetime,
     container: AsyncContainer,
 ) -> None:
+    logger.info("check_cryptobot_payment_status: payment_id=%s user_id=%s amount=%s", payment_id, user_id, amount)
     scheduler: AsyncIOScheduler = await container.get(AsyncIOScheduler)
     cryptobot_service: CryptoBotPaymentService = await container.get(CryptoBotPaymentService)
     bot_service: BotService = await container.get(BotService)
     messages: MessageBuilder = await container.get(MessageBuilder)
-    paid = False
-    async with container() as scope:
-        transactions_dao: TransactionsDAO = await scope.get(TransactionsDAO)
-        users_dao: UsersDAO = await scope.get(UsersDAO)
-        transaction = await transactions_dao.get_by_payment_id_for_update(payment_id)
-        if not transaction or transaction.status != TransactionStatus.PENDING:
-            return
-        if (datetime.now(UTC) - created_at) > timedelta(minutes=15):
-            await transactions_dao.update_status(payment_id, TransactionStatus.FAILED)
-            user = await users_dao.get_by_id(user_id)
-            if user:
-                await bot_service.notify_user(user_id, messages.payment_expired_notification())
-            return
-        status = await cryptobot_service.check_payment(payment_id)
-        if status == "paid":
-            await transactions_dao.update_status(payment_id, TransactionStatus.COMPLETED)
-            await users_dao.increase_balance(user_id, amount)
-            user = await users_dao.get_by_id(user_id)
-            if user:
-                await bot_service.notify_user(
-                    user_id, messages.payment_success_notification(amount, user.balance)
-                )
-                await bot_service.send_log_to_admin(messages.payment_admin_log(user, amount))
-                paid = True
+    should_remove_job = False
     try:
-        scheduler.remove_job(f"check_payment_{payment_id}")
-    except JobLookupError:
-        logger.debug("Job check_payment_%s already removed", payment_id)
-    if not paid:
-        try:
-            scheduler.remove_job(f"check_payment_{payment_id}")
-        except JobLookupError:
-            logger.debug("Job check_payment_%s already removed", payment_id)
+        async with container() as scope:
+            transactions_dao: TransactionsDAO = await scope.get(TransactionsDAO)
+            users_dao: UsersDAO = await scope.get(UsersDAO)
+            transaction = await transactions_dao.get_by_payment_id_for_update(payment_id)
+            if not transaction:
+                logger.warning("Transaction not found for payment_id=%s", payment_id)
+                should_remove_job = True
+                return
+            logger.info(
+                "Transaction %s: status=%s, amount=%s",
+                payment_id, transaction.status, transaction.amount,
+            )
+            if transaction.status != TransactionStatus.PENDING:
+                logger.info("Transaction %s not pending (status=%s), skipping", payment_id, transaction.status)
+                should_remove_job = True
+                return
+            if (datetime.now(UTC) - created_at) > timedelta(minutes=15):
+                logger.info("Transaction %s expired (15min timeout)", payment_id)
+                await transactions_dao.update_status(payment_id, TransactionStatus.FAILED)
+                user = await users_dao.get_by_id(user_id)
+                if user:
+                    await bot_service.notify_user(user_id, messages.payment_expired_notification())
+                should_remove_job = True
+                return
+            logger.info("Checking CryptoBot payment status for invoice %s", payment_id)
+            status = await cryptobot_service.check_payment(payment_id)
+            logger.info("CryptoBot check_payment(%s) → %s", payment_id, status)
+            if status == "paid":
+                logger.info("Payment %s confirmed paid, updating balance", payment_id)
+                await transactions_dao.update_status(payment_id, TransactionStatus.COMPLETED)
+                await users_dao.increase_balance(user_id, amount)
+                user = await users_dao.get_by_id(user_id)
+                if user:
+                    logger.info(
+                        "Balance updated for user %s: +%.2f, new balance=%.2f",
+                        user_id, amount, user.balance,
+                    )
+                    await bot_service.notify_user(
+                        user_id, messages.payment_success_notification(amount, user.balance)
+                    )
+                    await bot_service.send_log_to_admin(messages.payment_admin_log(user, amount))
+                else:
+                    logger.error("User %s not found after balance increase!", user_id)
+                should_remove_job = True
+            else:
+                logger.debug("Payment %s still not paid, will retry", payment_id)
+    except Exception:
+        logger.exception("Error in check_cryptobot_payment_status for payment_id=%s", payment_id)
+        raise
+    finally:
+        if should_remove_job:
+            try:
+                scheduler.remove_job(f"check_payment_{payment_id}")
+                logger.info("Removed scheduler job check_payment_%s", payment_id)
+            except JobLookupError:
+                logger.debug("Job check_payment_%s already removed", payment_id)
