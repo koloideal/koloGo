@@ -10,10 +10,12 @@ class DepositService:
         users_dao: UsersDAO,
         transactions_dao: TransactionsDAO,
         bot_service: BotService,
+        message_builder: MessageBuilder,
     ) -> None:
         self._users_dao = users_dao
         self._transactions_dao = transactions_dao
         self._bot_service = bot_service
+        self._messages = message_builder
 
     async def topup(self, user_id: int, amount: float) -> User | None:
         if amount <= 0:
@@ -27,7 +29,7 @@ class DepositService:
             type=TransactionType.ADMIN_TOPUP,
         )
         await self._bot_service.notify_user(
-            user_id, MessageBuilder.deposit_topup_notification(amount, user.balance)
+            user_id, self._messages.deposit_topup_notification(amount, user.balance)
         )
         return user
 
@@ -43,6 +45,6 @@ class DepositService:
             type=TransactionType.ADMIN_DECREASE,
         )
         await self._bot_service.notify_user(
-            user_id, MessageBuilder.deposit_decrease_notification(amount, user.balance)
+            user_id, self._messages.deposit_decrease_notification(amount, user.balance)
         )
         return user

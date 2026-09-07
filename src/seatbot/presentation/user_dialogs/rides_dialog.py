@@ -11,6 +11,7 @@ from seatbot.domain.exceptions import (AlreadyBookedError, NoFreeSeatsError,
 from seatbot.domain.schemas import BookingStatus
 from seatbot.infrastructure.database.dao import BookingsDAO, RidesDAO, UsersDAO
 from seatbot.infrastructure.notifications import MessageBuilder, fmt_amount
+from seatbot.infrastructure.time import LocalClock
 
 from .states import MainMenuSG, RidesSG
 
@@ -19,6 +20,7 @@ from .states import MainMenuSG, RidesSG
 async def get_rides_list(
     dialog_manager: DialogManager,
     rides_dao: FromDishka[RidesDAO],
+    clock: FromDishka[LocalClock],
     **_kwargs,
 ):
     rides = await rides_dao.list_upcoming_visible()
@@ -35,7 +37,7 @@ async def get_rides_list(
             {
                 "ride_id": rws.ride.ride_id,
                 "title": (
-                    f"{rws.ride.departure_at.strftime('%d.%m %H:%M')} • {price_str} • {rws.free_seats} мест"
+                    f"{clock.fmt(rws.ride.departure_at, '%d.%m %H:%M')} • {price_str} • {rws.free_seats} мест"
                 ),
             }
         )
@@ -52,6 +54,7 @@ async def get_ride_detail(
     rides_dao: FromDishka[RidesDAO],
     bookings_dao: FromDishka[BookingsDAO],
     users_dao: FromDishka[UsersDAO],
+    messages: FromDishka[MessageBuilder],
     **_kwargs,
 ):
     ride_id: int = dialog_manager.dialog_data["ride_id"]
@@ -63,7 +66,7 @@ async def get_ride_detail(
     user = await users_dao.get_by_id(user_id)
     existing = await bookings_dao.get_by_ride_and_user(ride_id, user_id)
 
-    ride_text = MessageBuilder.ride_card(rws)
+    ride_text = messages.ride_card(rws)
     if not rws.ride.is_free:
         price = float(rws.ride.price)
         if user and user.is_vip:

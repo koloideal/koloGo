@@ -9,6 +9,7 @@ from seatbot.application.services.ride import RideService
 from seatbot.domain.schemas import BookingStatus
 from seatbot.infrastructure.database.dao import BookingsDAO, RidesDAO, UsersDAO
 from seatbot.infrastructure.notifications import MessageBuilder
+from seatbot.infrastructure.time import LocalClock
 
 from .states import MyBookingsSG
 
@@ -28,6 +29,8 @@ async def get_my_bookings(
     bookings_dao: FromDishka[BookingsDAO],
     rides_dao: FromDishka[RidesDAO],
     users_dao: FromDishka[UsersDAO],
+    messages: FromDishka[MessageBuilder],
+    clock: FromDishka[LocalClock],
     **_kwargs,
 ):
     user_id = dialog_manager.middleware_data["event_from_user"].id
@@ -46,11 +49,11 @@ async def get_my_bookings(
         if not ride:
             continue
         emoji = _STATUS_EMOJI.get(b.status, "•")
-        pay = MessageBuilder.payment_short(b.paid_amount, float(ride.price), ride.is_free or is_vip)
+        pay = messages.payment_short(b.paid_amount, float(ride.price), ride.is_free or is_vip)
         items.append(
             {
                 "booking_id": b.booking_id,
-                "title": (f"{emoji} {ride.departure_at.strftime('%d.%m %H:%M')} • {pay}"),
+                "title": (f"{emoji} {clock.fmt(ride.departure_at, '%d.%m %H:%M')} • {pay}"),
             }
         )
     return {
@@ -66,6 +69,7 @@ async def get_booking_detail(
     bookings_dao: FromDishka[BookingsDAO],
     rides_dao: FromDishka[RidesDAO],
     users_dao: FromDishka[UsersDAO],
+    messages: FromDishka[MessageBuilder],
     **_kwargs,
 ):
     booking_id: int = dialog_manager.dialog_data["booking_id"]
@@ -78,7 +82,7 @@ async def get_booking_detail(
     user = await users_dao.get_by_id(booking.user_id)
     can_cancel = booking.status in (BookingStatus.PENDING, BookingStatus.APPROVED)
     return {
-        "booking_text": MessageBuilder.booking_card(booking, ride, is_vip=bool(user and user.is_vip)),
+        "booking_text": messages.booking_card(booking, ride, is_vip=bool(user and user.is_vip)),
         "can_cancel": can_cancel,
         "cancel_btn": "🚫 Отменить бронь",
         "back_btn": "⬅️ К броням",

@@ -13,9 +13,10 @@ class CreateOrGetUserCommand:
 
 
 class CreateOrGetUserInteractor:
-    def __init__(self, users_dao: UsersDAO, bot_service: BotService) -> None:
+    def __init__(self, users_dao: UsersDAO, bot_service: BotService, message_builder: MessageBuilder) -> None:
         self._users_dao = users_dao
         self._bot_service = bot_service
+        self._messages = message_builder
 
     async def execute(self, cmd: CreateOrGetUserCommand) -> None:
         existing = await self._users_dao.get_by_id(cmd.user_id)
@@ -27,4 +28,4 @@ class CreateOrGetUserInteractor:
         user = await self._users_dao.create(
             user_id=cmd.user_id, username=cmd.username, first_name=cmd.first_name
         )
-        await self._bot_service.send_log_to_admin(MessageBuilder.new_user_admin_log(user))
+        await self._bot_service.send_log_to_admin(self._messages.new_user_admin_log(user))

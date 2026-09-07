@@ -24,6 +24,7 @@ class RedisConfig:
 class BotConfig:
     token: str
     creator_id: int
+    timezone: str = "Europe/Minsk"
 
 
 @dataclass

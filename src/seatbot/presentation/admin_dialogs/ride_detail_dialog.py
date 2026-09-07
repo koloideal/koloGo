@@ -13,6 +13,7 @@ from seatbot.infrastructure.config.models import Config
 from seatbot.infrastructure.database.dao import BookingsDAO, RidesDAO, UsersDAO
 from seatbot.infrastructure.notifications import (BOOKING_STATUS_RU, MessageBuilder,
                                                   fmt_amount, user_display)
+from seatbot.infrastructure.time import LocalClock
 
 from ..user_dialogs.states import RideBookingsSG
 
@@ -32,6 +33,7 @@ async def get_ride_bookings(
     bookings_dao: FromDishka[BookingsDAO],
     users_dao: FromDishka[UsersDAO],
     rides_dao: FromDishka[RidesDAO],
+    messages: FromDishka[MessageBuilder],
     **_kwargs,
 ):
     start_data = dialog_manager.start_data
@@ -66,7 +68,7 @@ async def get_ride_bookings(
         uname = user_display(user.username, user.first_name, b.user_id) if user else f"id:{b.user_id}"
         status_ru = BOOKING_STATUS_RU.get(b.status, b.status.value)
         pay = (
-            MessageBuilder.payment_short(
+            messages.payment_short(
                 b.paid_amount,
                 float(ride.price),
                 ride.is_free or bool(user and user.is_vip),
@@ -89,6 +91,8 @@ async def get_booking_detail(
     bookings_dao: FromDishka[BookingsDAO],
     users_dao: FromDishka[UsersDAO],
     rides_dao: FromDishka[RidesDAO],
+    messages: FromDishka[MessageBuilder],
+    clock: FromDishka[LocalClock],
     **_kwargs,
 ):
     booking_id: int = dialog_manager.dialog_data["booking_id"]
@@ -101,9 +105,9 @@ async def get_booking_detail(
     vip = " ⭐VIP" if (user and user.is_vip) else ""
     text = f"<b>Бронь #{booking.booking_id}</b>\n\n👤 Пользователь: {uname}{vip} ({booking.user_id})\n"
     if ride:
-        text += f"🚗 Поездка: {ride.departure_at.strftime('%d.%m.%Y %H:%M')}\n"
+        text += f"🚗 Поездка: {clock.fmt(ride.departure_at, '%d.%m.%Y %H:%M')}\n"
         text += (
-            MessageBuilder.payment_full(
+            messages.payment_full(
                 booking.paid_amount,
                 float(ride.price),
                 ride.is_free or bool(user and user.is_vip),
@@ -235,7 +239,8 @@ async def on_passenger_selected(
         return
     ride = await rides_dao.get_by_id(ride_id)
     user = await users_dao.get_by_id(user_id)
-    pay = MessageBuilder.payment_short(
+    messages: MessageBuilder = await container.get(MessageBuilder)
+    pay = messages.payment_short(
         booking.paid_amount,
         float(ride.price) if ride else booking.paid_amount,
         bool(ride and (ride.is_free or (user and user.is_vip))),

@@ -1,4 +1,5 @@
 from collections.abc import AsyncIterable
+from zoneinfo import ZoneInfo
 
 from aiogram import Bot
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -20,8 +21,10 @@ from seatbot.infrastructure.config.models import Config
 from seatbot.infrastructure.database.config import new_session_maker
 from seatbot.infrastructure.database.dao import (BookingsDAO, RequisitesDAO, RidesDAO,
                                                  TransactionsDAO, UsersDAO)
+from seatbot.infrastructure.notifications import MessageBuilder
 from seatbot.infrastructure.scheduling.tasks import (auto_close_past_rides,
                                                      send_ride_reminders)
+from seatbot.infrastructure.time import LocalClock
 
 
 class DatabaseProvider(Provider):
@@ -83,6 +86,14 @@ class RedisProvider(Provider):
         return CacheKeys()
 
 
+class TimeProvider(Provider):
+    scope = Scope.APP
+
+    @provide
+    def get_local_clock(self, config: Config) -> LocalClock:
+        return LocalClock(ZoneInfo(config.bot.timezone))
+
+
 class SchedulerProvider(Provider):
     @provide(scope=Scope.APP)
     def get_scheduler(self, async_container: AsyncContainer) -> AsyncIOScheduler:
@@ -106,6 +117,10 @@ class ServicesProvider(Provider):
     scope = Scope.REQUEST
 
     @provide
+    def get_message_builder(self, clock: LocalClock) -> MessageBuilder:
+        return MessageBuilder(clock)
+
+    @provide
     def get_user_service(
         self, cache: RedisService, cache_keys: CacheKeys, users_dao: UsersDAO
     ) -> UserService:
@@ -119,8 +134,12 @@ class ServicesProvider(Provider):
         users_dao: UsersDAO,
         transactions_dao: TransactionsDAO,
         bot_service: BotService,
+        message_builder: MessageBuilder,
+        clock: LocalClock,
     ) -> RideService:
-        return RideService(rides_dao, bookings_dao, users_dao, transactions_dao, bot_service)
+        return RideService(
+            rides_dao, bookings_dao, users_dao, transactions_dao, bot_service, message_builder, clock
+        )
 
     @provide
     def get_deposit_service(
@@ -128,8 +147,9 @@ class ServicesProvider(Provider):
         users_dao: UsersDAO,
         transactions_dao: TransactionsDAO,
         bot_service: BotService,
+        message_builder: MessageBuilder,
     ) -> DepositService:
-        return DepositService(users_dao, transactions_dao, bot_service)
+        return DepositService(users_dao, transactions_dao, bot_service, message_builder)
 
     @provide
     def get_statistics_service(
@@ -154,5 +174,7 @@ class UserAppProvider(Provider):
     scope = Scope.REQUEST
 
     @provide
-    def create_or_get_user(self, users_dao: UsersDAO, bot_service: BotService) -> CreateOrGetUserInteractor:
-        return CreateOrGetUserInteractor(users_dao, bot_service)
+    def create_or_get_user(
+        self, users_dao: UsersDAO, bot_service: BotService, message_builder: MessageBuilder
+    ) -> CreateOrGetUserInteractor:
+        return CreateOrGetUserInteractor(users_dao, bot_service, message_builder)

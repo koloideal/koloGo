@@ -9,6 +9,7 @@ from seatbot.application.services.ride import RideService
 from seatbot.domain.schemas import RideStatus
 from seatbot.infrastructure.database.dao import RidesDAO
 from seatbot.infrastructure.notifications import MessageBuilder, fmt_amount
+from seatbot.infrastructure.time import LocalClock
 
 from ..user_dialogs.states import RideBookingsSG, RidesMgmtSG
 
@@ -24,6 +25,7 @@ _STATUS_EMOJI = {
 async def get_rides_list(
     dialog_manager: DialogManager,
     rides_dao: FromDishka[RidesDAO],
+    clock: FromDishka[LocalClock],
     **_kwargs,
 ):
     rides = await rides_dao.list_all(limit=30)
@@ -37,7 +39,7 @@ async def get_rides_list(
             {
                 "ride_id": rws.ride.ride_id,
                 "title": (
-                    f"{emoji} {rws.ride.departure_at.strftime('%d.%m %H:%M')} • "
+                    f"{emoji} {clock.fmt(rws.ride.departure_at, '%d.%m %H:%M')} • "
                     f"{price_str} • {rws.free_seats}/{rws.ride.seats_total} мест"
                 ),
             }
@@ -49,6 +51,7 @@ async def get_rides_list(
 async def get_ride_detail(
     dialog_manager: DialogManager,
     rides_dao: FromDishka[RidesDAO],
+    messages: FromDishka[MessageBuilder],
     **_kwargs,
 ):
     ride_id: int = dialog_manager.dialog_data["ride_id"]
@@ -58,7 +61,7 @@ async def get_ride_detail(
     is_open = rws.ride.status == RideStatus.OPEN
     is_active = rws.ride.status in (RideStatus.OPEN, RideStatus.CLOSED)
     return {
-        "ride_text": MessageBuilder.ride_card(rws),
+        "ride_text": messages.ride_card(rws),
         "ride_id": ride_id,
         "is_open": is_open,
         "is_active": is_active,

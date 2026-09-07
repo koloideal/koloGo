@@ -1,4 +1,4 @@
-from datetime import UTC, date, datetime, time
+from datetime import date, datetime, time
 
 from aiogram.types import CallbackQuery, Message
 from aiogram_dialog import Dialog, DialogManager, StartMode, Window
@@ -15,6 +15,7 @@ from dishka.integrations.aiogram_dialog import inject
 from seatbot.application.services.ride import RideService
 from seatbot.infrastructure.database.dao import RidesDAO
 from seatbot.infrastructure.notifications import fmt_amount
+from seatbot.infrastructure.time import LocalClock
 
 from ..user_dialogs.states import RideCreateSG, RidesMgmtSG
 
@@ -23,6 +24,7 @@ from ..user_dialogs.states import RideCreateSG, RidesMgmtSG
 async def get_templates(
     dialog_manager: DialogManager,
     rides_dao: FromDishka[RidesDAO],
+    clock: FromDishka[LocalClock],
     **_kwargs,
 ):
     templates = await rides_dao.list_templates(limit=8)
@@ -31,7 +33,7 @@ async def get_templates(
     items = []
     for t in templates:
         price_str = "бесплатно" if t.is_free else f"{fmt_amount(t.price)} BYN"
-        time_str = t.departure_at.strftime("%H:%M")
+        time_str = clock.fmt(t.departure_at, "%H:%M")
         note_str = f" • {t.note}" if t.note else ""
         items.append(
             {
@@ -160,9 +162,10 @@ async def on_date_selected(
     if template_ride_id is not None:
         container = manager.middleware_data["dishka_container"]
         ride_service: RideService = await container.get(RideService)
+        clock: LocalClock = await container.get(LocalClock)
         rides = await ride_service.create_ride_from_template(
             template_ride_id,
-            datetime.combine(selected_date, time.min, tzinfo=UTC),
+            clock.to_utc(datetime.combine(selected_date, time.min, tzinfo=clock.tz)),
         )
         if isinstance(event, CallbackQuery):
             if rides:
@@ -278,6 +281,7 @@ async def on_create(
     button: Button,
     manager: DialogManager,
     ride_service: FromDishka[RideService],
+    clock: FromDishka[LocalClock],
 ):
     date_str: str = manager.dialog_data["selected_date_obj"]
     hour: int = manager.dialog_data.get("selected_hour", 18)
@@ -290,14 +294,7 @@ async def on_create(
     remind_minutes: int = manager.dialog_data.get("remind_minutes", 30)
 
     d = date.fromisoformat(date_str)
-    departure_at = datetime(
-        year=d.year,
-        month=d.month,
-        day=d.day,
-        hour=hour,
-        minute=minute,
-        tzinfo=UTC,
-    )
+    departure_at = clock.local_dt(d.year, d.month, d.day, hour, minute)
 
     rides = await ride_service.create_ride(
         departure_at=departure_at,

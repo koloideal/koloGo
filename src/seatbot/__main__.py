@@ -19,7 +19,7 @@ from redis.asyncio import Redis
 from seatbot.infrastructure.config import load_config
 from seatbot.infrastructure.config.models import Config
 from seatbot.infrastructure.ioc import (DatabaseProvider, RedisProvider,
-                                        SchedulerProvider, ServicesProvider,
+                                        SchedulerProvider, ServicesProvider, TimeProvider,
                                         UserAppProvider)
 from seatbot.infrastructure.logging.logger import setup_logging
 from seatbot.presentation.middlewares.check_ban import CheckBanMiddleware
@@ -42,6 +42,7 @@ setup_logging("secret_data/logger-config.json")
 container = make_async_container(
     DatabaseProvider(),
     RedisProvider(),
+    TimeProvider(),
     SchedulerProvider(),
     ServicesProvider(),
     UserAppProvider(),

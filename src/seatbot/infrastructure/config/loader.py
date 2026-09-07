@@ -20,5 +20,6 @@ def load_config(config_path: str) -> Config:
         bot=BotConfig(
             token=raw["bot"]["token"],
             creator_id=raw["bot"]["creator_id"],
+            timezone=raw["bot"].get("timezone", "Europe/Minsk"),
         ),
     )
