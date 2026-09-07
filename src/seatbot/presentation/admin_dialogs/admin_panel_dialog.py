@@ -2,8 +2,9 @@ from aiogram_dialog import Dialog, Window
 from aiogram_dialog.widgets.kbd import Row, Start
 from aiogram_dialog.widgets.text import Const
 
-from ..user_dialogs.states import (AdminPanelSG, AdminRequisitesSG, AdminStatsSG,
-                                   BroadcastSG, RideCreateSG, RidesMgmtSG, UsersSG)
+from ..user_dialogs.states import (AdminPanelSG, AdminRequisitesSG, AdminSettingsSG,
+                                   AdminStatsSG, BroadcastSG, RideCreateSG, RidesMgmtSG,
+                                   UsersSG)
 
 admin_panel_dialog = Dialog(
     Window(
@@ -23,6 +24,7 @@ admin_panel_dialog = Dialog(
             Start(Const("💸 Реквизиты"), id="requisites", state=AdminRequisitesSG.list),
             Start(Const("💬 Рассылка"), id="broadcast", state=BroadcastSG.text),
         ),
+        Start(Const("⚙️ Настройки"), id="settings", state=AdminSettingsSG.main),
         state=AdminPanelSG.main,
     ),
 )

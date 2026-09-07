@@ -76,6 +76,7 @@ async def main() -> None:
         ride_detail_dialog as ride_detail_dialog_mod
     from seatbot.presentation.admin_dialogs import \
         rides_management_dialog as rides_management_dialog_mod
+    from seatbot.presentation.admin_dialogs import settings_dialog as settings_dialog_mod
     from seatbot.presentation.admin_dialogs import \
         statistics_dialog as statistics_dialog_mod
     from seatbot.presentation.admin_dialogs import users_dialog as users_dialog_mod
@@ -88,6 +89,7 @@ async def main() -> None:
         requisites_dialog as user_requisites_dialog_mod
     from seatbot.presentation.user_dialogs import rides_dialog as rides_dialog_mod
     from seatbot.presentation.user_dialogs import stats_dialog as stats_dialog_mod
+    from seatbot.presentation.user_dialogs import vip_dialog as vip_dialog_mod
     from seatbot.presentation.user_handlers import user_router
 
     dp.include_routers(error_router, user_router, admin_router)
@@ -97,6 +99,7 @@ async def main() -> None:
         my_bookings_dialog_mod.my_bookings_dialog,
         user_requisites_dialog_mod.requisites_dialog,
         stats_dialog_mod.stats_dialog,
+        vip_dialog_mod.vip_dialog,
     )
     dp.include_routers(
         admin_panel_dialog_mod.admin_panel_dialog,
@@ -108,6 +111,7 @@ async def main() -> None:
         admin_requisites_dialog_mod.requisites_dialog,
         broadcast_dialog_mod.broadcast_dialog,
         statistics_dialog_mod.statistics_dialog,
+        settings_dialog_mod.settings_dialog,
     )
 
     admin_router.message.middleware(RejectNotAdminMiddleware())

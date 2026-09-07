@@ -5,6 +5,10 @@ class MainMenuSG(StatesGroup):
     main = State()
 
 
+class VipSG(StatesGroup):
+    info = State()
+
+
 class RidesSG(StatesGroup):
     list = State()
     detail = State()
@@ -78,3 +82,8 @@ class AdminRequisitesSG(StatesGroup):
     title = State()
     value = State()
     detail = State()
+
+
+class AdminSettingsSG(StatesGroup):
+    main = State()
+    vip_price = State()

@@ -253,6 +253,56 @@ class MessageBuilder:
             f"Не опаздывайте!"
         )
 
+    def vip_info_text(self, price: float, is_vip: bool, balance: float) -> str:
+        if is_vip:
+            return (
+                "⭐ <b>Вы уже VIP!</b>\n\n"
+                "Ваши привилегии:\n"
+                "• Все поездки бесплатны\n"
+                "• Авто-одобрение без ожидания\n"
+                "• Доступ к бронированию во время VIP-холда\n\n"
+                "Спасибо за поддержку проекта! 🙏"
+            )
+        lines = [
+            "⭐ <b>VIP-статус</b>\n",
+            "<b>Привилегии VIP:</b>",
+            "• 🚗 Все поездки бесплатны",
+            "• ⚡ Авто-одобрение без ожидания водителя",
+            (
+                "• 🏃 Доступ к бронированию во время VIP-холда "
+                "(первые минуты после публикации поездки)"
+            ),
+            "",
+            f"💰 Стоимость: <b>{fmt_amount(price)} BYN</b> (единоразово)",
+            f"💳 Ваш баланс: <b>{fmt_amount(balance)} BYN</b>",
+        ]
+        if balance >= price:
+            lines.append("\n✅ У вас достаточно средств для покупки.")
+        else:
+            shortage = price - balance
+            lines.append(
+                f"\n❌ Не хватает <b>{fmt_amount(shortage)} BYN</b>. "
+                "Попросите админа пополнить депозит."
+            )
+        return "\n".join(lines)
+
+    def vip_purchase_notification(self, price: float, new_balance: float) -> str:
+        return (
+            "⭐ <b>VIP-статус активирован!</b>\n\n"
+            f"Списано: <b>-{fmt_amount(price)} BYN</b>\n"
+            f"Текущий баланс: <b>{fmt_amount(new_balance)} BYN</b>\n\n"
+            "Теперь все поездки для вас бесплатны, а брони "
+            "одобряются автоматически. Спасибо за поддержку! 🙏"
+        )
+
+    def vip_purchased_admin_log(self, user: User, price: float) -> str:
+        name = escape(user.first_name or user.username or str(user.user_id))
+        return (
+            f"⭐ <b>VIP куплен</b>\n\n"
+            f"Пользователь: {name} (<code>{user.user_id}</code>)\n"
+            f"Списано: <b>{fmt_amount(price)} BYN</b>"
+        )
+
     def ride_reminder_admin_notification(self, ride: Ride, approved_count: int) -> str:
         return (
             f"⏰ <b>Напоминание: поездка скоро отправляется</b>\n\n"

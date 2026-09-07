@@ -24,6 +24,7 @@ class TransactionType(str, Enum):
     ADMIN_DECREASE = "ADMIN_DECREASE"
     RIDE_PAYMENT = "RIDE_PAYMENT"
     REFUND = "REFUND"
+    VIP_PURCHASE = "VIP_PURCHASE"
 
 
 @dataclass

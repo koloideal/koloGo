@@ -16,11 +16,12 @@ from seatbot.application.services.deposit import DepositService
 from seatbot.application.services.ride import RideService
 from seatbot.application.services.statistics import StatisticsService
 from seatbot.application.services.user import UserService
+from seatbot.application.services.vip import VipService
 from seatbot.infrastructure.cache import CacheKeys, RedisService
 from seatbot.infrastructure.config.models import Config
 from seatbot.infrastructure.database.config import new_session_maker
 from seatbot.infrastructure.database.dao import (BookingsDAO, RequisitesDAO, RidesDAO,
-                                                 TransactionsDAO, UsersDAO)
+                                                 SettingsDAO, TransactionsDAO, UsersDAO)
 from seatbot.infrastructure.notifications import MessageBuilder
 from seatbot.infrastructure.scheduling.tasks import (auto_close_past_rides,
                                                      send_ride_reminders)
@@ -60,6 +61,10 @@ class DatabaseProvider(Provider):
     @provide
     def get_requisites_dao(self, session: AsyncSession) -> RequisitesDAO:
         return RequisitesDAO(session)
+
+    @provide
+    def get_settings_dao(self, session: AsyncSession) -> SettingsDAO:
+        return SettingsDAO(session)
 
 
 class RedisProvider(Provider):
@@ -168,6 +173,27 @@ class ServicesProvider(Provider):
     @provide
     def get_bot_service(self, bot: Bot, config: Config, users_dao: UsersDAO) -> BotService:
         return BotService(bot, config, users_dao)
+
+    @provide
+    def get_vip_service(
+        self,
+        settings_dao: SettingsDAO,
+        users_dao: UsersDAO,
+        transactions_dao: TransactionsDAO,
+        bot_service: BotService,
+        message_builder: MessageBuilder,
+        cache: RedisService,
+        cache_keys: CacheKeys,
+    ) -> VipService:
+        return VipService(
+            settings_dao,
+            users_dao,
+            transactions_dao,
+            bot_service,
+            message_builder,
+            cache,
+            cache_keys,
+        )
 
 
 class UserAppProvider(Provider):
