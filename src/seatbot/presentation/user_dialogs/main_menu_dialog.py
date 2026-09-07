@@ -21,15 +21,14 @@ async def get_main_menu(
     user_id = dialog_manager.middleware_data["event_from_user"].id
     user = await users_dao.get_by_id(user_id)
     has_approved_booking = await bookings_dao.has_approved_for_user(user_id)
+    has_extra = bool(user and (user.is_vip or user.balance > 0))
     lines = [
-        "🚗 <b>SeatBot — поездки в Минск</b>\n",
+        "🚗 <b>SeatBot — поездки в Минск</b>" + ("\n" if has_extra else ""),
     ]
     if user and user.is_vip:
         lines.append("⭐ <b>VIP:</b> поездки бесплатно, апрув автоматически.")
     if user and user.balance > 0:
         lines.append(f"💰 На депозите: <b>{fmt_amount(user.balance)} BYN</b>")
-    else:
-        lines[0] = lines[0].rstrip("\n")
     lines.append("\n<i><b>made by kolo</b></i>")
     return {
         "menu_text": "\n".join(lines),

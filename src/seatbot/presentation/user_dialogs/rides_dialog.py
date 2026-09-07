@@ -75,7 +75,12 @@ async def get_ride_detail(
     if hold_active and not is_vip:
         remaining = rws.ride.vip_hold_remaining_seconds(now)
         mins, secs = divmod(remaining, 60)
-        ride_text += f"\n⭐ <b>VIP-холд</b> — бронь только для VIP ещё {mins}:{secs:02d}"
+        ride_text += (
+            f"\n\n⭐ <b>Бронь временно только для VIP</b>\n"
+            f"Обычные пользователи смогут забронировать через "
+            f"<b>{mins}:{secs:02d}</b>\n"
+            f"<i>Станьте VIP, чтобы бронировать сразу — кнопка в главном меню.</i>"
+        )
     if not rws.ride.is_free:
         price = float(rws.ride.price)
         if user and user.is_vip:
