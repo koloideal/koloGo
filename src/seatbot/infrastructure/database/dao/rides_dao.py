@@ -21,6 +21,7 @@ class RidesDAO:
         note: str | None = None,
         is_visible: bool = True,
         remind_minutes: int = 30,
+        vip_hold_minutes: int = 0,
     ) -> Ride:
         orm_ride = OrmRide(
             departure_at=departure_at,
@@ -31,6 +32,7 @@ class RidesDAO:
             status=RideStatus.OPEN.value,
             note=note,
             remind_minutes=remind_minutes,
+            vip_hold_minutes=vip_hold_minutes,
         )
         self.session.add(orm_ride)
         await self.session.flush()
@@ -206,4 +208,5 @@ class RidesDAO:
             created_at=orm_ride.created_at,
             note=orm_ride.note,
             remind_minutes=orm_ride.remind_minutes,
+            vip_hold_minutes=orm_ride.vip_hold_minutes,
         )

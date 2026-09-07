@@ -33,3 +33,10 @@ class AlreadyBookedError(SeatBotError):
         super().__init__(f"User {user_id} already booked ride {ride_id}")
         self.ride_id = ride_id
         self.user_id = user_id
+
+
+class VipHoldActiveError(SeatBotError):
+    def __init__(self, ride_id: int, remaining_seconds: int) -> None:
+        super().__init__(f"Ride {ride_id} vip hold active, {remaining_seconds}s remaining")
+        self.ride_id = ride_id
+        self.remaining_seconds = remaining_seconds

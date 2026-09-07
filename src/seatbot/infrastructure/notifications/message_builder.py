@@ -59,6 +59,12 @@ class MessageBuilder:
             lines.append("⚡ Авто-одобрение включено")
         if not r.is_visible:
             lines.append("👁️ Скрытая (видна только забронировавшим)")
+        if r.is_vip_hold_active(self._clock.now()):
+            remaining = r.vip_hold_remaining_seconds(self._clock.now())
+            mins, secs = divmod(remaining, 60)
+            lines.append(f"⭐ VIP-холд: только VIP ещё {mins}:{secs:02d}")
+        elif r.vip_hold_minutes > 0:
+            lines.append(f"⭐ VIP-холд был {r.vip_hold_minutes} мин (истёк)")
         if r.note:
             lines.append(f"📝 {escape(r.note)}")
         return "\n".join(lines)
@@ -214,10 +220,17 @@ class MessageBuilder:
     def new_ride_notification(self, ride: Ride) -> str:
         price = "Бесплатно" if ride.is_free else f"{fmt_amount(ride.price)} BYN"
         note = f"\n📝 {escape(ride.note)}" if ride.note else ""
+        if ride.vip_hold_minutes > 0:
+            hold = (
+                f"\n⭐ <b>VIP-холд {ride.vip_hold_minutes} мин</b> — "
+                "сначала бронируют VIP, потом все остальные."
+            )
+        else:
+            hold = ""
         return (
             "🚗 <b>Новая поездка!</b>\n\n"
             f"🕒 Отправление: <b>{self._clock.fmt(ride.departure_at)}</b>\n"
-            f"💰 Цена: <b>{price}</b>{note}\n\n"
+            f"💰 Цена: <b>{price}</b>{note}{hold}\n\n"
             "Откройте раздел «Поездки», чтобы забронировать место."
         )
 

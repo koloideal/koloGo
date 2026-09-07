@@ -26,6 +26,7 @@ class Ride(Base):
     note: Mapped[str | None] = mapped_column(String(512), nullable=True)
     remind_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=30, server_default="30")
     remind_sent: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    vip_hold_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
     )

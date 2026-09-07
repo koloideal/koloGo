@@ -102,6 +102,22 @@ async def get_remind_data(
     }
 
 
+async def get_vip_hold_data(
+    dialog_manager: DialogManager,
+    **_kwargs,
+):
+    return {
+        "vip_hold_info": (
+            "⭐ <b>VIP-холд</b>\n\n"
+            "После создания поездки первые N минут бронировать "
+            "могут только VIP-пользователи, затем — все желающие.\n\n"
+            "Введите число минут от 0 до 120.\n"
+            "0 — без холда (сразу все могут бронировать)."
+        ),
+        "back_btn": "⬅️ Назад",
+    }
+
+
 async def get_price_data(
     dialog_manager: DialogManager,
     **_kwargs,
@@ -129,9 +145,11 @@ async def get_confirm_data(
     note = dialog_manager.dialog_data.get("note")
     repeat_days = dialog_manager.dialog_data.get("repeat_days", 1)
     remind_minutes = dialog_manager.dialog_data.get("remind_minutes", 30)
+    vip_hold_minutes = dialog_manager.dialog_data.get("vip_hold_minutes", 0)
     price_str = "Бесплатно" if price <= 0 else f"{fmt_amount(price)} BYN"
     repeat_str = f"{repeat_days} дн." if repeat_days > 1 else "1 день"
     remind_str = f"{remind_minutes} мин." if remind_minutes > 0 else "выключено"
+    vip_hold_str = f"{vip_hold_minutes} мин" if vip_hold_minutes > 0 else "нет"
     text = (
         "📝 <b>Подтвердите создание поездки</b>\n\n"
         f"📅 Дата: <b>{selected_date}</b>\n"
@@ -140,6 +158,7 @@ async def get_confirm_data(
         f"🪑 Мест: <b>4</b>\n"
         f"🔁 Повтор: <b>{repeat_str}</b>\n"
         f"⏰ Напоминание: <b>{remind_str}</b>\n"
+        f"⭐ VIP-холд: <b>{vip_hold_str}</b>\n"
         f"⚡ Авто-апрув: {'ВКЛ' if auto_approve else 'ВЫКЛ'}\n"
         f"👁️ Видимость: {'видна всем' if is_visible else 'скрытая'}\n"
         f"📝 Заметка: {note or '—'}"
@@ -245,6 +264,24 @@ async def on_remind_input(message: Message, widget: MessageInput, manager: Dialo
     await manager.next()
 
 
+async def on_vip_hold_input(message: Message, widget: MessageInput, manager: DialogManager):
+    text = (message.text or "").strip()
+    try:
+        vip_hold_minutes = int(text)
+        if not 0 <= vip_hold_minutes <= 120:
+            raise ValueError
+    except ValueError:
+        await message.answer("❌ Введите число от 0 до 120.")
+        return
+    manager.dialog_data["vip_hold_minutes"] = vip_hold_minutes
+    await manager.next()
+
+
+async def on_vip_hold_skip(callback: CallbackQuery, button: Button, manager: DialogManager):
+    manager.dialog_data["vip_hold_minutes"] = 0
+    await manager.next()
+
+
 async def on_note_input(message: Message, widget: MessageInput, manager: DialogManager):
     manager.dialog_data["note"] = (message.text or "").strip()[:512] or None
     await manager.next()
@@ -292,6 +329,7 @@ async def on_create(
     note: str | None = manager.dialog_data.get("note")
     repeat_days: int = manager.dialog_data.get("repeat_days", 1)
     remind_minutes: int = manager.dialog_data.get("remind_minutes", 30)
+    vip_hold_minutes: int = manager.dialog_data.get("vip_hold_minutes", 0)
 
     d = date.fromisoformat(date_str)
     departure_at = clock.local_dt(d.year, d.month, d.day, hour, minute)
@@ -304,6 +342,7 @@ async def on_create(
         is_visible=is_visible,
         repeat_days=repeat_days,
         remind_minutes=remind_minutes,
+        vip_hold_minutes=vip_hold_minutes,
         template_ride_id=manager.dialog_data.get("template_ride_id"),
     )
     count = len(rides)
@@ -330,6 +369,7 @@ async def on_template_selected(
     manager.dialog_data["is_visible"] = template.is_visible
     manager.dialog_data["note"] = template.note
     manager.dialog_data["remind_minutes"] = template.remind_minutes
+    manager.dialog_data["vip_hold_minutes"] = template.vip_hold_minutes
     await callback.answer("Шаблон загружен, выберите дату", show_alert=True)
     await manager.switch_to(RideCreateSG.calendar)
 
@@ -400,6 +440,15 @@ ride_create_dialog = Dialog(
         SwitchTo(Format("{back_btn}"), id="back", state=RideCreateSG.repeat_days),
         state=RideCreateSG.remind,
         getter=get_remind_data,
+    ),
+    # 6b. VIP-холд
+    Window(
+        Format("{vip_hold_info}"),
+        MessageInput(on_vip_hold_input),
+        Button(Const("⏭️ Без холда"), id="vip_hold_skip", on_click=on_vip_hold_skip),
+        SwitchTo(Format("{back_btn}"), id="back", state=RideCreateSG.remind),
+        state=RideCreateSG.vip_hold,
+        getter=get_vip_hold_data,
     ),
     # 7. Авто-одобрение
     Window(

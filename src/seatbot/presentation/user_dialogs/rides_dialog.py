@@ -7,7 +7,8 @@ from dishka.integrations.aiogram_dialog import inject
 
 from seatbot.application.services.ride import RideService
 from seatbot.domain.exceptions import (AlreadyBookedError, NoFreeSeatsError,
-                                       RideNotBookableError, UserBannedError)
+                                       RideNotBookableError, UserBannedError,
+                                       VipHoldActiveError)
 from seatbot.domain.schemas import BookingStatus
 from seatbot.infrastructure.database.dao import BookingsDAO, RidesDAO, UsersDAO
 from seatbot.infrastructure.notifications import MessageBuilder, fmt_amount
@@ -55,6 +56,7 @@ async def get_ride_detail(
     bookings_dao: FromDishka[BookingsDAO],
     users_dao: FromDishka[UsersDAO],
     messages: FromDishka[MessageBuilder],
+    clock: FromDishka[LocalClock],
     **_kwargs,
 ):
     ride_id: int = dialog_manager.dialog_data["ride_id"]
@@ -67,6 +69,13 @@ async def get_ride_detail(
     existing = await bookings_dao.get_by_ride_and_user(ride_id, user_id)
 
     ride_text = messages.ride_card(rws)
+    now = clock.now()
+    hold_active = rws.ride.is_vip_hold_active(now)
+    is_vip = bool(user and user.is_vip)
+    if hold_active and not is_vip:
+        remaining = rws.ride.vip_hold_remaining_seconds(now)
+        mins, secs = divmod(remaining, 60)
+        ride_text += f"\n⭐ <b>VIP-холд</b> — бронь только для VIP ещё {mins}:{secs:02d}"
     if not rws.ride.is_free:
         price = float(rws.ride.price)
         if user and user.is_vip:
@@ -80,6 +89,7 @@ async def get_ride_detail(
         and rws.ride.status.value == "open"
         and not existing
         and (user is None or not user.is_banned)
+        and not (hold_active and not is_vip)
     )
 
     return {
@@ -132,6 +142,14 @@ async def on_book_click(
         return
     except RideNotBookableError as e:
         await callback.answer(f"Нельзя забронировать: {e.reason}", show_alert=True)
+        return
+    except VipHoldActiveError as e:
+        mins, secs = divmod(e.remaining_seconds, 60)
+        await callback.answer(
+            f"⭐ Сейчас VIP-холд — только VIP могут бронировать. "
+            f"Подождите ещё {mins}:{secs:02d}.",
+            show_alert=True,
+        )
         return
 
     status_text = (

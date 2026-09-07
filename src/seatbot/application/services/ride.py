@@ -2,7 +2,8 @@ from datetime import datetime, timedelta
 
 from seatbot.application.services.bot import BotService
 from seatbot.domain.exceptions import (AlreadyBookedError, NoFreeSeatsError,
-                                       RideNotBookableError, UserBannedError)
+                                       RideNotBookableError, UserBannedError,
+                                       VipHoldActiveError)
 from seatbot.domain.schemas import (Booking, BookingStatus, Ride, RideStatus,
                                     TransactionType, User)
 from seatbot.infrastructure.database.dao import (BookingsDAO, RidesDAO, TransactionsDAO,
@@ -40,6 +41,7 @@ class RideService:
         is_visible: bool = True,
         repeat_days: int = 1,
         remind_minutes: int = 30,
+        vip_hold_minutes: int = 0,
         template_ride_id: int | None = None,
     ) -> list[Ride]:
         rides = []
@@ -53,6 +55,7 @@ class RideService:
                 note=note,
                 is_visible=is_visible,
                 remind_minutes=remind_minutes,
+                vip_hold_minutes=vip_hold_minutes,
             )
             rides.append(ride)
         if template_ride_id is not None:
@@ -88,6 +91,7 @@ class RideService:
             is_visible=template.is_visible,
             repeat_days=repeat_days,
             remind_minutes=template.remind_minutes,
+            vip_hold_minutes=template.vip_hold_minutes,
             template_ride_id=template_ride_id,
         )
 
@@ -183,6 +187,9 @@ class RideService:
 
         if user.is_banned:
             raise UserBannedError(user.user_id)
+
+        if ride.is_vip_hold_active(self._clock.now()) and not user.is_vip:
+            raise VipHoldActiveError(ride_id, ride.vip_hold_remaining_seconds(self._clock.now()))
 
         existing = await self._bookings_dao.get_by_ride_and_user(ride_id, user.user_id)
         if existing:

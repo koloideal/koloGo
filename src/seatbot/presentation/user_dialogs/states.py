@@ -44,6 +44,7 @@ class RideCreateSG(StatesGroup):
     note = State()
     repeat_days = State()
     remind = State()
+    vip_hold = State()
     confirm = State()
 
 

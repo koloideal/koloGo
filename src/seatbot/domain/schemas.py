@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import Enum
 
 
@@ -51,10 +51,21 @@ class Ride:
     created_at: datetime
     note: str | None = None
     remind_minutes: int = 30
+    vip_hold_minutes: int = 0
 
     @property
     def is_free(self) -> bool:
         return self.price <= 0
+
+    def is_vip_hold_active(self, now: datetime) -> bool:
+        if self.vip_hold_minutes <= 0:
+            return False
+        return now < self.created_at + timedelta(minutes=self.vip_hold_minutes)
+
+    def vip_hold_remaining_seconds(self, now: datetime) -> int:
+        hold_ends = self.created_at + timedelta(minutes=self.vip_hold_minutes)
+        delta = (hold_ends - now).total_seconds()
+        return max(0, int(delta))
 
 
 @dataclass
