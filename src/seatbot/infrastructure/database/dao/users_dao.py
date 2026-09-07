@@ -46,6 +46,7 @@ class UsersDAO:
         if not orm_user:
             return None
         orm_user.balance = Decimal(str(orm_user.balance)) + Decimal(str(amount))
+        await self.session.flush()
         return self._map_to_domain(orm_user)
 
     async def decrease_balance(self, user_id: int, amount: float) -> User | None:

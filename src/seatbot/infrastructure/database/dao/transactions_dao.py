@@ -56,6 +56,7 @@ class TransactionsDAO:
         if not orm:
             return None
         orm.status = new_status.value
+        await self.session.flush()
         return self._map_to_domain(orm)
 
     async def get_pending_by_user_id(self, user_id: int) -> Transaction | None:

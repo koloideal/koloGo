@@ -70,13 +70,13 @@ async def check_cryptobot_payment_status(
     logger.info("check_cryptobot_payment_status: payment_id=%s user_id=%s amount=%s", payment_id, user_id, amount)
     scheduler: AsyncIOScheduler = await container.get(AsyncIOScheduler)
     cryptobot_service: CryptoBotPaymentService = await container.get(CryptoBotPaymentService)
-    bot_service: BotService = await container.get(BotService)
-    messages: MessageBuilder = await container.get(MessageBuilder)
     should_remove_job = False
     try:
         async with container() as scope:
             transactions_dao: TransactionsDAO = await scope.get(TransactionsDAO)
             users_dao: UsersDAO = await scope.get(UsersDAO)
+            bot_service: BotService = await scope.get(BotService)
+            messages: MessageBuilder = await scope.get(MessageBuilder)
             transaction = await transactions_dao.get_by_payment_id_for_update(payment_id)
             if not transaction:
                 logger.warning("Transaction not found for payment_id=%s", payment_id)
@@ -120,9 +120,12 @@ async def check_cryptobot_payment_status(
                 should_remove_job = True
             else:
                 logger.debug("Payment %s still not paid, will retry", payment_id)
+        logger.info("Scope exiting for payment_id=%s, transaction will commit", payment_id)
     except Exception:
         logger.exception("Error in check_cryptobot_payment_status for payment_id=%s", payment_id)
         raise
+    else:
+        logger.info("Scope exited successfully for payment_id=%s, transaction committed", payment_id)
     finally:
         if should_remove_job:
             try:
