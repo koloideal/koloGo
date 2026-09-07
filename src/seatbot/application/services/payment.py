@@ -1,12 +1,7 @@
-from datetime import UTC, datetime
-
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from dishka import AsyncContainer
-
 from seatbot.domain.schemas import TransactionStatus, TransactionType
 from seatbot.infrastructure.database.dao import SettingsDAO, TransactionsDAO
 from seatbot.infrastructure.payments import CryptoBotPayment, CryptoBotPaymentService
-from seatbot.infrastructure.scheduling.tasks import check_cryptobot_payment_status
+from seatbot.infrastructure.scheduling.payment_poller import PaymentStatusPoller
 
 BYN_TO_USD_RATE_KEY = "byn_to_usd_rate"
 BYN_TO_USD_RATE_DEFAULT = 3.2
@@ -18,14 +13,12 @@ class PaymentService:
         transactions_dao: TransactionsDAO,
         settings_dao: SettingsDAO,
         cryptobot_service: CryptoBotPaymentService,
-        scheduler: AsyncIOScheduler,
-        container: AsyncContainer,
+        poller: PaymentStatusPoller,
     ) -> None:
         self._transactions_dao = transactions_dao
         self._settings_dao = settings_dao
         self._cryptobot_service = cryptobot_service
-        self._scheduler = scheduler
-        self._container = container
+        self._poller = poller
 
     async def get_byn_to_usd_rate(self) -> float:
         return await self._settings_dao.get_float(BYN_TO_USD_RATE_KEY, BYN_TO_USD_RATE_DEFAULT)
@@ -48,18 +41,5 @@ class PaymentService:
             payment_url=payment.bot_invoice_url,
             status=TransactionStatus.PENDING,
         )
-        self._scheduler.add_job(
-            check_cryptobot_payment_status,
-            trigger="interval",
-            seconds=5,
-            id=f"check_payment_{payment.invoice_id}",
-            kwargs={
-                "payment_id": str(payment.invoice_id),
-                "user_id": user_id,
-                "amount": amount_byn,
-                "created_at": datetime.now(UTC),
-                "container": self._container,
-            },
-            max_instances=5,
-        )
+        self._poller.start_polling(str(payment.invoice_id), user_id, amount_byn)
         return payment

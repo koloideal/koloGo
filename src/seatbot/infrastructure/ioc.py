@@ -25,6 +25,7 @@ from seatbot.infrastructure.database.dao import (BookingsDAO, RequisitesDAO, Rid
                                                  SettingsDAO, TransactionsDAO, UsersDAO)
 from seatbot.infrastructure.notifications import MessageBuilder
 from seatbot.infrastructure.payments import CryptoBotPaymentService
+from seatbot.infrastructure.scheduling.payment_poller import PaymentStatusPoller
 from seatbot.infrastructure.scheduling.tasks import (auto_close_past_rides,
                                                      send_ride_reminders)
 from seatbot.infrastructure.time import LocalClock
@@ -119,6 +120,12 @@ class SchedulerProvider(Provider):
         )
         return scheduler
 
+    @provide(scope=Scope.APP)
+    def get_payment_poller(
+        self, scheduler: AsyncIOScheduler, async_container: AsyncContainer
+    ) -> PaymentStatusPoller:
+        return PaymentStatusPoller(scheduler, async_container)
+
 
 class ServicesProvider(Provider):
     scope = Scope.REQUEST
@@ -207,12 +214,9 @@ class ServicesProvider(Provider):
         transactions_dao: TransactionsDAO,
         settings_dao: SettingsDAO,
         cryptobot_service: CryptoBotPaymentService,
-        scheduler: AsyncIOScheduler,
-        async_container: AsyncContainer,
+        poller: PaymentStatusPoller,
     ) -> PaymentService:
-        return PaymentService(
-            transactions_dao, settings_dao, cryptobot_service, scheduler, async_container
-        )
+        return PaymentService(transactions_dao, settings_dao, cryptobot_service, poller)
 
 
 class UserAppProvider(Provider):

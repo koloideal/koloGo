@@ -111,16 +111,6 @@ async def check_cryptobot_payment_status(
                         "Balance updated for user %s: +%.2f, new balance=%.2f",
                         user_id, amount, user.balance,
                     )
-                    # Explicit commit to ensure changes are persisted
-                    await transactions_dao.session.commit()
-                    logger.info("Explicit commit done for payment_id=%s", payment_id)
-                    # Verify: re-read balance from DB in a fresh query
-                    transactions_dao.session.expire_all()
-                    verify_user = await users_dao.get_by_id(user_id)
-                    logger.info(
-                        "Verify after commit: user %s balance=%.2f",
-                        user_id, verify_user.balance if verify_user else "USER NOT FOUND",
-                    )
                     await bot_service.notify_user(
                         user_id, messages.payment_success_notification(amount, user.balance)
                     )
@@ -130,12 +120,9 @@ async def check_cryptobot_payment_status(
                 should_remove_job = True
             else:
                 logger.debug("Payment %s still not paid, will retry", payment_id)
-        logger.info("Scope exiting for payment_id=%s, transaction will commit", payment_id)
     except Exception:
         logger.exception("Error in check_cryptobot_payment_status for payment_id=%s", payment_id)
         raise
-    else:
-        logger.info("Scope exited successfully for payment_id=%s, transaction committed", payment_id)
     finally:
         if should_remove_job:
             try:
