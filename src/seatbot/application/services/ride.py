@@ -142,6 +142,46 @@ class RideService:
             )
         return await self._rides_dao.get_by_id(ride_id)
 
+    async def change_ride_time(self, ride_id: int, hour: int, minute: int) -> Ride | None:
+        ride = await self._rides_dao.get_by_id_for_update(ride_id)
+        if not ride or ride.status not in (RideStatus.OPEN, RideStatus.CLOSED):
+            return None
+        old_departure = ride.departure_at
+        local_old = self._clock.to_local(old_departure)
+        new_departure = self._clock.to_utc(
+            local_old.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        )
+        if new_departure == old_departure:
+            return ride
+        await self._rides_dao.set_departure_at(ride_id, new_departure)
+        updated = await self._rides_dao.get_by_id(ride_id)
+        if not updated:
+            return None
+        approved = await self._bookings_dao.list_for_ride_with_status(
+            ride_id, {BookingStatus.APPROVED}
+        )
+        for booking in approved:
+            await self._bot_service.notify_user(
+                booking.user_id,
+                self._messages.ride_time_changed_notification(updated, old_departure),
+            )
+        await self._bot_service.send_log_to_admin(
+            self._messages.ride_time_changed_admin_log(updated, old_departure, len(approved))
+        )
+        now = self._clock.now()
+        if updated.remind_minutes > 0:
+            remind_at = new_departure - timedelta(minutes=updated.remind_minutes)
+            if now >= remind_at and now <= new_departure + timedelta(minutes=30):
+                for booking in approved:
+                    await self._bot_service.notify_user(
+                        booking.user_id, self._messages.ride_reminder_notification(updated)
+                    )
+                await self._bot_service.send_log_to_admin(
+                    self._messages.ride_reminder_admin_notification(updated, len(approved))
+                )
+                await self._rides_dao.mark_remind_sent(ride_id)
+        return updated
+
     async def complete_ride(self, ride_id: int) -> Ride | None:
         ride = await self._rides_dao.get_by_id(ride_id)
         if not ride:

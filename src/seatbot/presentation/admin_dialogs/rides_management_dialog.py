@@ -1,5 +1,6 @@
-from aiogram.types import CallbackQuery
+from aiogram.types import CallbackQuery, Message
 from aiogram_dialog import Dialog, DialogManager, Window
+from aiogram_dialog.widgets.input import MessageInput
 from aiogram_dialog.widgets.kbd import Button, Cancel, Column, Group, Select, SwitchTo
 from aiogram_dialog.widgets.text import Const, Format
 from dishka import FromDishka
@@ -68,6 +69,7 @@ async def get_ride_detail(
         "is_visible": rws.ride.is_visible,
         "auto_approve": rws.ride.auto_approve,
         "bookings_btn": "📋 Брони",
+        "change_time_btn": "🕒 Изменить время",
         "complete_btn": "🏁 Завершить",
         "cancel_btn": "❌ Отменить",
         "toggle_vis_btn": "👁️ Скрыть" if rws.ride.is_visible else "👁️ Показать",
@@ -152,6 +154,48 @@ async def on_to_bookings(
     await manager.start(RideBookingsSG.bookings_list, data={"ride_id": ride_id})
 
 
+async def on_change_time(callback: CallbackQuery, button: Button, manager: DialogManager):
+    await manager.switch_to(RidesMgmtSG.change_time)
+
+
+@inject
+async def on_time_input(
+    message: Message,
+    widget: MessageInput,
+    manager: DialogManager,
+    rides_dao: FromDishka[RidesDAO],
+    clock: FromDishka[LocalClock],
+):
+    text = (message.text or "").strip()
+    try:
+        parts = text.replace(".", ":").split(":")
+        if len(parts) != 2:
+            raise ValueError
+        hour = int(parts[0])
+        minute = int(parts[1])
+        if not (0 <= hour <= 23 and 0 <= minute <= 59):
+            raise ValueError
+    except ValueError:
+        await message.answer("❌ Введите время в формате ЧЧ:ММ (например, <code>18:30</code>).")
+        return
+    ride_id: int = manager.dialog_data["ride_id"]
+    ride = await rides_dao.get_by_id(ride_id)
+    if not ride:
+        await message.answer("❌ Поездка не найдена.")
+        return
+    container = manager.middleware_data["dishka_container"]
+    ride_service: RideService = await container.get(RideService)
+    updated = await ride_service.change_ride_time(ride_id, hour, minute)
+    if not updated:
+        await message.answer("❌ Не удалось изменить время. Поездка уже завершена или отменена.")
+        return
+    await message.answer(
+        f"✅ Время изменено на <b>{clock.fmt(updated.departure_at, '%H:%M')}</b>. "
+        "Пассажиры уведомлены."
+    )
+    await manager.switch_to(RidesMgmtSG.ride_detail)
+
+
 rides_management_dialog = Dialog(
     Window(
         Const("🚗 <b>Мои поездки</b>"),
@@ -173,6 +217,9 @@ rides_management_dialog = Dialog(
     Window(
         Format("{ride_text}"),
         Button(Format("{bookings_btn}"), id="to_bookings", on_click=on_to_bookings),
+        Button(
+            Format("{change_time_btn}"), id="change_time", on_click=on_change_time, when="is_active"
+        ),
         Group(
             Button(
                 Format("{toggle_vis_btn}"), id="toggle_vis", on_click=on_toggle_visibility, when="is_open"
@@ -200,5 +247,16 @@ rides_management_dialog = Dialog(
         SwitchTo(Const("⬅️ Отмена"), id="back", state=RidesMgmtSG.ride_detail),
         state=RidesMgmtSG.complete_confirm,
         getter=get_ride_detail,
+    ),
+    Window(
+        Const(
+            "🕒 <b>Изменение времени поездки</b>\n\n"
+            "Введите новое время в формате <code>ЧЧ:ММ</code>.\n"
+            "Например: <code>18:30</code>\n\n"
+            "Дата останется прежней. Пассажиры будут уведомлены."
+        ),
+        MessageInput(on_time_input),
+        SwitchTo(Const("⬅️ Назад"), id="back", state=RidesMgmtSG.ride_detail),
+        state=RidesMgmtSG.change_time,
     ),
 )

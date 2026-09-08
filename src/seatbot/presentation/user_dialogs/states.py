@@ -43,6 +43,7 @@ class RidesMgmtSG(StatesGroup):
     rides_list = State()
     ride_detail = State()
     complete_confirm = State()
+    change_time = State()
 
 
 class RideCreateSG(StatesGroup):

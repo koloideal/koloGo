@@ -1,3 +1,4 @@
+from datetime import datetime
 from html import escape
 
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
@@ -256,6 +257,22 @@ class MessageBuilder:
             f"{ride.remind_minutes} мин.\n"
             f"🕒 Время: {self._clock.fmt(ride.departure_at)}\n"
             f"Не опаздывайте!"
+        )
+
+    def ride_time_changed_notification(self, ride: Ride, old_departure: datetime) -> str:
+        return (
+            f"🕒 <b>Время поездки изменено!</b>\n\n"
+            f"Было: <s>{self._clock.fmt(old_departure)}</s>\n"
+            f"Стало: <b>{self._clock.fmt(ride.departure_at)}</b>\n\n"
+            "Пожалуйста, учитывайте новое время."
+        )
+
+    def ride_time_changed_admin_log(self, ride: Ride, old_departure: datetime, approved_count: int) -> str:
+        return (
+            f"🕒 <b>Изменено время поездки</b>\n\n"
+            f"Было: <s>{self._clock.fmt(old_departure)}</s>\n"
+            f"Стало: <b>{self._clock.fmt(ride.departure_at)}</b>\n"
+            f"Уведомлено пассажиров: <b>{approved_count}</b>"
         )
 
     def vip_info_text(self, price: float, is_vip: bool, balance: float) -> str:

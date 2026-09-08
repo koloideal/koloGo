@@ -165,6 +165,16 @@ class RidesDAO:
         orm_ride.auto_approve = auto_approve
         return self._map_to_domain(orm_ride)
 
+    async def set_departure_at(self, ride_id: int, departure_at: datetime) -> Ride | None:
+        result = await self.session.execute(select(OrmRide).where(OrmRide.id == ride_id))
+        orm_ride = result.scalar_one_or_none()
+        if not orm_ride:
+            return None
+        orm_ride.departure_at = departure_at
+        orm_ride.remind_sent = False
+        await self.session.flush()
+        return self._map_to_domain(orm_ride)
+
     async def count_total(self) -> int:
         result = await self.session.execute(select(func.count(OrmRide.id)))
         return int(result.scalar_one() or 0)
