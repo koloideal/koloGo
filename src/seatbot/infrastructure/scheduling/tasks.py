@@ -6,6 +6,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from dishka import AsyncContainer
 
 from seatbot.application.services.bot import BotService
+from seatbot.application.services.ride import RideService
 from seatbot.domain.schemas import BookingStatus, RideStatus, TransactionStatus
 from seatbot.infrastructure.database.dao import (BookingsDAO, RidesDAO, TransactionsDAO,
                                                  UsersDAO)
@@ -77,6 +78,7 @@ async def check_cryptobot_payment_status(
             users_dao: UsersDAO = await scope.get(UsersDAO)
             bot_service: BotService = await scope.get(BotService)
             messages: MessageBuilder = await scope.get(MessageBuilder)
+            ride_service: RideService = await scope.get(RideService)
             transaction = await transactions_dao.get_by_payment_id_for_update(payment_id)
             if not transaction:
                 logger.warning("Transaction not found for payment_id=%s", payment_id)
@@ -115,6 +117,7 @@ async def check_cryptobot_payment_status(
                         user_id, messages.payment_success_notification(amount, user.balance)
                     )
                     await bot_service.send_log_to_admin(messages.payment_admin_log(user, amount))
+                    await ride_service.charge_pending_debt(user_id)
                 else:
                     logger.error("User %s not found after balance increase!", user_id)
                 should_remove_job = True

@@ -147,6 +147,23 @@ class BookingsDAO:
         )
         return int(result.scalar_one() or 0)
 
+    async def list_unpaid_approved_for_user(self, user_id: int) -> list[Booking]:
+        result = await self.session.execute(
+            select(OrmBooking)
+            .join(OrmRide, OrmBooking.ride_id == OrmRide.id)
+            .join(OrmUser, OrmBooking.user_id == OrmUser.user_id)
+            .where(
+                OrmBooking.user_id == user_id,
+                OrmBooking.status == BookingStatus.APPROVED.value,
+                OrmBooking.paid_amount == 0,
+                OrmRide.price > 0,
+                OrmUser.is_vip.is_(False),
+                OrmRide.status == "open",
+            )
+            .order_by(OrmBooking.created_at.asc())
+        )
+        return [self._map_to_domain(b) for b in result.scalars().all()]
+
     @staticmethod
     def _map_to_domain(orm: OrmBooking) -> Booking:
         return Booking(

@@ -340,3 +340,16 @@ class MessageBuilder:
             f"Сумма: <b>{fmt_amount(amount)} BYN</b>\n"
             f"Способ: CryptoBot (USDT)"
         )
+
+    def debt_charged_notification(
+        self, charged: list[tuple[Booking, Ride, float]], new_balance: float
+    ) -> str:
+        lines = ["💳 <b>Списано с баланса за бронь</b>\n"]
+        for booking, ride, amount in charged:
+            lines.append(
+                f"• Бронь #{booking.booking_id} — "
+                f"{self._clock.fmt(ride.departure_at)}: "
+                f"<b>-{fmt_amount(amount)} BYN</b>"
+            )
+        lines.append(f"\nОстаток на балансе: <b>{fmt_amount(new_balance)} BYN</b>")
+        return "\n".join(lines)

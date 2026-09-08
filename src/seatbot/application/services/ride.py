@@ -245,6 +245,38 @@ class RideService:
         )
         return booking
 
+    async def charge_pending_debt(self, user_id: int) -> None:
+        user = await self._users_dao.get_by_id(user_id)
+        if not user or user.is_vip:
+            return
+        bookings = await self._bookings_dao.list_unpaid_approved_for_user(user_id)
+        if not bookings:
+            return
+        charged: list[tuple[Booking, Ride, float]] = []
+        for booking in bookings:
+            ride = await self._rides_dao.get_by_id(booking.ride_id)
+            if not ride or ride.is_free:
+                continue
+            price = float(ride.price)
+            current_user = await self._users_dao.get_by_id(user_id)
+            if not current_user or current_user.balance < price:
+                break
+            await self._users_dao.decrease_balance(user_id, price)
+            await self._transactions_dao.create(
+                user_id=user_id,
+                amount=price,
+                type=TransactionType.RIDE_PAYMENT,
+                ride_id=booking.ride_id,
+            )
+            await self._bookings_dao.set_paid_amount(booking.booking_id, price)
+            charged.append((booking, ride, price))
+        if charged:
+            updated_user = await self._users_dao.get_by_id(user_id)
+            balance = updated_user.balance if updated_user else 0.0
+            await self._bot_service.notify_user(
+                user_id, self._messages.debt_charged_notification(charged, balance)
+            )
+
     async def add_passenger(self, ride_id: int, user_id: int) -> Booking | None:
         ride = await self._rides_dao.get_by_id_for_update(ride_id)
         if not ride or ride.status != RideStatus.OPEN:
