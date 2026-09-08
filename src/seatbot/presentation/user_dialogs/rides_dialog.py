@@ -167,10 +167,8 @@ async def on_book_click(
     if ride:
         if ride.is_free or user.is_vip:
             msg += "\n💰 Поездка бесплатная."
-        elif booking.paid_amount > 0:
-            msg += f"\n💰 С депозита списано {fmt_amount(booking.paid_amount)} BYN."
         else:
-            msg += f"\n💵 Оплата по факту поездки: {fmt_amount(float(ride.price))} BYN."
+            msg += f"\n� Оплата по факту поездки: {fmt_amount(float(ride.price))} BYN."
     await callback.answer(msg, show_alert=True)
     await manager.start(MainMenuSG.main, mode=StartMode.RESET_STACK)
 

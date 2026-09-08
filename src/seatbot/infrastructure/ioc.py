@@ -162,9 +162,8 @@ class ServicesProvider(Provider):
         transactions_dao: TransactionsDAO,
         bot_service: BotService,
         message_builder: MessageBuilder,
-        ride_service: RideService,
     ) -> DepositService:
-        return DepositService(users_dao, transactions_dao, bot_service, message_builder, ride_service)
+        return DepositService(users_dao, transactions_dao, bot_service, message_builder)
 
     @provide
     def get_statistics_service(

@@ -135,12 +135,21 @@ class MessageBuilder:
             text += "С вас ничего не списывалось — оплата была по факту."
         return text
 
-    def ride_completed_notification(self, ride: Ride) -> str:
-        return (
+    def ride_completed_notification(
+        self, ride: Ride, paid_amount: float = 0.0, price: float = 0.0, is_free: bool = False
+    ) -> str:
+        text = (
             f"🏁 <b>Поездка завершена.</b>\n\n"
             f"🕒 Отправление: {self._clock.fmt(ride.departure_at)}\n"
-            f"Спасибо за поездку!"
         )
+        if is_free:
+            text += "💰 Поездка бесплатная."
+        elif paid_amount > 0:
+            text += f"💰 Списано с депозита: <b>{fmt_amount(paid_amount)} BYN</b>."
+        else:
+            text += f"💰 Оплата по факту: <b>{fmt_amount(price)} BYN</b>."
+        text += "\nСпасибо за поездку!"
+        return text
 
     def no_show_notification(self, ride: Ride) -> str:
         return (
@@ -340,16 +349,3 @@ class MessageBuilder:
             f"Сумма: <b>{fmt_amount(amount)} BYN</b>\n"
             f"Способ: CryptoBot (USDT)"
         )
-
-    def debt_charged_notification(
-        self, charged: list[tuple[Booking, Ride, float]], new_balance: float
-    ) -> str:
-        lines = ["💳 <b>Списано с баланса за бронь</b>\n"]
-        for booking, ride, amount in charged:
-            lines.append(
-                f"• Бронь #{booking.booking_id} — "
-                f"{self._clock.fmt(ride.departure_at)}: "
-                f"<b>-{fmt_amount(amount)} BYN</b>"
-            )
-        lines.append(f"\nОстаток на балансе: <b>{fmt_amount(new_balance)} BYN</b>")
-        return "\n".join(lines)

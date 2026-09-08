@@ -149,21 +149,27 @@ class RideService:
         await self._rides_dao.set_status(ride_id, RideStatus.COMPLETED)
         approved = await self._bookings_dao.list_for_ride_with_status(ride_id, {BookingStatus.APPROVED})
         for booking in approved:
+            user = await self._users_dao.get_by_id(booking.user_id)
+            is_free = ride.is_free or bool(user and user.is_vip)
+            price = float(ride.price)
+            if not is_free and user and user.balance >= price:
+                await self._users_dao.decrease_balance(booking.user_id, price)
+                await self._transactions_dao.create(
+                    user_id=booking.user_id,
+                    amount=price,
+                    type=TransactionType.RIDE_PAYMENT,
+                    ride_id=ride_id,
+                )
+                await self._bookings_dao.set_paid_amount(booking.booking_id, price)
             await self._bookings_dao.set_status(booking.booking_id, BookingStatus.COMPLETED)
+            updated = await self._bookings_dao.get_by_id(booking.booking_id)
+            paid = updated.paid_amount if updated else 0.0
             await self._bot_service.notify_user(
-                booking.user_id, self._messages.ride_completed_notification(ride)
+                booking.user_id, self._messages.ride_completed_notification(ride, paid, price, is_free)
             )
         pending = await self._bookings_dao.list_for_ride_with_status(ride_id, {BookingStatus.PENDING})
         for booking in pending:
             await self._bookings_dao.set_status(booking.booking_id, BookingStatus.CANCELLED)
-            if booking.paid_amount > 0:
-                await self._users_dao.increase_balance(booking.user_id, booking.paid_amount)
-                await self._transactions_dao.create(
-                    user_id=booking.user_id,
-                    amount=booking.paid_amount,
-                    type=TransactionType.REFUND,
-                    ride_id=ride_id,
-                )
         return await self._rides_dao.get_by_id(ride_id)
 
     async def mark_no_show(self, booking_id: int) -> Booking | None:
@@ -203,26 +209,10 @@ class RideService:
         is_free = ride.is_free or is_vip
         ride_price = float(ride.price)
 
-        if is_free:
-            paid_amount = 0.0
-        elif user.balance >= ride_price:
-            paid_amount = ride_price
-        else:
-            paid_amount = 0.0
-
-        if paid_amount > 0:
-            await self._users_dao.decrease_balance(user.user_id, paid_amount)
-            await self._transactions_dao.create(
-                user_id=user.user_id,
-                amount=paid_amount,
-                type=TransactionType.RIDE_PAYMENT,
-                ride_id=ride_id,
-            )
-
         booking = await self._bookings_dao.create(
             ride_id=ride_id,
             user_id=user.user_id,
-            paid_amount=paid_amount,
+            paid_amount=0.0,
         )
 
         if ride.auto_approve or is_vip:
@@ -230,7 +220,7 @@ class RideService:
             updated = await self._bookings_dao.get_by_id(booking.booking_id)
             if updated:
                 booking = updated
-            due_amount = 0.0 if is_free else ride_price - booking.paid_amount
+            due_amount = 0.0 if is_free else ride_price
             await self._bot_service.notify_user(
                 user.user_id, self._messages.booking_approved_notification(ride, due_amount)
             )
@@ -244,38 +234,6 @@ class RideService:
             ),
         )
         return booking
-
-    async def charge_pending_debt(self, user_id: int) -> None:
-        user = await self._users_dao.get_by_id(user_id)
-        if not user or user.is_vip:
-            return
-        bookings = await self._bookings_dao.list_unpaid_approved_for_user(user_id)
-        if not bookings:
-            return
-        charged: list[tuple[Booking, Ride, float]] = []
-        for booking in bookings:
-            ride = await self._rides_dao.get_by_id(booking.ride_id)
-            if not ride or ride.is_free:
-                continue
-            price = float(ride.price)
-            current_user = await self._users_dao.get_by_id(user_id)
-            if not current_user or current_user.balance < price:
-                break
-            await self._users_dao.decrease_balance(user_id, price)
-            await self._transactions_dao.create(
-                user_id=user_id,
-                amount=price,
-                type=TransactionType.RIDE_PAYMENT,
-                ride_id=booking.ride_id,
-            )
-            await self._bookings_dao.set_paid_amount(booking.booking_id, price)
-            charged.append((booking, ride, price))
-        if charged:
-            updated_user = await self._users_dao.get_by_id(user_id)
-            balance = updated_user.balance if updated_user else 0.0
-            await self._bot_service.notify_user(
-                user_id, self._messages.debt_charged_notification(charged, balance)
-            )
 
     async def add_passenger(self, ride_id: int, user_id: int) -> Booking | None:
         ride = await self._rides_dao.get_by_id_for_update(ride_id)
@@ -293,26 +251,14 @@ class RideService:
 
         is_free = ride.is_free or user.is_vip
         ride_price = float(ride.price)
-        if is_free or user.balance < ride_price:
-            paid_amount = 0.0
-        else:
-            paid_amount = ride_price
-        if paid_amount > 0:
-            await self._users_dao.decrease_balance(user_id, paid_amount)
-            await self._transactions_dao.create(
-                user_id=user_id,
-                amount=paid_amount,
-                type=TransactionType.RIDE_PAYMENT,
-                ride_id=ride_id,
-            )
 
         booking = await self._bookings_dao.create(
             ride_id=ride_id,
             user_id=user_id,
-            paid_amount=paid_amount,
+            paid_amount=0.0,
         )
         await self._bookings_dao.set_status(booking.booking_id, BookingStatus.APPROVED)
-        due_amount = 0.0 if is_free else ride_price - paid_amount
+        due_amount = 0.0 if is_free else ride_price
         await self._bot_service.notify_user(
             user_id, self._messages.added_by_admin_notification(ride, due_amount)
         )
@@ -339,14 +285,6 @@ class RideService:
         if not booking or booking.status != BookingStatus.PENDING:
             return None
         await self._bookings_dao.set_status(booking_id, BookingStatus.REJECTED)
-        if booking.paid_amount > 0:
-            await self._users_dao.increase_balance(booking.user_id, booking.paid_amount)
-            await self._transactions_dao.create(
-                user_id=booking.user_id,
-                amount=booking.paid_amount,
-                type=TransactionType.REFUND,
-                ride_id=booking.ride_id,
-            )
         ride = await self._rides_dao.get_by_id(booking.ride_id)
         if ride:
             await self._bot_service.notify_user(
