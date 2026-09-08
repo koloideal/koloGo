@@ -1,7 +1,7 @@
 from datetime import date, datetime, time
 
 from aiogram.types import CallbackQuery, Message
-from aiogram_dialog import Dialog, DialogManager, StartMode, Window
+from aiogram_dialog import Dialog, DialogManager, Window
 from aiogram_dialog.api.entities import ChatEvent
 from aiogram_dialog.widgets.input import MessageInput
 from aiogram_dialog.widgets.kbd import (Button, Calendar, Cancel, Column, ManagedCalendar,
@@ -17,7 +17,7 @@ from seatbot.infrastructure.database.dao import RidesDAO
 from seatbot.infrastructure.notifications import fmt_amount
 from seatbot.infrastructure.time import LocalClock
 
-from ..user_dialogs.states import RideCreateSG, RidesMgmtSG
+from ..user_dialogs.states import RideCreateSG
 
 
 @inject
@@ -188,13 +188,13 @@ async def on_date_selected(
         )
         if isinstance(event, CallbackQuery):
             if rides:
-                await manager.start(RidesMgmtSG.rides_list, mode=StartMode.RESET_STACK)
+                await manager.done()
                 await event.answer("✅ Поездка создана из шаблона")
             else:
                 await event.answer("❌ Шаблон не найден", show_alert=True)
                 return
         else:
-            await manager.start(RidesMgmtSG.rides_list, mode=StartMode.RESET_STACK)
+            await manager.done()
         return
     if isinstance(event, CallbackQuery):
         await event.answer(f"Выбрана дата: {selected_date.strftime('%d.%m.%Y')}")
@@ -346,7 +346,7 @@ async def on_create(
         template_ride_id=manager.dialog_data.get("template_ride_id"),
     )
     count = len(rides)
-    await manager.start(RidesMgmtSG.rides_list, mode=StartMode.RESET_STACK)
+    await manager.done()
     await callback.answer(f"✅ Создано поездок: {count}!")
 
 

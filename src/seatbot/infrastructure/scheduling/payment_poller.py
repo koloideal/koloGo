@@ -7,10 +7,6 @@ from seatbot.infrastructure.scheduling.tasks import check_cryptobot_payment_stat
 
 
 class PaymentStatusPoller:
-    """APP-scoped: держит корневой контейнер, чтобы джобы шедулера
-    открывали собственный REQUEST-scope, а не переиспользовали закрытый
-    REQUEST-контейнер хендлера."""
-
     def __init__(self, scheduler: AsyncIOScheduler, app_container: AsyncContainer) -> None:
         self._scheduler = scheduler
         self._app_container = app_container

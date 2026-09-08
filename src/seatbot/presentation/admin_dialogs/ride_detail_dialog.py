@@ -36,13 +36,12 @@ async def get_ride_bookings(
     messages: FromDishka[MessageBuilder],
     **_kwargs,
 ):
-    start_data = dialog_manager.start_data
-    ride_id: int | None = (
-        start_data.get("ride_id")
-        if isinstance(start_data, dict)
-        else dialog_manager.dialog_data.get("ride_id")
-    )
-    if ride_id is None:
+    if "ride_id" not in dialog_manager.dialog_data:
+        start_data = dialog_manager.start_data
+        if isinstance(start_data, dict):
+            dialog_manager.dialog_data["ride_id"] = start_data["ride_id"]
+    ride_id: int = dialog_manager.dialog_data.get("ride_id", 0)
+    if not ride_id:
         return {
             "has_bookings": False,
             "empty_text": "🚫 Нет броней.",
