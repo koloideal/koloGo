@@ -149,7 +149,17 @@ async def on_search_input(message: Message, widget: MessageInput, manager: Dialo
         await message.answer("❌ Введите запрос для поиска.")
         return
     manager.dialog_data["search_query"] = query
-    await manager.switch_to(UsersSG.search_results)
+    container = manager.middleware_data["dishka_container"]
+    statistics_service: StatisticsService = await container.get(StatisticsService)
+    config: Config = await container.get(Config)
+    stats = await statistics_service.search_users_stats(
+        query, limit=50, exclude_user_id=config.bot.creator_id
+    )
+    if len(stats) == 1:
+        manager.dialog_data["user_id"] = stats[0].user_id
+        await manager.switch_to(UsersSG.user_detail)
+    else:
+        await manager.switch_to(UsersSG.search_results)
 
 
 @inject
