@@ -1,5 +1,6 @@
-from aiogram.types import CallbackQuery
+from aiogram.types import CallbackQuery, Message
 from aiogram_dialog import Dialog, DialogManager, Window
+from aiogram_dialog.widgets.input import MessageInput
 from aiogram_dialog.widgets.kbd import (Button, Cancel, Group, ScrollingGroup, Select,
                                         SwitchTo)
 from aiogram_dialog.widgets.text import Const, Format
@@ -138,6 +139,52 @@ async def on_user_selected(
     await manager.next()
 
 
+async def on_search_click(callback: CallbackQuery, button: Button, manager: DialogManager):
+    await manager.switch_to(UsersSG.search)
+
+
+async def on_search_input(message: Message, widget: MessageInput, manager: DialogManager):
+    query = (message.text or "").strip()
+    if not query:
+        await message.answer("❌ Введите запрос для поиска.")
+        return
+    manager.dialog_data["search_query"] = query
+    await manager.switch_to(UsersSG.search_results)
+
+
+@inject
+async def get_search_results(
+    dialog_manager: DialogManager,
+    statistics_service: FromDishka[StatisticsService],
+    config: FromDishka[Config],
+    **_kwargs,
+):
+    query: str = dialog_manager.dialog_data.get("search_query", "")
+    if not query:
+        return {"has_users": False, "empty_text": "🚫 Пустой запрос.", "back_btn": "⬅️ Назад"}
+    stats = await statistics_service.search_users_stats(
+        query, limit=50, exclude_user_id=config.bot.creator_id
+    )
+    if not stats:
+        return {"has_users": False, "empty_text": "🚫 Ничего не найдено.", "back_btn": "⬅️ Назад"}
+    items = []
+    for s in stats:
+        badges = []
+        if s.is_vip:
+            badges.append("⭐")
+        if s.is_banned:
+            badges.append("🚫")
+        badge_str = " " + "".join(badges) if badges else ""
+        uname = user_display(s.username, s.first_name, s.user_id)
+        items.append(
+            {
+                "user_id": s.user_id,
+                "title": f"{uname}{badge_str} • {s.total_rides} поездок • {fmt_amount(s.balance)} BYN",
+            }
+        )
+    return {"has_users": True, "users": items, "back_btn": "⬅️ Назад"}
+
+
 users_dialog = Dialog(
     Window(
         Const("👥 <b>Клиенты</b>"),
@@ -155,6 +202,7 @@ users_dialog = Dialog(
             id="users_scroll",
         ),
         Format("{empty_text}", when="not has_users"),
+        Button(Const("🔍 Поиск"), id="search", on_click=on_search_click),
         Cancel(Format("{back_btn}")),
         state=UsersSG.users_list,
         getter=get_users_list,
@@ -174,5 +222,34 @@ users_dialog = Dialog(
         SwitchTo(Format("{back_btn}"), id="back", state=UsersSG.users_list),
         state=UsersSG.user_detail,
         getter=get_user_detail,
+    ),
+    Window(
+        Const(
+            "🔍 <b>Поиск клиентов</b>\n\n"
+            "Введите имя, username или ID для поиска:"
+        ),
+        MessageInput(on_search_input),
+        SwitchTo(Const("⬅️ Назад"), id="back", state=UsersSG.users_list),
+        state=UsersSG.search,
+    ),
+    Window(
+        Const("🔍 <b>Результаты поиска</b>"),
+        ScrollingGroup(
+            Select(
+                Format("{item[title]}"),
+                id="users_search_sel",
+                item_id_getter=lambda item: str(item["user_id"]),
+                items="users",
+                on_click=on_user_selected,
+                when="has_users",
+            ),
+            width=1,
+            height=8,
+            id="users_search_scroll",
+        ),
+        Format("{empty_text}", when="not has_users"),
+        SwitchTo(Const("⬅️ Назад"), id="back", state=UsersSG.users_list),
+        state=UsersSG.search_results,
+        getter=get_search_results,
     ),
 )

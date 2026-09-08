@@ -1,7 +1,7 @@
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
-from sqlalchemy import func, select
+from sqlalchemy import String, cast, func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -108,6 +108,21 @@ class UsersDAO:
         if limit != -1:
             query = query.limit(limit)
         result = await self.session.execute(query)
+        return [self._map_to_domain(u) for u in result.scalars().all()]
+
+    async def search(self, query: str, limit: int = 50, exclude_user_id: int | None = None) -> list[User]:
+        query_lower = query.lower().strip()
+        if not query_lower:
+            return await self.get_all(limit=limit, exclude_user_id=exclude_user_id)
+        sql_query = select(OrmUser).where(
+            func.lower(OrmUser.username).like(f"%{query_lower}%")
+            | func.lower(OrmUser.first_name).like(f"%{query_lower}%")
+            | cast(OrmUser.user_id, String).like(f"%{query_lower}%")
+        )
+        if exclude_user_id is not None:
+            sql_query = sql_query.where(OrmUser.user_id != exclude_user_id)
+        sql_query = sql_query.order_by(OrmUser.registration_date.desc()).limit(limit)
+        result = await self.session.execute(sql_query)
         return [self._map_to_domain(u) for u in result.scalars().all()]
 
     async def count_total_users(self, days: int | None = None) -> int:

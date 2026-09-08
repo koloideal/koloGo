@@ -72,6 +72,8 @@ class RideBookingsSG(StatesGroup):
 class UsersSG(StatesGroup):
     users_list = State()
     user_detail = State()
+    search = State()
+    search_results = State()
 
 
 class DepositSG(StatesGroup):

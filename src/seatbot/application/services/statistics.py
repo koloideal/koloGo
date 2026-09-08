@@ -55,6 +55,13 @@ class StatisticsService:
 
     async def all_users_stats(self, limit: int = 100, exclude_user_id: int | None = None) -> list[UserStats]:
         users = await self._users_dao.get_all(limit=limit, exclude_user_id=exclude_user_id)
+        return await self._build_stats(users)
+
+    async def search_users_stats(self, query: str, limit: int = 50, exclude_user_id: int | None = None) -> list[UserStats]:
+        users = await self._users_dao.search(query, limit=limit, exclude_user_id=exclude_user_id)
+        return await self._build_stats(users)
+
+    async def _build_stats(self, users: list) -> list[UserStats]:
         out: list[UserStats] = []
         for user in users:
             total_rides = await self._bookings_dao.count_completed_for_user(user.user_id)
