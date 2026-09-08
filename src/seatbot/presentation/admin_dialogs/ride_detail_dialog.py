@@ -1,5 +1,6 @@
-from aiogram.types import CallbackQuery
+from aiogram.types import CallbackQuery, Message
 from aiogram_dialog import Dialog, DialogManager, Window
+from aiogram_dialog.widgets.input import MessageInput
 from aiogram_dialog.widgets.kbd import Button, Cancel, Column, Group, Select, SwitchTo
 from aiogram_dialog.widgets.text import Const, Format
 from dishka import FromDishka
@@ -81,7 +82,7 @@ async def get_ride_bookings(
                 "title": f"{emoji} #{b.booking_id} • {uname}{vip} • {status_ru} • {pay}",
             }
         )
-    return {"has_bookings": True, "bookings": items, "back_btn": "⬅️ К поездке", "can_add_passenger": can_add}
+    return {"has_bookings": True, "bookings": items, "back_btn": "⬅️ К поездке", "can_add_passenger": can_add, "has_approved": any(b.status == BookingStatus.APPROVED for b in bookings) if bookings else False}
 
 
 @inject
@@ -117,13 +118,16 @@ async def get_booking_detail(
     text += f"📋 Статус: {_STATUS_EMOJI.get(booking.status, '•')} {status_ru.capitalize()}"
     is_pending = booking.status == BookingStatus.PENDING
     is_approved = booking.status == BookingStatus.APPROVED
+    is_active = booking.status in (BookingStatus.PENDING, BookingStatus.APPROVED)
     return {
         "booking_text": text,
         "is_pending": is_pending,
         "is_approved": is_approved,
+        "is_active": is_active,
         "approve_btn": "✅ Одобрить",
         "reject_btn": "❌ Отклонить",
         "noshow_btn": "🙅 Неявка",
+        "kick_btn": "🚫 Кикнуть",
         "back_btn": "⬅️ К броням",
     }
 
@@ -174,6 +178,65 @@ async def on_noshow(
     booking_id: int = manager.dialog_data["booking_id"]
     await ride_service.mark_no_show(booking_id)
     await callback.answer("Отмечена неявка", show_alert=True)
+    await manager.switch_to(RideBookingsSG.bookings_list)
+
+
+async def on_kick(callback: CallbackQuery, button: Button, manager: DialogManager):
+    await manager.switch_to(RideBookingsSG.kick_reason)
+
+
+@inject
+async def on_kick_reason_input(
+    message: Message,
+    widget: MessageInput,
+    manager: DialogManager,
+    ride_service: FromDishka[RideService],
+):
+    booking_id: int = manager.dialog_data["booking_id"]
+    reason = (message.text or "").strip()[:512]
+    booking = await ride_service.kick_booking(booking_id, reason)
+    if not booking:
+        await message.answer("❌ Не удалось кикнуть. Бронь уже не активна.")
+        return
+    await message.answer("✅ Пассажир кикнут, уведомлён.")
+    await manager.switch_to(RideBookingsSG.bookings_list)
+
+
+async def on_broadcast_click(callback: CallbackQuery, button: Button, manager: DialogManager):
+    await manager.switch_to(RideBookingsSG.broadcast_text)
+
+
+async def on_broadcast_text_input(message: Message, widget: MessageInput, manager: DialogManager):
+    text = (message.text or "").strip()
+    if not text:
+        await message.answer("❌ Текст не может быть пустым.")
+        return
+    manager.dialog_data["broadcast_text"] = text
+    await manager.switch_to(RideBookingsSG.broadcast_confirm)
+
+
+async def get_broadcast_preview(dialog_manager: DialogManager, **_kwargs):
+    text = dialog_manager.dialog_data.get("broadcast_text", "")
+    return {"broadcast_text": text, "send_btn": "📢 Отправить", "back_btn": "⬅️ Назад"}
+
+
+@inject
+async def on_broadcast_send(
+    callback: CallbackQuery,
+    button: Button,
+    manager: DialogManager,
+    ride_service: FromDishka[RideService],
+    bookings_dao: FromDishka[BookingsDAO],
+):
+    ride_id: int = manager.dialog_data.get("ride_id", 0)
+    text: str = manager.dialog_data.get("broadcast_text", "")
+    if not ride_id or not text:
+        await callback.answer("Ошибка данных", show_alert=True)
+        await manager.switch_to(RideBookingsSG.bookings_list)
+        return
+    approved = await bookings_dao.list_for_ride_with_status(ride_id, {BookingStatus.APPROVED})
+    sent = await ride_service.broadcast_ride(ride_id, text)
+    await callback.answer(f"Отправлено {sent}/{len(approved)}", show_alert=True)
     await manager.switch_to(RideBookingsSG.bookings_list)
 
 
@@ -268,6 +331,12 @@ ride_detail_dialog = Dialog(
             state=RideBookingsSG.add_passenger,
             when="can_add_passenger",
         ),
+        SwitchTo(
+            Const("📢 Рассылка пассажирам"),
+            id="broadcast",
+            state=RideBookingsSG.broadcast_text,
+            when="has_approved",
+        ),
         Cancel(Format("{back_btn}")),
         state=RideBookingsSG.bookings_list,
         getter=get_ride_bookings,
@@ -278,6 +347,7 @@ ride_detail_dialog = Dialog(
             Button(Format("{approve_btn}"), id="approve", on_click=on_approve, when="is_pending"),
             Button(Format("{reject_btn}"), id="reject", on_click=on_reject, when="is_pending"),
             Button(Format("{noshow_btn}"), id="noshow", on_click=on_noshow, when="is_approved"),
+            Button(Format("{kick_btn}"), id="kick", on_click=on_kick, when="is_active"),
             width=2,
         ),
         SwitchTo(Format("{back_btn}"), id="back", state=RideBookingsSG.bookings_list),
@@ -300,5 +370,34 @@ ride_detail_dialog = Dialog(
         SwitchTo(Format("{back_btn}"), id="back", state=RideBookingsSG.bookings_list),
         state=RideBookingsSG.add_passenger,
         getter=get_passengers_list,
+    ),
+    Window(
+        Const(
+            "🚫 <b>Кикнуть пассажира</b>\n\n"
+            "Введите причину (или «-» чтобы без причины):\n"
+            "Пассажир будет уведомлён, бронь отменена."
+        ),
+        MessageInput(on_kick_reason_input),
+        SwitchTo(Const("⬅️ Назад"), id="back", state=RideBookingsSG.booking_detail),
+        state=RideBookingsSG.kick_reason,
+        getter=get_booking_detail,
+    ),
+    Window(
+        Const(
+            "📢 <b>Рассылка пассажирам поездки</b>\n\n"
+            "Отправьте текст сообщения.\n"
+            "Оно будет отправлено всем одобренным пассажирам."
+        ),
+        MessageInput(on_broadcast_text_input),
+        SwitchTo(Const("⬅️ Назад"), id="back", state=RideBookingsSG.bookings_list),
+        state=RideBookingsSG.broadcast_text,
+    ),
+    Window(
+        Const("📋 <b>Предпросмотр рассылки</b>\n\nСообщение:"),
+        Format("{broadcast_text}"),
+        Button(Format("{send_btn}"), id="send_broadcast", on_click=on_broadcast_send),
+        SwitchTo(Format("{back_btn}"), id="back", state=RideBookingsSG.broadcast_text),
+        state=RideBookingsSG.broadcast_confirm,
+        getter=get_broadcast_preview,
     ),
 )

@@ -222,6 +222,38 @@ class RideService:
             await self._bot_service.notify_user(booking.user_id, self._messages.no_show_notification(ride))
         return await self._bookings_dao.get_by_id(booking_id)
 
+    async def kick_booking(self, booking_id: int, reason: str) -> Booking | None:
+        booking = await self._bookings_dao.get_by_id_for_update(booking_id)
+        if not booking or booking.status not in (BookingStatus.PENDING, BookingStatus.APPROVED):
+            return None
+        await self._bookings_dao.set_status(booking_id, BookingStatus.CANCELLED)
+        if booking.paid_amount > 0:
+            await self._users_dao.increase_balance(booking.user_id, booking.paid_amount)
+            await self._transactions_dao.create(
+                user_id=booking.user_id,
+                amount=booking.paid_amount,
+                type=TransactionType.REFUND,
+                ride_id=booking.ride_id,
+            )
+        ride = await self._rides_dao.get_by_id(booking.ride_id)
+        if ride:
+            await self._bot_service.notify_user(
+                booking.user_id, self._messages.booking_kicked_notification(ride, reason)
+            )
+        return await self._bookings_dao.get_by_id(booking_id)
+
+    async def broadcast_ride(self, ride_id: int, text: str) -> int:
+        ride = await self._rides_dao.get_by_id(ride_id)
+        if not ride:
+            return 0
+        approved = await self._bookings_dao.list_for_ride_with_status(ride_id, {BookingStatus.APPROVED})
+        sent = 0
+        for booking in approved:
+            ok = await self._bot_service.notify_user(booking.user_id, text)
+            if ok:
+                sent += 1
+        return sent
+
     async def book_ride(self, ride_id: int, user: User) -> Booking:
         ride = await self._rides_dao.get_by_id_for_update(ride_id)
         if not ride:

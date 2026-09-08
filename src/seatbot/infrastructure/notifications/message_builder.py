@@ -159,6 +159,16 @@ class MessageBuilder:
             f"Возврат депозита не производится."
         )
 
+    def booking_kicked_notification(self, ride: Ride, reason: str) -> str:
+        text = (
+            f"🚫 <b>Вас убрали из поездки.</b>\n\n"
+            f"Поездка в {self._clock.fmt(ride.departure_at)}.\n"
+        )
+        if reason:
+            text += f"Причина: <i>{escape(reason)}</i>\n"
+        text += "Бронь отменена."
+        return text
+
     def booking_cancelled_by_user_admin_log(self, booking: Booking, user: User, ride: Ride) -> str:
         vip_marker = " ⭐VIP" if user.is_vip else ""
         is_free = ride.is_free or user.is_vip

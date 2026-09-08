@@ -31,8 +31,9 @@ class BotService:
             reply_markup=reply_markup,
         )
 
-    async def notify_user(self, user_id: int, text: str) -> None:
+    async def notify_user(self, user_id: int, text: str) -> bool:
         try:
             await self._bot.send_message(chat_id=user_id, text=text)
+            return True
         except (TelegramForbiddenError, TelegramBadRequest, TelegramRetryAfter):
-            pass
+            return False

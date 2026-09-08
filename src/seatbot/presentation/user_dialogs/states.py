@@ -64,6 +64,9 @@ class RideBookingsSG(StatesGroup):
     bookings_list = State()
     booking_detail = State()
     add_passenger = State()
+    kick_reason = State()
+    broadcast_text = State()
+    broadcast_confirm = State()
 
 
 class UsersSG(StatesGroup):
