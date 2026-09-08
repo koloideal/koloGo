@@ -1,6 +1,6 @@
 from aiogram.types import CallbackQuery
 from aiogram_dialog import Dialog, DialogManager, Window
-from aiogram_dialog.widgets.kbd import Button, Cancel, Column, Select, SwitchTo
+from aiogram_dialog.widgets.kbd import Button, Cancel, ScrollingGroup, Select, SwitchTo
 from aiogram_dialog.widgets.text import Const, Format
 from dishka import FromDishka
 from dishka.integrations.aiogram_dialog import inject
@@ -36,7 +36,7 @@ async def get_my_bookings(
     user_id = dialog_manager.middleware_data["event_from_user"].id
     user = await users_dao.get_by_id(user_id)
     is_vip = bool(user and user.is_vip)
-    bookings = await bookings_dao.list_for_user(user_id, limit=20)
+    bookings = await bookings_dao.list_for_user(user_id, limit=100)
     if not bookings:
         return {
             "has_bookings": False,
@@ -119,7 +119,7 @@ async def on_booking_selected(
 my_bookings_dialog = Dialog(
     Window(
         Const("📋 <b>Мои брони</b>"),
-        Column(
+        ScrollingGroup(
             Select(
                 Format("{item[title]}"),
                 id="bookings_sel",
@@ -128,6 +128,9 @@ my_bookings_dialog = Dialog(
                 on_click=on_booking_selected,
                 when="has_bookings",
             ),
+            width=1,
+            height=8,
+            id="bookings_scroll",
         ),
         Format("{empty_text}", when="not has_bookings"),
         Cancel(Format("{back_btn}")),

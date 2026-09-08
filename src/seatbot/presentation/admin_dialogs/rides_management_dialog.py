@@ -1,7 +1,8 @@
 from aiogram.types import CallbackQuery, Message
 from aiogram_dialog import Dialog, DialogManager, Window
 from aiogram_dialog.widgets.input import MessageInput
-from aiogram_dialog.widgets.kbd import Button, Cancel, Column, Group, Select, SwitchTo
+from aiogram_dialog.widgets.kbd import (Button, Cancel, Group, ScrollingGroup, Select,
+                                        SwitchTo)
 from aiogram_dialog.widgets.text import Const, Format
 from dishka import FromDishka
 from dishka.integrations.aiogram_dialog import inject
@@ -29,7 +30,7 @@ async def get_rides_list(
     clock: FromDishka[LocalClock],
     **_kwargs,
 ):
-    rides = await rides_dao.list_all(limit=30)
+    rides = await rides_dao.list_all(limit=100)
     if not rides:
         return {"has_rides": False, "empty_text": "🚫 Поездок пока нет.", "back_btn": "⬅️ В панель"}
     items = []
@@ -199,7 +200,7 @@ async def on_time_input(
 rides_management_dialog = Dialog(
     Window(
         Const("🚗 <b>Мои поездки</b>"),
-        Column(
+        ScrollingGroup(
             Select(
                 Format("{item[title]}"),
                 id="rides_sel",
@@ -208,6 +209,9 @@ rides_management_dialog = Dialog(
                 on_click=on_ride_selected,
                 when="has_rides",
             ),
+            width=1,
+            height=8,
+            id="rides_scroll",
         ),
         Format("{empty_text}", when="not has_rides"),
         Cancel(Format("{back_btn}")),

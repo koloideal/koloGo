@@ -1,6 +1,7 @@
 from aiogram.types import CallbackQuery
 from aiogram_dialog import Dialog, DialogManager, Window
-from aiogram_dialog.widgets.kbd import Button, Cancel, Column, Group, Select, SwitchTo
+from aiogram_dialog.widgets.kbd import (Button, Cancel, Group, ScrollingGroup, Select,
+                                        SwitchTo)
 from aiogram_dialog.widgets.text import Const, Format
 from dishka import FromDishka
 from dishka.integrations.aiogram_dialog import inject
@@ -21,7 +22,7 @@ async def get_users_list(
     config: FromDishka[Config],
     **_kwargs,
 ):
-    stats = await statistics_service.all_users_stats(limit=50, exclude_user_id=config.bot.creator_id)
+    stats = await statistics_service.all_users_stats(limit=100, exclude_user_id=config.bot.creator_id)
     if not stats:
         return {"has_users": False, "empty_text": "🚫 Нет пользователей.", "back_btn": "⬅️ В панель"}
     items = []
@@ -140,7 +141,7 @@ async def on_user_selected(
 users_dialog = Dialog(
     Window(
         Const("👥 <b>Клиенты</b>"),
-        Column(
+        ScrollingGroup(
             Select(
                 Format("{item[title]}"),
                 id="users_sel",
@@ -149,6 +150,9 @@ users_dialog = Dialog(
                 on_click=on_user_selected,
                 when="has_users",
             ),
+            width=1,
+            height=8,
+            id="users_scroll",
         ),
         Format("{empty_text}", when="not has_users"),
         Cancel(Format("{back_btn}")),

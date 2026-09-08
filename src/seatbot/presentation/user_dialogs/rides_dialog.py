@@ -1,6 +1,6 @@
 from aiogram.types import CallbackQuery
 from aiogram_dialog import Dialog, DialogManager, StartMode, Window
-from aiogram_dialog.widgets.kbd import Button, Cancel, Column, Select, SwitchTo
+from aiogram_dialog.widgets.kbd import Button, Cancel, ScrollingGroup, Select, SwitchTo
 from aiogram_dialog.widgets.text import Const, Format
 from dishka import FromDishka
 from dishka.integrations.aiogram_dialog import inject
@@ -176,7 +176,7 @@ async def on_book_click(
 rides_dialog = Dialog(
     Window(
         Const("🚗 <b>Ближайшие поездки</b>\n\nВыберите поездку:"),
-        Column(
+        ScrollingGroup(
             Select(
                 Format("{item[title]}"),
                 id="rides_sel",
@@ -185,6 +185,9 @@ rides_dialog = Dialog(
                 on_click=on_ride_selected,
                 when="has_rides",
             ),
+            width=1,
+            height=8,
+            id="rides_scroll",
         ),
         Format("{empty_text}", when="not has_rides"),
         Cancel(Format("{back_btn}")),

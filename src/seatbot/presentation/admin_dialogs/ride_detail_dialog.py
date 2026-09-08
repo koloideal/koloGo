@@ -1,7 +1,8 @@
 from aiogram.types import CallbackQuery, Message
 from aiogram_dialog import Dialog, DialogManager, Window
 from aiogram_dialog.widgets.input import MessageInput
-from aiogram_dialog.widgets.kbd import Button, Cancel, Column, Group, Select, SwitchTo
+from aiogram_dialog.widgets.kbd import (Button, Cancel, Group, ScrollingGroup, Select,
+                                        SwitchTo)
 from aiogram_dialog.widgets.text import Const, Format
 from dishka import FromDishka
 from dishka.integrations.aiogram_dialog import inject
@@ -251,7 +252,7 @@ async def get_passengers_list(
     ride_id: int = dialog_manager.dialog_data.get("ride_id", 0)
     if not ride_id:
         return {"has_users": False, "empty_text": "🚫 Поездка не найдена.", "back_btn": "⬅️ К броням"}
-    stats = await statistics_service.all_users_stats(limit=50, exclude_user_id=config.bot.creator_id)
+    stats = await statistics_service.all_users_stats(limit=100, exclude_user_id=config.bot.creator_id)
     if not stats:
         return {"has_users": False, "empty_text": "🚫 Нет пользователей.", "back_btn": "⬅️ К броням"}
     existing = await bookings_dao.list_for_ride(ride_id)
@@ -314,7 +315,7 @@ async def on_passenger_selected(
 ride_detail_dialog = Dialog(
     Window(
         Const("📋 <b>Брони на поездку</b>"),
-        Column(
+        ScrollingGroup(
             Select(
                 Format("{item[title]}"),
                 id="bookings_sel",
@@ -323,6 +324,9 @@ ride_detail_dialog = Dialog(
                 on_click=on_booking_selected,
                 when="has_bookings",
             ),
+            width=1,
+            height=8,
+            id="bookings_scroll",
         ),
         Format("{empty_text}", when="not has_bookings"),
         SwitchTo(
@@ -356,7 +360,7 @@ ride_detail_dialog = Dialog(
     ),
     Window(
         Const("➕ <b>Добавить клиента в поездку</b>\n\nВыберите клиента:"),
-        Column(
+        ScrollingGroup(
             Select(
                 Format("{item[title]}"),
                 id="users_sel",
@@ -365,6 +369,9 @@ ride_detail_dialog = Dialog(
                 on_click=on_passenger_selected,
                 when="has_users",
             ),
+            width=1,
+            height=8,
+            id="users_scroll",
         ),
         Format("{empty_text}", when="not has_users"),
         SwitchTo(Format("{back_btn}"), id="back", state=RideBookingsSG.bookings_list),
