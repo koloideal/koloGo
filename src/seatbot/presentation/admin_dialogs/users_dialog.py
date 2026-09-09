@@ -15,6 +15,28 @@ from seatbot.infrastructure.notifications import fmt_amount, user_display
 
 from ..user_dialogs.states import DepositSG, UsersSG
 
+_SORT_MODES = [
+    ("reg_desc", "📅 Новизна ↓", lambda s: s.registration_date, True),
+    ("reg_asc", "📅 Новизна ↑", lambda s: s.registration_date, False),
+    ("bal_desc", "💰 Баланс ↓", lambda s: s.balance, True),
+    ("bal_asc", "💰 Баланс ↑", lambda s: s.balance, False),
+    ("rides_desc", "🚗 Поездки ↓", lambda s: s.total_rides, True),
+    ("rides_asc", "🚗 Поездки ↑", lambda s: s.total_rides, False),
+]
+_SORT_MAP = {m[0]: (m[2], m[3]) for m in _SORT_MODES}
+_SORT_LABELS = {m[0]: m[1] for m in _SORT_MODES}
+_SORT_ORDER = [m[0] for m in _SORT_MODES]
+
+
+def _sort_stats(stats: list, mode: str) -> list:
+    key_func, reverse = _SORT_MAP.get(mode, _SORT_MAP["reg_desc"])
+    return sorted(stats, key=key_func, reverse=reverse)
+
+
+def _next_sort_mode(current: str) -> str:
+    idx = _SORT_ORDER.index(current) if current in _SORT_ORDER else 0
+    return _SORT_ORDER[(idx + 1) % len(_SORT_ORDER)]
+
 
 @inject
 async def get_users_list(
@@ -25,7 +47,9 @@ async def get_users_list(
 ):
     stats = await statistics_service.all_users_stats(limit=100, exclude_user_id=config.bot.creator_id)
     if not stats:
-        return {"has_users": False, "empty_text": "🚫 Нет пользователей.", "back_btn": "⬅️ В панель"}
+        return {"has_users": False, "empty_text": "🚫 Нет пользователей.", "back_btn": "⬅️ В панель", "sort_btn": "📅 Новизна ↓"}
+    sort_mode = dialog_manager.dialog_data.get("sort_mode", "reg_desc")
+    stats = _sort_stats(stats, sort_mode)
     items = []
     for s in stats:
         badges = []
@@ -42,7 +66,7 @@ async def get_users_list(
                 "title": f"{uname}{badge_str} • {first}",
             }
         )
-    return {"has_users": True, "users": items, "back_btn": "⬅️ В панель"}
+    return {"has_users": True, "users": items, "back_btn": "⬅️ В панель", "sort_btn": _SORT_LABELS.get(sort_mode, "📅 Новизна ↓")}
 
 
 @inject
@@ -144,6 +168,12 @@ async def on_search_click(callback: CallbackQuery, button: Button, manager: Dial
     await manager.switch_to(UsersSG.search)
 
 
+async def on_sort_click(callback: CallbackQuery, button: Button, manager: DialogManager):
+    current = manager.dialog_data.get("sort_mode", "reg_desc")
+    manager.dialog_data["sort_mode"] = _next_sort_mode(current)
+    await manager.update({})
+
+
 async def on_search_input(message: Message, widget: MessageInput, manager: DialogManager):
     query = (message.text or "").strip()
     if not query:
@@ -214,6 +244,7 @@ users_dialog = Dialog(
             id="users_scroll",
         ),
         Format("{empty_text}", when="not has_users"),
+        Button(Format("{sort_btn}"), id="sort", on_click=on_sort_click, when="has_users"),
         Button(Const("🔍 Поиск"), id="search", on_click=on_search_click),
         Cancel(Format("{back_btn}")),
         state=UsersSG.users_list,
