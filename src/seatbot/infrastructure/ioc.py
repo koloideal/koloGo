@@ -215,8 +215,12 @@ class ServicesProvider(Provider):
         settings_dao: SettingsDAO,
         cryptobot_service: CryptoBotPaymentService,
         poller: PaymentStatusPoller,
+        users_dao: UsersDAO,
+        message_builder: MessageBuilder,
     ) -> PaymentService:
-        return PaymentService(transactions_dao, settings_dao, cryptobot_service, poller)
+        return PaymentService(
+            transactions_dao, settings_dao, cryptobot_service, poller, users_dao, message_builder
+        )
 
 
 class UserAppProvider(Provider):

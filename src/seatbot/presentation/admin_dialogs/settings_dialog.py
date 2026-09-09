@@ -22,9 +22,11 @@ async def get_settings_main(
 ):
     price = await vip_service.get_vip_price()
     rate = await payment_service.get_byn_to_usd_rate()
+    stars_rate = await payment_service.get_byn_to_stars_rate()
     return {
         "vip_price": fmt_amount(price),
         "byn_to_usd_rate": fmt_amount(rate),
+        "byn_to_stars_rate": fmt_amount(stars_rate),
         "back_btn": "⬅️ В панель",
     }
 
@@ -61,18 +63,40 @@ async def on_exchange_rate_input(message: Message, widget: MessageInput, manager
     await manager.switch_to(AdminSettingsSG.main)
 
 
+async def on_stars_rate_input(message: Message, widget: MessageInput, manager: DialogManager):
+    text = (message.text or "").strip().replace(",", ".")
+    try:
+        rate = float(text)
+        if rate <= 0:
+            raise ValueError
+    except ValueError:
+        await message.answer("❌ Введите положительное число (например, <code>1.0</code>).")
+        return
+    container = manager.middleware_data["dishka_container"]
+    payment_service: PaymentService = await container.get(PaymentService)
+    await payment_service.set_byn_to_stars_rate(rate)
+    await message.answer(f"✅ Курс BYN→Stars обновлён: <b>1 ⭐ = {fmt_amount(rate)} BYN</b>")
+    await manager.switch_to(AdminSettingsSG.main)
+
+
 settings_dialog = Dialog(
     Window(
         Format(
             "⚙️ <b>Настройки</b>\n\n"
             "⭐ Стоимость VIP: <b>{vip_price} BYN</b>\n"
-            "💱 Курс BYN→USD: <b>1 USD = {byn_to_usd_rate} BYN</b>"
+            "💱 Курс BYN→USD: <b>1 USD = {byn_to_usd_rate} BYN</b>\n"
+            "🌟 Курс BYN→Stars: <b>1 ⭐ = {byn_to_stars_rate} BYN</b>"
         ),
         SwitchTo(Const("⭐ Изменить цену VIP"), id="edit_vip_price", state=AdminSettingsSG.vip_price),
         SwitchTo(
             Const("💱 Изменить курс BYN→USD"),
             id="edit_rate",
             state=AdminSettingsSG.byn_rate,
+        ),
+        SwitchTo(
+            Const("🌟 Изменить курс BYN→Stars"),
+            id="edit_stars_rate",
+            state=AdminSettingsSG.stars_rate,
         ),
         Cancel(Format("{back_btn}")),
         state=AdminSettingsSG.main,
@@ -93,5 +117,15 @@ settings_dialog = Dialog(
         MessageInput(on_exchange_rate_input),
         SwitchTo(Const("⬅️ Назад"), id="back", state=AdminSettingsSG.main),
         state=AdminSettingsSG.byn_rate,
+    ),
+    Window(
+        Const(
+            "🌟 <b>Курс BYN→Stars</b>\n\n"
+            "Сколько BYN за 1 звезду (например, <code>1.0</code>).\n"
+            "По этому курсу сумма в BYN конвертируется в Telegram Stars."
+        ),
+        MessageInput(on_stars_rate_input),
+        SwitchTo(Const("⬅️ Назад"), id="back", state=AdminSettingsSG.main),
+        state=AdminSettingsSG.stars_rate,
     ),
 )

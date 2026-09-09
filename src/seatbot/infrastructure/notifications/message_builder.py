@@ -368,11 +368,11 @@ class MessageBuilder:
             "Инвойс отменён. Попробуйте пополнить баланс снова."
         )
 
-    def payment_admin_log(self, user: User, amount: float) -> str:
+    def payment_admin_log(self, user: User, amount: float, method: str = "CryptoBot (USDT)") -> str:
         name = escape(user.first_name or user.username or str(user.user_id))
         return (
             f"💰 <b>Пополнение баланса</b>\n\n"
             f"Пользователь: {name} (<code>{user.user_id}</code>)\n"
             f"Сумма: <b>{fmt_amount(amount)} BYN</b>\n"
-            f"Способ: CryptoBot (USDT)"
+            f"Способ: {method}"
         )

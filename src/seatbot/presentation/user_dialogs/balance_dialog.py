@@ -1,4 +1,5 @@
-from aiogram.types import CallbackQuery, Message
+from aiogram import Bot
+from aiogram.types import CallbackQuery, LabeledPrice, Message
 from aiogram_dialog import Dialog, DialogManager, StartMode, Window
 from aiogram_dialog.widgets.input import MessageInput
 from aiogram_dialog.widgets.kbd import Button, Cancel, Row, SwitchTo, Url
@@ -45,10 +46,9 @@ async def get_top_up_amount_data(**_kwargs):
 
 async def get_top_up_method_data(**_kwargs):
     return {
-        "method_prompt": (
-            "💳 <b>Выберите способ оплаты</b>"
-        ),
+        "method_prompt": "💳 <b>Выберите способ оплаты</b>",
         "cryptobot_btn": "🤖 CryptoBot (USDT)",
+        "stars_btn": "⭐ Telegram Stars",
         "back_btn": "⬅️ Назад",
     }
 
@@ -136,6 +136,28 @@ async def on_cryptobot_clicked(
 
 
 @inject
+async def on_stars_clicked(
+    callback: CallbackQuery,
+    button: Button,
+    manager: DialogManager,
+    payment_service: FromDishka[PaymentService],
+    bot: FromDishka[Bot],
+):
+    amount: float = manager.dialog_data["top_up_amount"]
+    user_id = callback.from_user.id
+    stars = await payment_service.byn_to_stars(amount)
+    await bot.send_invoice(
+        chat_id=user_id,
+        title=f"Пополнение баланса на {fmt_amount(amount)} BYN",
+        description=f"Пополнение депозита SeatBot на {fmt_amount(amount)} BYN",
+        payload=f"stars_topup:{amount}",
+        currency="XTR",
+        prices=[LabeledPrice(label=f"{fmt_amount(amount)} BYN", amount=stars)],
+    )
+    await callback.answer("Инвойс отправлен в чат", show_alert=True)
+
+
+@inject
 async def on_cancel_invoice_clicked(
     callback: CallbackQuery,
     button: Button,
@@ -177,6 +199,7 @@ balance_dialog = Dialog(
     Window(
         Format("{method_prompt}"),
         Button(Format("{cryptobot_btn}"), id="crypto_bot", on_click=on_cryptobot_clicked),
+        Button(Format("{stars_btn}"), id="stars", on_click=on_stars_clicked),
         SwitchTo(Format("{back_btn}"), id="back", state=BalanceSG.top_up_amount),
         state=BalanceSG.top_up_method,
         getter=get_top_up_method_data,

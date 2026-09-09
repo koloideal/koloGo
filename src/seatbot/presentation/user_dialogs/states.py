@@ -101,3 +101,4 @@ class AdminSettingsSG(StatesGroup):
     main = State()
     vip_price = State()
     byn_rate = State()
+    stars_rate = State()

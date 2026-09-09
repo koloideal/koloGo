@@ -26,6 +26,7 @@ class TransactionType(str, Enum):
     REFUND = "REFUND"
     VIP_PURCHASE = "VIP_PURCHASE"
     CRYPTOBOT_TOPUP = "CRYPTOBOT_TOPUP"
+    STARS_TOPUP = "STARS_TOPUP"
 
 
 class TransactionStatus(str, Enum):
