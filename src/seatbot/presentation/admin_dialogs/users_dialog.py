@@ -35,10 +35,11 @@ async def get_users_list(
             badges.append("🚫")
         badge_str = " " + "".join(badges) if badges else ""
         uname = user_display(s.username, s.first_name, s.user_id)
+        first = s.first_name or "—"
         items.append(
             {
                 "user_id": s.user_id,
-                "title": f"{uname}{badge_str} • {s.total_rides} поездок • {fmt_amount(s.balance)} BYN",
+                "title": f"{uname}{badge_str} • {first}",
             }
         )
     return {"has_users": True, "users": items, "back_btn": "⬅️ В панель"}
@@ -186,10 +187,11 @@ async def get_search_results(
             badges.append("🚫")
         badge_str = " " + "".join(badges) if badges else ""
         uname = user_display(s.username, s.first_name, s.user_id)
+        first = s.first_name or "—"
         items.append(
             {
                 "user_id": s.user_id,
-                "title": f"{uname}{badge_str} • {s.total_rides} поездок • {fmt_amount(s.balance)} BYN",
+                "title": f"{uname}{badge_str} • {first}",
             }
         )
     return {"has_users": True, "users": items, "back_btn": "⬅️ Назад"}
