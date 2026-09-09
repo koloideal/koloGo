@@ -1,3 +1,7 @@
+from collections.abc import Callable
+from types import MappingProxyType
+from typing import Any
+
 from aiogram.types import CallbackQuery, Message
 from aiogram_dialog import Dialog, DialogManager, Window
 from aiogram_dialog.widgets.input import MessageInput
@@ -9,26 +13,27 @@ from dishka.integrations.aiogram_dialog import inject
 
 from seatbot.application.services.statistics import StatisticsService
 from seatbot.application.services.user import UserService
+from seatbot.domain.schemas import UserStats
 from seatbot.infrastructure.config.models import Config
 from seatbot.infrastructure.database.dao import UsersDAO
 from seatbot.infrastructure.notifications import fmt_amount, user_display
 
 from ..user_dialogs.states import DepositSG, UsersSG
 
-_SORT_MODES = [
+_SORT_MODES: tuple[tuple[str, str, Callable[[UserStats], Any], bool], ...] = (
     ("reg_desc", "📅 Новизна ↓", lambda s: s.registration_date, True),
     ("reg_asc", "📅 Новизна ↑", lambda s: s.registration_date, False),
     ("bal_desc", "💰 Баланс ↓", lambda s: s.balance, True),
     ("bal_asc", "💰 Баланс ↑", lambda s: s.balance, False),
     ("rides_desc", "🚗 Поездки ↓", lambda s: s.total_rides, True),
     ("rides_asc", "🚗 Поездки ↑", lambda s: s.total_rides, False),
-]
-_SORT_MAP = {m[0]: (m[2], m[3]) for m in _SORT_MODES}
-_SORT_LABELS = {m[0]: m[1] for m in _SORT_MODES}
-_SORT_ORDER = [m[0] for m in _SORT_MODES]
+)
+_SORT_MAP = MappingProxyType({m[0]: (m[2], m[3]) for m in _SORT_MODES})
+_SORT_LABELS = MappingProxyType({m[0]: m[1] for m in _SORT_MODES})
+_SORT_ORDER: tuple[str, ...] = tuple(m[0] for m in _SORT_MODES)
 
 
-def _sort_stats(stats: list, mode: str) -> list:
+def _sort_stats(stats: list[UserStats], mode: str) -> list[UserStats]:
     key_func, reverse = _SORT_MAP.get(mode, _SORT_MAP["reg_desc"])
     return sorted(stats, key=key_func, reverse=reverse)
 
