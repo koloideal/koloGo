@@ -130,6 +130,7 @@ class UserStats:
     is_banned: bool
     last_ride_at: datetime | None
     first_name: str | None = None
+    registration_date: datetime | None = None
 
 
 @dataclass

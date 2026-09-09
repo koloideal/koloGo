@@ -79,6 +79,7 @@ class StatisticsService:
                     is_banned=user.is_banned,
                     last_ride_at=last_ride_at,
                     first_name=user.first_name,
+                    registration_date=user.registration_date,
                 )
             )
         return out
