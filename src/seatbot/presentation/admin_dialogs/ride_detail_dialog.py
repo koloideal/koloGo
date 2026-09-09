@@ -53,7 +53,7 @@ async def get_ride_bookings(
     dialog_manager.dialog_data["ride_id"] = ride_id
     ride = await rides_dao.get_by_id(ride_id)
     can_add = ride is not None and ride.status == RideStatus.OPEN
-    bookings = await bookings_dao.list_for_ride(ride_id)
+    bookings = await bookings_dao.list_for_ride(ride_id, only_active=True)
     if not bookings:
         return {
             "has_bookings": False,
@@ -255,7 +255,7 @@ async def get_passengers_list(
     stats = await statistics_service.all_users_stats(limit=100, exclude_user_id=config.bot.creator_id)
     if not stats:
         return {"has_users": False, "empty_text": "🚫 Нет пользователей.", "back_btn": "⬅️ К броням"}
-    existing = await bookings_dao.list_for_ride(ride_id)
+    existing = await bookings_dao.list_for_ride(ride_id, only_active=True)
     existing_ids = {b.user_id for b in existing}
     items = []
     for s in stats:

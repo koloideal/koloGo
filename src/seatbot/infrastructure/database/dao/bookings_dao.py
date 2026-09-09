@@ -51,10 +51,14 @@ class BookingsDAO:
         orm = result.scalar_one_or_none()
         return self._map_to_domain(orm) if orm else None
 
-    async def list_for_ride(self, ride_id: int) -> list[Booking]:
-        result = await self.session.execute(
-            select(OrmBooking).where(OrmBooking.ride_id == ride_id).order_by(OrmBooking.created_at.asc())
-        )
+    async def list_for_ride(self, ride_id: int, only_active: bool = False) -> list[Booking]:
+        query = select(OrmBooking).where(OrmBooking.ride_id == ride_id)
+        if only_active:
+            query = query.where(
+                OrmBooking.status.in_([BookingStatus.PENDING.value, BookingStatus.APPROVED.value])
+            )
+        query = query.order_by(OrmBooking.created_at.asc())
+        result = await self.session.execute(query)
         return [self._map_to_domain(b) for b in result.scalars().all()]
 
     async def list_for_user(self, user_id: int, limit: int = 50) -> list[Booking]:
