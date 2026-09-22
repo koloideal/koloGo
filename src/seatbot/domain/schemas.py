@@ -116,6 +116,7 @@ class RideWithStats:
     booked_seats: int
     approved_seats: int
     pending_seats: int
+    finished_seats: int = 0
 
     @property
     def free_seats(self) -> int:

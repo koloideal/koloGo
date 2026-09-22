@@ -33,14 +33,13 @@ async def get_rides_list(
         }
     items = []
     for rws in rides:
-        price_str = "Бесплатно" if rws.ride.is_free else f"{fmt_amount(rws.ride.price)} BYN"
         route = route_str(rws.ride)
         route_part = f" • {route}" if route else ""
         items.append(
             {
                 "ride_id": rws.ride.ride_id,
                 "title": (
-                    f"{clock.fmt(rws.ride.departure_at, '%d.%m %H:%M')} • {price_str} • "
+                    f"{clock.fmt(rws.ride.departure_at, '%d.%m %H:%M')} • "
                     f"{rws.free_seats} мест{route_part}"
                 ),
             }

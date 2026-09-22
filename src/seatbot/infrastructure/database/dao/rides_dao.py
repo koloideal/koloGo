@@ -58,16 +58,7 @@ class RidesDAO:
         ride = await self.get_by_id(ride_id)
         if not ride:
             return None
-
-        approved = await self._count_status(ride_id, {"approved"})
-        pending = await self._count_status(ride_id, {"pending"})
-        booked = approved + pending
-        return RideWithStats(
-            ride=ride,
-            booked_seats=booked,
-            approved_seats=approved,
-            pending_seats=pending,
-        )
+        return await self._with_stats(ride)
 
     async def list_upcoming_visible(self, now: datetime | None = None) -> list[RideWithStats]:
         now = now or datetime.now(UTC)
@@ -82,19 +73,7 @@ class RidesDAO:
         )
         result = await self.session.execute(query)
         rides = [self._map_to_domain(r) for r in result.scalars().all()]
-        out: list[RideWithStats] = []
-        for ride in rides:
-            approved = await self._count_status(ride.ride_id, {"approved"})
-            pending = await self._count_status(ride.ride_id, {"pending"})
-            out.append(
-                RideWithStats(
-                    ride=ride,
-                    booked_seats=approved + pending,
-                    approved_seats=approved,
-                    pending_seats=pending,
-                )
-            )
-        return out
+        return [await self._with_stats(ride) for ride in rides]
 
     async def list_all(self, limit: int = 50) -> list[RideWithStats]:
         status_order = case(
@@ -107,19 +86,7 @@ class RidesDAO:
         query = select(OrmRide).order_by(status_order, OrmRide.departure_at.asc()).limit(limit)
         result = await self.session.execute(query)
         rides = [self._map_to_domain(r) for r in result.scalars().all()]
-        out: list[RideWithStats] = []
-        for ride in rides:
-            approved = await self._count_status(ride.ride_id, {"approved"})
-            pending = await self._count_status(ride.ride_id, {"pending"})
-            out.append(
-                RideWithStats(
-                    ride=ride,
-                    booked_seats=approved + pending,
-                    approved_seats=approved,
-                    pending_seats=pending,
-                )
-            )
-        return out
+        return [await self._with_stats(ride) for ride in rides]
 
     async def list_active(self) -> list[Ride]:
         query = (
@@ -208,6 +175,18 @@ class RidesDAO:
             )
         )
         return int(result.scalar_one() or 0)
+
+    async def _with_stats(self, ride: Ride) -> RideWithStats:
+        approved = await self._count_status(ride.ride_id, {"approved"})
+        pending = await self._count_status(ride.ride_id, {"pending"})
+        finished = await self._count_status(ride.ride_id, {"completed", "no_show"})
+        return RideWithStats(
+            ride=ride,
+            booked_seats=approved + pending,
+            approved_seats=approved,
+            pending_seats=pending,
+            finished_seats=finished,
+        )
 
     @staticmethod
     def _map_to_domain(orm_ride: OrmRide) -> Ride:

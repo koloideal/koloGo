@@ -39,12 +39,18 @@ async def get_rides_list(
         price_str = "бесплатно" if rws.ride.is_free else f"{fmt_amount(rws.ride.price)} BYN"
         route = route_str(rws.ride)
         route_part = f" • {route}" if route else ""
+        if rws.ride.status == RideStatus.COMPLETED:
+            seats_str = f"{rws.finished_seats}/{rws.ride.seats_total} ехало"
+        elif rws.ride.status == RideStatus.CANCELLED:
+            seats_str = f"{rws.ride.seats_total} мест"
+        else:
+            seats_str = f"{rws.free_seats}/{rws.ride.seats_total} мест"
         items.append(
             {
                 "ride_id": rws.ride.ride_id,
                 "title": (
                     f"{emoji} {clock.fmt(rws.ride.departure_at, '%d.%m %H:%M')} • "
-                    f"{price_str} • {rws.free_seats}/{rws.ride.seats_total} мест{route_part}"
+                    f"{price_str} • {seats_str}{route_part}"
                 ),
             }
         )
@@ -58,6 +64,10 @@ async def get_ride_detail(
     messages: FromDishka[MessageBuilder],
     **_kwargs,
 ):
+    if "ride_id" not in dialog_manager.dialog_data:
+        start_data = dialog_manager.start_data
+        if isinstance(start_data, dict):
+            dialog_manager.dialog_data["ride_id"] = start_data["ride_id"]
     ride_id: int = dialog_manager.dialog_data["ride_id"]
     rws = await rides_dao.get_with_stats(ride_id)
     if not rws:

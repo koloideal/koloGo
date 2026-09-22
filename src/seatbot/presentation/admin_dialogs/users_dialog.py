@@ -111,8 +111,8 @@ async def get_user_detail(
         "is_vip": user.is_vip,
         "ban_btn": "🚫 В ЧС" if not user.is_banned else "✅ Из ЧС",
         "vip_btn": "⭐ Выдать VIP" if not user.is_vip else "⭐ Снять VIP",
-        "deposit_btn": "💰 Пополнить депозит",
-        "decrease_btn": "💸 Списать депозит",
+        "deposit_btn": "💰 Пополнить",
+        "decrease_btn": "💸 Списать",
         "back_btn": "⬅️ К клиентам",
     }
 

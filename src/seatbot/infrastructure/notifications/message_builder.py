@@ -3,7 +3,8 @@ from html import escape
 
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
-from seatbot.domain.schemas import Booking, BookingStatus, Ride, RideWithStats, User
+from seatbot.domain.schemas import (Booking, BookingStatus, Ride, RideStatus,
+                                    RideWithStats, User)
 from seatbot.infrastructure.time import LocalClock
 
 BOOKING_STATUS_RU = {
@@ -55,10 +56,11 @@ class MessageBuilder:
             free = ride.free_seats
             approved = ride.approved_seats
             pending = ride.pending_seats
+            finished = ride.finished_seats
         else:
             r = ride
             free = free_seats if free_seats is not None else r.seats_total
-            approved = pending = 0
+            approved = pending = finished = 0
         price_str = "Бесплатно" if r.is_free else f"{fmt_amount(r.price)} BYN"
         status_emoji = {"open": "🟢", "closed": "🟡", "completed": "✅", "cancelled": "❌"}.get(
             r.status.value, "•"
@@ -70,10 +72,13 @@ class MessageBuilder:
         route = route_str(r)
         if route:
             lines.append(f"📍 Маршрут: <b>{route}</b>")
-        lines += [
-            f"💰 Цена: <b>{price_str}</b>",
-            f"🪑 Свободно мест: <b>{free}/{r.seats_total}</b>",
-        ]
+        lines.append(f"💰 Цена: <b>{price_str}</b>")
+        if r.status == RideStatus.COMPLETED:
+            lines.append(f"🏁 Ехало: <b>{finished}/{r.seats_total}</b>")
+        elif r.status == RideStatus.CANCELLED:
+            lines.append(f"🪑 Мест было: <b>{r.seats_total}</b>")
+        else:
+            lines.append(f"🪑 Свободно мест: <b>{free}/{r.seats_total}</b>")
         if approved or pending:
             lines.append(f"   (подтверждено: {approved}, ожидает: {pending})")
         if r.auto_approve:
