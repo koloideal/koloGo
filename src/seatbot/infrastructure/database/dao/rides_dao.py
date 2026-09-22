@@ -18,12 +18,12 @@ class RidesDAO:
         price: float,
         seats_total: int,
         auto_approve: bool,
+        origin: str,
+        destination: str,
         note: str | None = None,
         is_visible: bool = True,
         remind_minutes: int = 30,
         vip_hold_minutes: int = 0,
-        origin: str | None = None,
-        destination: str | None = None,
     ) -> Ride:
         orm_ride = OrmRide(
             departure_at=departure_at,
@@ -134,7 +134,7 @@ class RidesDAO:
         query = select(OrmRide).order_by(OrmRide.departure_at.desc()).limit(limit * 3)
         result = await self.session.execute(query)
         rides = [self._map_to_domain(r) for r in result.scalars().all()]
-        seen: set[tuple[float, str | None, str | None, str | None]] = set()
+        seen: set[tuple[float, str | None, str, str]] = set()
         unique: list[Ride] = []
         for ride in rides:
             key = (float(ride.price), ride.note, ride.origin, ride.destination)

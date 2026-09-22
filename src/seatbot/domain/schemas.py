@@ -58,11 +58,11 @@ class Ride:
     auto_approve: bool
     status: RideStatus
     created_at: datetime
+    origin: str
+    destination: str
     note: str | None = None
     remind_minutes: int = 30
     vip_hold_minutes: int = 0
-    origin: str | None = None
-    destination: str | None = None
 
     @property
     def is_free(self) -> bool:

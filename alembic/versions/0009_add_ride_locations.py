@@ -18,6 +18,9 @@ depends_on: str | Sequence[str] | None = None
 def upgrade() -> None:
     op.add_column("rides", sa.Column("origin", sa.String(length=128), nullable=True))
     op.add_column("rides", sa.Column("destination", sa.String(length=128), nullable=True))
+    op.execute("UPDATE rides SET origin = 'Новое Поле', destination = 'Минск'")
+    op.alter_column("rides", "origin", nullable=False)
+    op.alter_column("rides", "destination", nullable=False)
 
 
 def downgrade() -> None:

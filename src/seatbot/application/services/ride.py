@@ -36,14 +36,14 @@ class RideService:
         departure_at: datetime,
         price: float,
         auto_approve: bool,
+        origin: str,
+        destination: str,
         seats_total: int = 4,
         note: str | None = None,
         is_visible: bool = True,
         repeat_days: int = 1,
         remind_minutes: int = 30,
         vip_hold_minutes: int = 0,
-        origin: str | None = None,
-        destination: str | None = None,
         template_ride_id: int | None = None,
     ) -> list[Ride]:
         rides = []

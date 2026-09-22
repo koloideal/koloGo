@@ -412,8 +412,8 @@ async def on_create(
     remind_minutes: int = manager.dialog_data.get("remind_minutes", 30)
     vip_hold_minutes: int = manager.dialog_data.get("vip_hold_minutes", 0)
     seats_total: int = manager.dialog_data.get("seats_total", 4)
-    origin: str | None = manager.dialog_data.get("origin")
-    destination: str | None = manager.dialog_data.get("destination")
+    origin: str = manager.dialog_data["origin"]
+    destination: str = manager.dialog_data["destination"]
 
     d = date.fromisoformat(date_str)
     departure_at = clock.local_dt(d.year, d.month, d.day, hour, minute)
