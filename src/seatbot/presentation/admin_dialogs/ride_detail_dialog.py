@@ -10,7 +10,7 @@ from dishka.integrations.aiogram_dialog import inject
 from seatbot.application.services.ride import RideService
 from seatbot.application.services.statistics import StatisticsService
 from seatbot.domain.exceptions import NoFreeSeatsError
-from seatbot.domain.schemas import BookingStatus, RideStatus
+from seatbot.domain.schemas import Booking, BookingStatus, RideStatus
 from seatbot.infrastructure.config.models import Config
 from seatbot.infrastructure.database.dao import BookingsDAO, RidesDAO, UsersDAO
 from seatbot.infrastructure.notifications import (BOOKING_STATUS_RU, MessageBuilder,
@@ -53,7 +53,17 @@ async def get_ride_bookings(
     dialog_manager.dialog_data["ride_id"] = ride_id
     ride = await rides_dao.get_by_id(ride_id)
     can_add = ride is not None and ride.status == RideStatus.OPEN
-    bookings = await bookings_dao.list_for_ride(ride_id, only_active=True)
+    all_bookings = await bookings_dao.list_for_ride(ride_id)
+    latest_by_user: dict[int, Booking] = {}
+    for b in all_bookings:
+        latest_by_user[b.user_id] = b
+    if ride is not None and ride.status == RideStatus.OPEN:
+        bookings = [
+            b for b in latest_by_user.values()
+            if b.status in (BookingStatus.PENDING, BookingStatus.APPROVED)
+        ]
+    else:
+        bookings = list(latest_by_user.values())
     if not bookings:
         return {
             "has_bookings": False,
