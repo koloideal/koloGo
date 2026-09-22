@@ -81,12 +81,44 @@ async def get_booking_detail(
         return {"booking_text": "🚫 Поездка не найдена", "back_btn": "⬅️ Назад"}
     user = await users_dao.get_by_id(booking.user_id)
     can_cancel = booking.status in (BookingStatus.PENDING, BookingStatus.APPROVED)
+    has_origin_geo = (
+        booking.status == BookingStatus.APPROVED
+        and ride.origin_lat is not None
+        and ride.origin_lon is not None
+    )
     return {
         "booking_text": messages.booking_card(booking, ride, is_vip=bool(user and user.is_vip)),
         "can_cancel": can_cancel,
+        "has_origin_geo": has_origin_geo,
         "cancel_btn": "🚫 Отменить бронь",
+        "origin_btn": "📍 Место отправления",
         "back_btn": "⬅️ К броням",
     }
+
+
+@inject
+async def on_show_origin(
+    callback: CallbackQuery,
+    button: Button,
+    manager: DialogManager,
+    bookings_dao: FromDishka[BookingsDAO],
+    rides_dao: FromDishka[RidesDAO],
+):
+    booking_id: int = manager.dialog_data["booking_id"]
+    booking = await bookings_dao.get_by_id(booking_id)
+    if not booking:
+        await callback.answer("Бронь не найдена", show_alert=True)
+        return
+    ride = await rides_dao.get_by_id(booking.ride_id)
+    if not ride or ride.origin_lat is None or ride.origin_lon is None:
+        await callback.answer("Геопозиция не задана", show_alert=True)
+        return
+    if callback.message:
+        await callback.message.answer_location(
+            latitude=ride.origin_lat,
+            longitude=ride.origin_lon,
+        )
+    await callback.answer()
 
 
 @inject
@@ -140,6 +172,7 @@ my_bookings_dialog = Dialog(
     Window(
         Format("{booking_text}"),
         Button(Format("{cancel_btn}"), id="cancel_booking", on_click=on_cancel_booking, when="can_cancel"),
+        Button(Format("{origin_btn}"), id="show_origin", on_click=on_show_origin, when="has_origin_geo"),
         SwitchTo(Format("{back_btn}"), id="back", state=MyBookingsSG.list),
         state=MyBookingsSG.detail,
         getter=get_booking_detail,

@@ -24,6 +24,10 @@ class RidesDAO:
         is_visible: bool = True,
         remind_minutes: int = 30,
         vip_hold_minutes: int = 0,
+        origin_lat: float | None = None,
+        origin_lon: float | None = None,
+        destination_lat: float | None = None,
+        destination_lon: float | None = None,
     ) -> Ride:
         orm_ride = OrmRide(
             departure_at=departure_at,
@@ -37,6 +41,10 @@ class RidesDAO:
             vip_hold_minutes=vip_hold_minutes,
             origin=origin,
             destination=destination,
+            origin_lat=origin_lat,
+            origin_lon=origin_lon,
+            destination_lat=destination_lat,
+            destination_lon=destination_lon,
         )
         self.session.add(orm_ride)
         await self.session.flush()
@@ -78,10 +86,11 @@ class RidesDAO:
     async def list_all(self, limit: int = 50) -> list[RideWithStats]:
         status_order = case(
             (OrmRide.status == RideStatus.OPEN.value, 0),
-            (OrmRide.status == RideStatus.CLOSED.value, 1),
-            (OrmRide.status == RideStatus.COMPLETED.value, 2),
-            (OrmRide.status == RideStatus.CANCELLED.value, 3),
-            else_=4,
+            (OrmRide.status == RideStatus.IN_PROGRESS.value, 1),
+            (OrmRide.status == RideStatus.CLOSED.value, 2),
+            (OrmRide.status == RideStatus.COMPLETED.value, 3),
+            (OrmRide.status == RideStatus.CANCELLED.value, 4),
+            else_=5,
         )
         query = select(OrmRide).order_by(status_order, OrmRide.departure_at.asc()).limit(limit)
         result = await self.session.execute(query)
@@ -161,6 +170,44 @@ class RidesDAO:
             orm_ride.remind_sent = True
             await self.session.flush()
 
+    async def set_finished_at(self, ride_id: int, finished_at: datetime) -> None:
+        result = await self.session.execute(select(OrmRide).where(OrmRide.id == ride_id))
+        orm_ride = result.scalar_one_or_none()
+        if orm_ride:
+            orm_ride.finished_at = finished_at
+            orm_ride.live_chat_id = None
+            orm_ride.live_message_id = None
+            await self.session.flush()
+
+    async def set_awaiting_live(self, ride_id: int, value: bool) -> None:
+        result = await self.session.execute(select(OrmRide).where(OrmRide.id == ride_id))
+        orm_ride = result.scalar_one_or_none()
+        if orm_ride:
+            orm_ride.awaiting_live_geo = value
+            await self.session.flush()
+
+    async def get_awaiting_live_orm(self) -> OrmRide | None:
+        result = await self.session.execute(
+            select(OrmRide)
+            .where(
+                OrmRide.awaiting_live_geo.is_(True),
+                OrmRide.status.in_([RideStatus.OPEN.value, RideStatus.CLOSED.value]),
+            )
+            .order_by(OrmRide.id.desc())
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
+
+    async def get_tracking_orm(self, chat_id: int, message_id: int) -> OrmRide | None:
+        result = await self.session.execute(
+            select(OrmRide).where(
+                OrmRide.status == RideStatus.IN_PROGRESS.value,
+                OrmRide.live_chat_id == chat_id,
+                OrmRide.live_message_id == message_id,
+            )
+        )
+        return result.scalar_one_or_none()
+
     async def count_by_status(self, status: RideStatus) -> int:
         result = await self.session.execute(
             select(func.count(OrmRide.id)).where(OrmRide.status == status.value)
@@ -204,4 +251,11 @@ class RidesDAO:
             vip_hold_minutes=orm_ride.vip_hold_minutes,
             origin=orm_ride.origin,
             destination=orm_ride.destination,
+            origin_lat=orm_ride.origin_lat,
+            origin_lon=orm_ride.origin_lon,
+            destination_lat=orm_ride.destination_lat,
+            destination_lon=orm_ride.destination_lon,
+            started_at=orm_ride.started_at,
+            finished_at=orm_ride.finished_at,
+            track_distance_m=orm_ride.track_distance_m,
         )

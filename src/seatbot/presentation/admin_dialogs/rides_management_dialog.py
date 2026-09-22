@@ -1,15 +1,17 @@
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import BufferedInputFile, CallbackQuery, Message
 from aiogram_dialog import Dialog, DialogManager, Window
 from aiogram_dialog.widgets.input import MessageInput
 from aiogram_dialog.widgets.kbd import (Button, Cancel, Group, ScrollingGroup, Select,
-                                        SwitchTo)
+                                        SwitchTo, Url)
 from aiogram_dialog.widgets.text import Const, Format
 from dishka import FromDishka
 from dishka.integrations.aiogram_dialog import inject
 
 from seatbot.application.services.ride import RideService
+from seatbot.application.services.tracking import TrackingService
 from seatbot.domain.schemas import RideStatus
-from seatbot.infrastructure.database.dao import RidesDAO
+from seatbot.infrastructure.database.dao import RidesDAO, TrackPointsDAO
+from seatbot.infrastructure.geo import render_track_png, yandex_route_url
 from seatbot.infrastructure.notifications import MessageBuilder, fmt_amount, route_str
 from seatbot.infrastructure.time import LocalClock
 
@@ -18,6 +20,7 @@ from ..user_dialogs.states import RideBookingsSG, RidesMgmtSG
 _STATUS_EMOJI = {
     RideStatus.OPEN: "🟢",
     RideStatus.CLOSED: "🟡",
+    RideStatus.IN_PROGRESS: "🚙",
     RideStatus.COMPLETED: "✅",
     RideStatus.CANCELLED: "❌",
 }
@@ -61,6 +64,7 @@ async def get_rides_list(
 async def get_ride_detail(
     dialog_manager: DialogManager,
     rides_dao: FromDishka[RidesDAO],
+    track_dao: FromDishka[TrackPointsDAO],
     messages: FromDishka[MessageBuilder],
     **_kwargs,
 ):
@@ -74,17 +78,29 @@ async def get_ride_detail(
         return {"ride_text": "🚫 Поездка не найдена", "back_btn": "⬅️ Назад"}
     is_open = rws.ride.status == RideStatus.OPEN
     is_active = rws.ride.status in (RideStatus.OPEN, RideStatus.CLOSED)
+    can_finish = rws.ride.status in (
+        RideStatus.OPEN, RideStatus.CLOSED, RideStatus.IN_PROGRESS
+    )
+    track_points = await track_dao.list_for_ride(ride_id)
+    has_track = len(track_points) >= 2
+    route_url = yandex_route_url(track_points) if has_track else ""
     return {
         "ride_text": messages.ride_card(rws),
         "ride_id": ride_id,
         "is_open": is_open,
         "is_active": is_active,
+        "can_finish": can_finish,
         "is_visible": rws.ride.is_visible,
         "auto_approve": rws.ride.auto_approve,
+        "has_track": has_track,
+        "route_url": route_url,
         "bookings_btn": "📋 Брони",
         "change_time_btn": "🕒 Изменить время",
+        "start_btn": "🚀 Старт поездки",
         "complete_btn": "🏁 Завершить",
         "cancel_btn": "❌ Отменить",
+        "route_btn": "🗺 Маршрут (Яндекс)",
+        "track_img_btn": "🖼 Карта маршрута",
         "toggle_vis_btn": "👁️ Скрыть" if rws.ride.is_visible else "👁️ Показать",
         "toggle_auto_btn": "⚡ Авто-апрув ✅" if rws.ride.auto_approve else "⚡ Авто-апрув ❌",
         "back_btn": "⬅️ К поездкам",
@@ -167,6 +183,56 @@ async def on_to_bookings(
     await manager.start(RideBookingsSG.bookings_list, data={"ride_id": ride_id})
 
 
+@inject
+async def on_start_ride(
+    callback: CallbackQuery,
+    button: Button,
+    manager: DialogManager,
+    tracking_service: FromDishka[TrackingService],
+):
+    ride_id: int = manager.dialog_data["ride_id"]
+    ride = await tracking_service.request_start(ride_id)
+    if not ride:
+        await callback.answer("Поездку нельзя стартовать (неверный статус)", show_alert=True)
+        return
+    await callback.answer(
+        "📍 Отправьте боту live-геолокацию (📎 → Геопозиция → Транслировать геопозицию)",
+        show_alert=True,
+    )
+    if callback.message:
+        await callback.message.answer(
+            "🚀 <b>Ожидаю live-геолокацию для поездки "
+            f"#{ride_id}.</b>\n\n"
+            "Отправьте live-гео (📎 → Геопозиция → «Транслировать геопозицию») — "
+            "трекинг начнётся автоматически."
+        )
+
+
+@inject
+async def on_track_map(
+    callback: CallbackQuery,
+    button: Button,
+    manager: DialogManager,
+    track_dao: FromDishka[TrackPointsDAO],
+):
+    ride_id: int = manager.dialog_data["ride_id"]
+    points = await track_dao.list_for_ride(ride_id)
+    if len(points) < 2:
+        await callback.answer("Трека нет — поездка не отслеживалась.", show_alert=True)
+        return
+    try:
+        png = render_track_png(points)
+    except (ImportError, ValueError, OSError, RuntimeError):
+        await callback.answer("Не удалось построить карту.", show_alert=True)
+        return
+    if callback.message:
+        await callback.message.answer_photo(
+            photo=BufferedInputFile(png, filename="track.png"),
+            caption=f"🗺 Маршрут поездки #{ride_id}",
+        )
+    await callback.answer()
+
+
 async def on_change_time(callback: CallbackQuery, button: Button, manager: DialogManager):
     await manager.switch_to(RidesMgmtSG.change_time)
 
@@ -236,6 +302,9 @@ rides_management_dialog = Dialog(
         Button(
             Format("{change_time_btn}"), id="change_time", on_click=on_change_time, when="is_active"
         ),
+        Button(
+            Format("{start_btn}"), id="start_ride", on_click=on_start_ride, when="is_active"
+        ),
         Group(
             Button(
                 Format("{toggle_vis_btn}"), id="toggle_vis", on_click=on_toggle_visibility, when="is_open"
@@ -247,9 +316,16 @@ rides_management_dialog = Dialog(
         ),
         Group(
             SwitchTo(
-                Format("{complete_btn}"), id="complete", state=RidesMgmtSG.complete_confirm, when="is_active"
+                Format("{complete_btn}"), id="complete", state=RidesMgmtSG.complete_confirm, when="can_finish"
             ),
-            Button(Format("{cancel_btn}"), id="cancel_ride", on_click=on_cancel_ride, when="is_active"),
+            Button(Format("{cancel_btn}"), id="cancel_ride", on_click=on_cancel_ride, when="can_finish"),
+            width=2,
+        ),
+        Group(
+            Url(Format("{route_btn}"), url=Format("{route_url}"), when="has_track"),
+            Button(
+                Format("{track_img_btn}"), id="track_img", on_click=on_track_map, when="has_track"
+            ),
             width=2,
         ),
         SwitchTo(Format("{back_btn}"), id="back", state=RidesMgmtSG.rides_list),

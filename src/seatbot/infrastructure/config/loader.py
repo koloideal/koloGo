@@ -26,6 +26,8 @@ def load_config(config_path: str) -> Config:
             token=raw["bot"]["token"],
             creator_id=raw["bot"]["creator_id"],
             timezone=raw["bot"].get("timezone", "Europe/Minsk"),
+            arrival_radius_m=float(raw["bot"].get("arrival_radius_m", 20)),
+            arrival_debounce=int(raw["bot"].get("arrival_debounce", 2)),
         ),
         cryptobot=cryptobot,
     )

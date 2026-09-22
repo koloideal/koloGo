@@ -99,14 +99,22 @@ async def get_ride_detail(
         and not (hold_active and not is_vip)
     )
 
+    has_origin_geo = (
+        existing is not None
+        and existing.status == BookingStatus.APPROVED
+        and rws.ride.origin_lat is not None
+        and rws.ride.origin_lon is not None
+    )
     return {
         "ride_text": ride_text,
         "ride_id": ride_id,
         "can_book": can_book,
         "already_booked": existing is not None,
+        "has_origin_geo": has_origin_geo,
         "book_btn": "🪑 Забронировать",
         "already_booked_text": "✅ Вы уже забронировали эту поездку",
         "no_seats_text": "🚫 Мест нет",
+        "origin_btn": "📍 Место отправления",
         "back_btn": "⬅️ К поездкам",
     }
 
@@ -175,6 +183,26 @@ async def on_book_click(
     await manager.start(MainMenuSG.main, mode=StartMode.RESET_STACK)
 
 
+@inject
+async def on_show_origin(
+    callback: CallbackQuery,
+    button: Button,
+    manager: DialogManager,
+    rides_dao: FromDishka[RidesDAO],
+):
+    ride_id: int = manager.dialog_data["ride_id"]
+    ride = await rides_dao.get_by_id(ride_id)
+    if not ride or ride.origin_lat is None or ride.origin_lon is None:
+        await callback.answer("Геопозиция не задана", show_alert=True)
+        return
+    if callback.message:
+        await callback.message.answer_location(
+            latitude=ride.origin_lat,
+            longitude=ride.origin_lon,
+        )
+    await callback.answer()
+
+
 rides_dialog = Dialog(
     Window(
         Const("🚗 <b>Ближайшие поездки</b>\n\nВыберите поездку:"),
@@ -201,6 +229,7 @@ rides_dialog = Dialog(
         Button(Format("{book_btn}"), id="book", on_click=on_book_click, when="can_book"),
         Format("{already_booked_text}", when="already_booked"),
         Format("{no_seats_text}", when="not can_book and not already_booked"),
+        Button(Format("{origin_btn}"), id="show_origin", on_click=on_show_origin, when="has_origin_geo"),
         SwitchTo(Format("{back_btn}"), id="back", state=RidesSG.list),
         state=RidesSG.detail,
         getter=get_ride_detail,

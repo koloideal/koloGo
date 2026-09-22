@@ -7,6 +7,7 @@ from aiogram_dialog import DialogManager, StartMode
 from dishka import FromDishka
 
 from seatbot.application.services.ride import RideService
+from seatbot.application.services.tracking import TrackingService
 
 from .user_dialogs.states import AdminPanelSG, RidesMgmtSG
 
@@ -71,3 +72,45 @@ async def cb_open_ride(callback: CallbackQuery, dialog_manager: DialogManager):
     ride_id = int((callback.data or "").split(":", 1)[1])
     await callback.answer()
     await dialog_manager.start(RidesMgmtSG.ride_detail, data={"ride_id": ride_id})
+
+
+@admin_router.message(F.location, F.location.live_period)
+async def msg_live_location(
+    message: Message,
+    tracking_service: FromDishka[TrackingService],
+):
+    loc = message.location
+    if loc is None or message.chat is None:
+        return
+    ride = await tracking_service.handle_live_start(
+        message.chat.id, message.message_id, loc.latitude, loc.longitude
+    )
+    if ride is None:
+        await message.answer(
+            "ℹ️ Live-гео получено, но сейчас нет поездки, ожидающей старта.\n"
+            "Нажмите «🚀 Старт поездки» в карточке поездки."
+        )
+        return
+    await message.answer(
+        f"🚙 <b>Трекинг запущен!</b>\n\n"
+        f"Поездка #{ride.ride_id} — поехали.\n"
+        "Бот завершит поездку автоматически по прибытии в точку назначения."
+    )
+
+
+@admin_router.edited_message(F.location)
+async def msg_live_location_update(
+    message: Message,
+    tracking_service: FromDishka[TrackingService],
+):
+    loc = message.location
+    if loc is None or message.chat is None:
+        return
+    await tracking_service.handle_update(
+        chat_id=message.chat.id,
+        message_id=message.message_id,
+        lat=loc.latitude,
+        lon=loc.longitude,
+        live_period=loc.live_period,
+        horizontal_accuracy=loc.horizontal_accuracy,
+    )

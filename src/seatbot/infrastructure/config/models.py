@@ -25,6 +25,8 @@ class BotConfig:
     token: str
     creator_id: int
     timezone: str = "Europe/Minsk"
+    arrival_radius_m: float = 20.0
+    arrival_debounce: int = 2
 
 
 @dataclass

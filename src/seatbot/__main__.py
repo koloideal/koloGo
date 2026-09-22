@@ -118,6 +118,7 @@ async def main() -> None:
 
     admin_router.message.middleware(RejectNotAdminMiddleware())
     admin_router.callback_query.middleware(RejectNotAdminMiddleware())
+    admin_router.edited_message.middleware(RejectNotAdminMiddleware())
 
     dp.update.middleware(CheckBanMiddleware())
 

@@ -23,6 +23,14 @@ def fmt_amount(value: float) -> str:
     return f"{value:.2f}"
 
 
+def fmt_duration(seconds: float) -> str:
+    mins = int(seconds // 60)
+    hours, mins = divmod(mins, 60)
+    if hours:
+        return f"{hours} ч {mins} мин"
+    return f"{mins} мин"
+
+
 def user_display(username: str | None, first_name: str | None, user_id: int) -> str:
     if username:
         return f"@{username}"
@@ -62,9 +70,10 @@ class MessageBuilder:
             free = free_seats if free_seats is not None else r.seats_total
             approved = pending = finished = 0
         price_str = "Бесплатно" if r.is_free else f"{fmt_amount(r.price)} BYN"
-        status_emoji = {"open": "🟢", "closed": "🟡", "completed": "✅", "cancelled": "❌"}.get(
-            r.status.value, "•"
-        )
+        status_emoji = {
+            "open": "🟢", "closed": "🟡", "in_progress": "🚙",
+            "completed": "✅", "cancelled": "❌",
+        }.get(r.status.value, "•")
         lines = [
             f"{status_emoji} <b>Поездка</b>",
             f"🕒 Отправление: <b>{self._clock.fmt(r.departure_at)}</b>",
@@ -75,6 +84,9 @@ class MessageBuilder:
         lines.append(f"💰 Цена: <b>{price_str}</b>")
         if r.status == RideStatus.COMPLETED:
             lines.append(f"🏁 Ехало: <b>{finished}/{r.seats_total}</b>")
+            lines.extend(self._track_stats_lines(r))
+        elif r.status == RideStatus.IN_PROGRESS:
+            lines.append(f"🚙 <b>В пути</b> (дистанция: {r.track_distance_m / 1000:.1f} км)")
         elif r.status == RideStatus.CANCELLED:
             lines.append(f"🪑 Мест было: <b>{r.seats_total}</b>")
         else:
@@ -90,6 +102,20 @@ class MessageBuilder:
         if r.note:
             lines.append(f"📝 {escape(r.note)}")
         return "\n".join(lines)
+
+    @staticmethod
+    def _track_stats_lines(r: Ride) -> list[str]:
+        if not r.started_at or not r.finished_at:
+            return []
+        duration = (r.finished_at - r.started_at).total_seconds()
+        km = r.track_distance_m / 1000
+        lines = [
+            f"⏱ В пути: <b>{fmt_duration(duration)}</b>",
+            f"🛣 Дистанция: <b>{km:.1f} км</b>",
+        ]
+        if duration > 0 and km > 0:
+            lines.append(f"⚡ Ср. скорость: <b>{km / (duration / 3600):.0f} км/ч</b>")
+        return lines
 
     def payment_short(self, paid_amount: float, price: float, is_free: bool) -> str:
         if is_free:
@@ -376,6 +402,30 @@ class MessageBuilder:
             f"⭐ <b>VIP куплен</b>\n\n"
             f"Пользователь: {name} (<code>{user.user_id}</code>)\n"
             f"Списано: <b>{fmt_amount(price)} BYN</b>"
+        )
+
+    def ride_arrived_notification(self, ride: Ride) -> str:
+        lines = [
+            "🏁 <b>Приехали!</b>\n",
+            f"📍 Маршрут: {route_str(ride) or '—'}",
+            f"🕒 Отправление: {self._clock.fmt(ride.departure_at)}",
+        ]
+        lines.extend(self._track_stats_lines(ride))
+        return "\n".join(lines)
+
+    def tracking_started_admin_log(self, ride: Ride) -> str:
+        return (
+            f"🚙 <b>Трекинг поездки запущен</b>\n\n"
+            f"Поездка {self._clock.fmt(ride.departure_at)}\n"
+            f"{route_line(ride)}"
+            "Бот следит за live-гео и завершит поездку автоматически "
+            "по прибытии в точку назначения."
+        )
+
+    def tracking_stopped_admin_log(self, ride_id: int) -> str:
+        return (
+            f"⚠️ <b>Live-гео поездки #{ride_id} остановлено.</b>\n\n"
+            "Трекинг прекращён. Завершите поездку вручную в меню поездок."
         )
 
     def ride_reminder_admin_notification(self, ride: Ride, approved_count: int) -> str:

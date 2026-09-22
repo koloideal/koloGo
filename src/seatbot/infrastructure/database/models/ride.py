@@ -4,7 +4,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, Integer, Numeric, String, func
+from sqlalchemy import BigInteger, Boolean, Float, Integer, Numeric, String, func
 from sqlalchemy.dialects.postgresql import TIMESTAMP
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -29,6 +29,19 @@ class Ride(Base):
     remind_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=30, server_default="30")
     remind_sent: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     vip_hold_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    origin_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
+    origin_lon: Mapped[float | None] = mapped_column(Float, nullable=True)
+    destination_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
+    destination_lon: Mapped[float | None] = mapped_column(Float, nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    track_distance_m: Mapped[float] = mapped_column(Float, nullable=False, default=0, server_default="0")
+    live_chat_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    live_message_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    arrive_streak: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    awaiting_live_geo: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
     )

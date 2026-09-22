@@ -1,16 +1,76 @@
-from aiogram.types import Message
+from aiogram.types import CallbackQuery, Message
 from aiogram_dialog import Dialog, DialogManager, Window
 from aiogram_dialog.widgets.input import MessageInput
-from aiogram_dialog.widgets.kbd import Cancel, SwitchTo
+from aiogram_dialog.widgets.kbd import Button, Cancel, ScrollingGroup, Select, SwitchTo
 from aiogram_dialog.widgets.text import Const, Format
 from dishka import FromDishka
 from dishka.integrations.aiogram_dialog import inject
 
 from seatbot.application.services.payment import PaymentService
 from seatbot.application.services.vip import VipService
+from seatbot.infrastructure.database.dao import LocationsDAO
 from seatbot.infrastructure.notifications import fmt_amount
 
 from ..user_dialogs.states import AdminSettingsSG
+
+
+@inject
+async def get_locations_list(
+    dialog_manager: DialogManager,
+    locations_dao: FromDishka[LocationsDAO],
+    **_kwargs,
+):
+    locations = await locations_dao.list_all()
+    items = [
+        {"location_id": loc.location_id, "title": f"🗑 {loc.name}"} for loc in locations
+    ]
+    return {
+        "has_locations": bool(items),
+        "locations": items,
+        "empty_text": "📍 Точек пока нет. Добавьте первую.",
+        "back_btn": "⬅️ К настройкам",
+    }
+
+
+async def on_add_location(callback: CallbackQuery, button: Button, manager: DialogManager):
+    await manager.switch_to(AdminSettingsSG.location_name)
+
+
+async def on_delete_location(
+    callback: CallbackQuery,
+    select: Select,
+    manager: DialogManager,
+    item_id: str,
+):
+    container = manager.middleware_data["dishka_container"]
+    locations_dao: LocationsDAO = await container.get(LocationsDAO)
+    await locations_dao.delete(int(item_id))
+    await callback.answer("🗑 Точка удалена", show_alert=True)
+
+
+async def on_location_name_input(message: Message, widget: MessageInput, manager: DialogManager):
+    name = (message.text or "").strip()[:128]
+    if not name:
+        await message.answer("❌ Введите название точки.")
+        return
+    manager.dialog_data["location_name"] = name
+    await manager.next()
+
+
+async def on_location_geo_input(message: Message, widget: MessageInput, manager: DialogManager):
+    if not message.location:
+        await message.answer("❌ Отправьте геолокацию точки (📎 → Геопозиция).")
+        return
+    container = manager.middleware_data["dishka_container"]
+    locations_dao: LocationsDAO = await container.get(LocationsDAO)
+    name = manager.dialog_data["location_name"]
+    await locations_dao.create(name, message.location.latitude, message.location.longitude)
+    await message.answer(f"✅ Точка «{name}» сохранена.")
+    await manager.switch_to(AdminSettingsSG.locations)
+
+
+async def on_location_wrong_input(message: Message, widget: MessageInput, manager: DialogManager):
+    await message.answer("❌ Отправьте геолокацию точки (📎 → Геопозиция).")
 
 
 @inject
@@ -98,6 +158,11 @@ settings_dialog = Dialog(
             id="edit_stars_rate",
             state=AdminSettingsSG.stars_rate,
         ),
+        SwitchTo(
+            Const("📍 Точки маршрута"),
+            id="locations",
+            state=AdminSettingsSG.locations,
+        ),
         Cancel(Format("{back_btn}")),
         state=AdminSettingsSG.main,
         getter=get_settings_main,
@@ -127,5 +192,42 @@ settings_dialog = Dialog(
         MessageInput(on_stars_rate_input),
         SwitchTo(Const("⬅️ Назад"), id="back", state=AdminSettingsSG.main),
         state=AdminSettingsSG.stars_rate,
+    ),
+    Window(
+        Const("📍 <b>Точки маршрута</b>\n\nНажмите на точку, чтобы удалить её."),
+        ScrollingGroup(
+            Select(
+                Format("{item[title]}"),
+                id="loc_sel",
+                item_id_getter=lambda item: str(item["location_id"]),
+                items="locations",
+                on_click=on_delete_location,
+                when="has_locations",
+            ),
+            width=1,
+            height=8,
+            id="loc_scroll",
+        ),
+        Format("{empty_text}", when="not has_locations"),
+        Button(Const("➕ Добавить точку"), id="add_loc", on_click=on_add_location),
+        SwitchTo(Format("{back_btn}"), id="back", state=AdminSettingsSG.main),
+        state=AdminSettingsSG.locations,
+        getter=get_locations_list,
+    ),
+    Window(
+        Const("📍 <b>Новая точка</b>\n\nВведите название (например, <code>Колледж</code>):"),
+        MessageInput(on_location_name_input),
+        SwitchTo(Const("⬅️ Назад"), id="back", state=AdminSettingsSG.locations),
+        state=AdminSettingsSG.location_name,
+    ),
+    Window(
+        Const(
+            "📍 <b>Геопозиция точки</b>\n\n"
+            "Отправьте геолокацию этой точки (📎 → Геопозиция)."
+        ),
+        MessageInput(on_location_geo_input, content_types=["location"]),
+        MessageInput(on_location_wrong_input, content_types=["text"]),
+        SwitchTo(Const("⬅️ Назад"), id="back", state=AdminSettingsSG.locations),
+        state=AdminSettingsSG.location_geo,
     ),
 )

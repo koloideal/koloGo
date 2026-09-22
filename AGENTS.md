@@ -34,7 +34,9 @@ Telegram-бот на aiogram для менеджмента платных пое
 
 ## Доменная модель
 - **User**: пассажир. Поля: `balance` (депозит), `is_banned` (ЧС), `is_vip` (бесплатно + авто-апрув), `is_admin` (водитель).
-- **Ride**: поездка. `departure_at`, `origin`/`destination` (маршрут), `price` (0 = бесплатная), `seats_total` (задаётся при создании), `is_visible` (публикация), `auto_approve`, `status` (open/closed/completed/cancelled).
+- **Ride**: поездка. `departure_at`, `origin`/`destination` (маршрут, NOT NULL; координаты `*_lat`/`*_lon` опциональны), `price` (0 = бесплатная), `seats_total` (задаётся при создании), `is_visible` (публикация), `auto_approve`, `status` (open/closed/in_progress/completed/cancelled). Трекинг: `started_at`, `finished_at`, `track_distance_m`, live-поля в ORM.
+- **Location**: именованная гео-точка для маршрутов (название + lat/lon), управляется через Настройки.
+- **RideTrackPoint**: точка трека поездки (seq + lat/lon), пишется во время live-гео трекинга.
 - **Booking**: бронь 1 места. `status` (pending/approved/rejected/cancelled/completed/no_show), `paid_amount` (сколько списано с депозита).
 - **Transaction**: движение депозита. `type` (admin_topup/admin_decrease/ride_payment/refund), `amount`, `ride_id?`.
 
@@ -46,3 +48,4 @@ Telegram-бот на aiogram для менеджмента платных пое
 - Скрытая поездка (`is_visible=False`): не видна в списке для тех, кто не забронировал; забронировавшие видят свою бронь.
 - Отмена поездки админом → возврат всем + уведомление.
 - No-show: админ отмечает, возврата нет, в статистику не идёт как completed.
+- Трекинг поездки: админ жмёт «Старт поездки» → шлёт live-гео → статус `in_progress`, точки в `ride_track_points`; прибытие — `arrival_radius_m` (20м) × `arrival_debounce` (2) подряд → авто-завершение + стата (время/дистанция/ср. скорость) пассажирам и админу. Стоп live-гео → трекинг снимается, поездка завершается вручную.

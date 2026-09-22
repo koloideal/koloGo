@@ -6,6 +6,7 @@ from enum import Enum
 class RideStatus(str, Enum):
     OPEN = "open"
     CLOSED = "closed"
+    IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
     CANCELLED = "cancelled"
 
@@ -63,6 +64,13 @@ class Ride:
     note: str | None = None
     remind_minutes: int = 30
     vip_hold_minutes: int = 0
+    origin_lat: float | None = None
+    origin_lon: float | None = None
+    destination_lat: float | None = None
+    destination_lon: float | None = None
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+    track_distance_m: float = 0.0
 
     @property
     def is_free(self) -> bool:
@@ -100,6 +108,15 @@ class Transaction:
     payment_id: str | None = None
     payment_url: str | None = None
     status: TransactionStatus = TransactionStatus.COMPLETED
+
+
+@dataclass
+class Location:
+    location_id: int
+    name: str
+    lat: float
+    lon: float
+    created_at: datetime
 
 
 @dataclass

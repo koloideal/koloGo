@@ -16,13 +16,15 @@ from seatbot.application.services.deposit import DepositService
 from seatbot.application.services.payment import PaymentService
 from seatbot.application.services.ride import RideService
 from seatbot.application.services.statistics import StatisticsService
+from seatbot.application.services.tracking import TrackingService
 from seatbot.application.services.user import UserService
 from seatbot.application.services.vip import VipService
 from seatbot.infrastructure.cache import CacheKeys, RedisService
 from seatbot.infrastructure.config.models import Config
 from seatbot.infrastructure.database.config import new_session_maker
-from seatbot.infrastructure.database.dao import (BookingsDAO, RequisitesDAO, RidesDAO,
-                                                 SettingsDAO, TransactionsDAO, UsersDAO)
+from seatbot.infrastructure.database.dao import (BookingsDAO, LocationsDAO, RequisitesDAO,
+                                                 RidesDAO, SettingsDAO, TrackPointsDAO,
+                                                 TransactionsDAO, UsersDAO)
 from seatbot.infrastructure.notifications import MessageBuilder
 from seatbot.infrastructure.payments import CryptoBotPaymentService
 from seatbot.infrastructure.scheduling.payment_poller import PaymentStatusPoller
@@ -68,6 +70,14 @@ class DatabaseProvider(Provider):
     @provide
     def get_settings_dao(self, session: AsyncSession) -> SettingsDAO:
         return SettingsDAO(session)
+
+    @provide
+    def get_locations_dao(self, session: AsyncSession) -> LocationsDAO:
+        return LocationsDAO(session)
+
+    @provide
+    def get_track_points_dao(self, session: AsyncSession) -> TrackPointsDAO:
+        return TrackPointsDAO(session)
 
 
 class RedisProvider(Provider):
@@ -220,6 +230,29 @@ class ServicesProvider(Provider):
     ) -> PaymentService:
         return PaymentService(
             transactions_dao, settings_dao, cryptobot_service, poller, users_dao, message_builder
+        )
+
+    @provide
+    def get_tracking_service(
+        self,
+        rides_dao: RidesDAO,
+        bookings_dao: BookingsDAO,
+        track_dao: TrackPointsDAO,
+        ride_service: RideService,
+        bot_service: BotService,
+        message_builder: MessageBuilder,
+        clock: LocalClock,
+        config: Config,
+    ) -> TrackingService:
+        return TrackingService(
+            rides_dao,
+            bookings_dao,
+            track_dao,
+            ride_service,
+            bot_service,
+            message_builder,
+            clock,
+            config,
         )
 
 

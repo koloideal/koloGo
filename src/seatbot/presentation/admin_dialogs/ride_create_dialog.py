@@ -5,15 +5,15 @@ from aiogram_dialog import Dialog, DialogManager, Window
 from aiogram_dialog.api.entities import ChatEvent
 from aiogram_dialog.widgets.input import MessageInput
 from aiogram_dialog.widgets.kbd import (Button, Calendar, Cancel, Column, ManagedCalendar,
-                                        ManagedTimeSelect, Row, Select, SwitchTo,
-                                        TimeSelect)
+                                        ManagedTimeSelect, Row, ScrollingGroup, Select,
+                                        SwitchTo, TimeSelect)
 from aiogram_dialog.widgets.kbd.time import OnValueChanged
 from aiogram_dialog.widgets.text import Const, Format
 from dishka import FromDishka
 from dishka.integrations.aiogram_dialog import inject
 
 from seatbot.application.services.ride import RideService
-from seatbot.infrastructure.database.dao import RidesDAO
+from seatbot.infrastructure.database.dao import LocationsDAO, RidesDAO
 from seatbot.infrastructure.notifications import fmt_amount, route_str
 from seatbot.infrastructure.time import LocalClock
 
@@ -135,6 +135,10 @@ async def get_price_data(
     }
 
 
+async def get_back_btn(dialog_manager: DialogManager, **_kwargs):
+    return {"back_btn": "⬅️ Назад"}
+
+
 async def get_seats_data(
     dialog_manager: DialogManager,
     **_kwargs,
@@ -150,30 +154,50 @@ async def get_seats_data(
     }
 
 
+@inject
 async def get_origin_data(
     dialog_manager: DialogManager,
+    locations_dao: FromDishka[LocationsDAO],
     **_kwargs,
 ):
+    locations = await locations_dao.list_all()
+    current = dialog_manager.dialog_data.get("origin")
     return {
         "origin_info": (
             "📍 <b>Место отправления</b>\n\n"
-            "Откуда отправляется поездка?\n"
-            "Введите текст или выберите кнопку."
+            "Выберите точку, отправьте геолокацию\n"
+            "или введите название текстом (без гео)."
         ),
+        "locations": [
+            {"location_id": loc.location_id, "name": loc.name} for loc in locations
+        ],
+        "has_locations": bool(locations),
+        "has_current": bool(current),
+        "current_name": current or "",
         "back_btn": "⬅️ Назад",
     }
 
 
+@inject
 async def get_destination_data(
     dialog_manager: DialogManager,
+    locations_dao: FromDishka[LocationsDAO],
     **_kwargs,
 ):
+    locations = await locations_dao.list_all()
+    current = dialog_manager.dialog_data.get("destination")
     return {
         "destination_info": (
             "🏁 <b>Место прибытия</b>\n\n"
-            "Куда едет поездка?\n"
-            "Введите текст или выберите кнопку."
+            "Выберите точку, отправьте геолокацию\n"
+            "или введите название текстом (без гео)."
         ),
+        "locations": [
+            {"location_id": loc.location_id, "name": loc.name} for loc in locations
+        ],
+        "has_locations": bool(locations),
+        "has_current": bool(current),
+        "current_name": current or "",
         "back_btn": "⬅️ Назад",
     }
 
@@ -274,41 +298,97 @@ on_time_changed = TimeChangedHandler()
 
 
 async def on_origin_input(message: Message, widget: MessageInput, manager: DialogManager):
+    if message.location:
+        manager.dialog_data["origin_lat"] = message.location.latitude
+        manager.dialog_data["origin_lon"] = message.location.longitude
+        await manager.switch_to(RideCreateSG.origin_name)
+        return
     origin = (message.text or "").strip()[:128]
     if not origin:
-        await message.answer("❌ Введите место отправления.")
+        await message.answer("❌ Введите название или отправьте геолокацию.")
         return
     manager.dialog_data["origin"] = origin
-    await manager.next()
+    manager.dialog_data["origin_lat"] = None
+    manager.dialog_data["origin_lon"] = None
+    await manager.switch_to(RideCreateSG.destination)
 
 
-async def on_origin_np(callback: CallbackQuery, button: Button, manager: DialogManager):
-    manager.dialog_data["origin"] = "Новое Поле"
-    await manager.next()
+async def on_keep_origin(callback: CallbackQuery, button: Button, manager: DialogManager):
+    await manager.switch_to(RideCreateSG.destination)
 
 
-async def on_origin_minsk(callback: CallbackQuery, button: Button, manager: DialogManager):
-    manager.dialog_data["origin"] = "Минск"
-    await manager.next()
+async def on_keep_destination(callback: CallbackQuery, button: Button, manager: DialogManager):
+    await manager.switch_to(RideCreateSG.price)
+
+
+async def on_origin_name_input(message: Message, widget: MessageInput, manager: DialogManager):
+    name = (message.text or "").strip()[:128]
+    if not name:
+        await message.answer("❌ Введите название точки отправления.")
+        return
+    manager.dialog_data["origin"] = name
+    await manager.switch_to(RideCreateSG.destination)
+
+
+@inject
+async def on_origin_location_selected(
+    callback: CallbackQuery,
+    select: Select,
+    manager: DialogManager,
+    item_id: str,
+    locations_dao: FromDishka[LocationsDAO],
+):
+    loc = await locations_dao.get_by_id(int(item_id))
+    if not loc:
+        await callback.answer("Точка не найдена", show_alert=True)
+        return
+    manager.dialog_data["origin"] = loc.name
+    manager.dialog_data["origin_lat"] = loc.lat
+    manager.dialog_data["origin_lon"] = loc.lon
+    await manager.switch_to(RideCreateSG.destination)
 
 
 async def on_destination_input(message: Message, widget: MessageInput, manager: DialogManager):
+    if message.location:
+        manager.dialog_data["destination_lat"] = message.location.latitude
+        manager.dialog_data["destination_lon"] = message.location.longitude
+        await manager.switch_to(RideCreateSG.destination_name)
+        return
     destination = (message.text or "").strip()[:128]
     if not destination:
-        await message.answer("❌ Введите место прибытия.")
+        await message.answer("❌ Введите название или отправьте геолокацию.")
         return
     manager.dialog_data["destination"] = destination
-    await manager.next()
+    manager.dialog_data["destination_lat"] = None
+    manager.dialog_data["destination_lon"] = None
+    await manager.switch_to(RideCreateSG.price)
 
 
-async def on_destination_np(callback: CallbackQuery, button: Button, manager: DialogManager):
-    manager.dialog_data["destination"] = "Новое Поле"
-    await manager.next()
+async def on_destination_name_input(message: Message, widget: MessageInput, manager: DialogManager):
+    name = (message.text or "").strip()[:128]
+    if not name:
+        await message.answer("❌ Введите название точки прибытия.")
+        return
+    manager.dialog_data["destination"] = name
+    await manager.switch_to(RideCreateSG.price)
 
 
-async def on_destination_minsk(callback: CallbackQuery, button: Button, manager: DialogManager):
-    manager.dialog_data["destination"] = "Минск"
-    await manager.next()
+@inject
+async def on_destination_location_selected(
+    callback: CallbackQuery,
+    select: Select,
+    manager: DialogManager,
+    item_id: str,
+    locations_dao: FromDishka[LocationsDAO],
+):
+    loc = await locations_dao.get_by_id(int(item_id))
+    if not loc:
+        await callback.answer("Точка не найдена", show_alert=True)
+        return
+    manager.dialog_data["destination"] = loc.name
+    manager.dialog_data["destination_lat"] = loc.lat
+    manager.dialog_data["destination_lon"] = loc.lon
+    await manager.switch_to(RideCreateSG.price)
 
 
 async def on_price_input(message: Message, widget: MessageInput, manager: DialogManager):
@@ -434,6 +514,10 @@ async def on_create(
     seats_total: int = manager.dialog_data.get("seats_total", 4)
     origin: str = manager.dialog_data["origin"]
     destination: str = manager.dialog_data["destination"]
+    origin_lat: float | None = manager.dialog_data.get("origin_lat")
+    origin_lon: float | None = manager.dialog_data.get("origin_lon")
+    destination_lat: float | None = manager.dialog_data.get("destination_lat")
+    destination_lon: float | None = manager.dialog_data.get("destination_lon")
 
     d = date.fromisoformat(date_str)
     departure_at = clock.local_dt(d.year, d.month, d.day, hour, minute)
@@ -446,6 +530,10 @@ async def on_create(
         note=note,
         origin=origin,
         destination=destination,
+        origin_lat=origin_lat,
+        origin_lon=origin_lon,
+        destination_lat=destination_lat,
+        destination_lon=destination_lon,
         is_visible=is_visible,
         repeat_days=repeat_days,
         remind_minutes=remind_minutes,
@@ -480,6 +568,10 @@ async def on_template_selected(
     manager.dialog_data["seats_total"] = template.seats_total
     manager.dialog_data["origin"] = template.origin
     manager.dialog_data["destination"] = template.destination
+    manager.dialog_data["origin_lat"] = template.origin_lat
+    manager.dialog_data["origin_lon"] = template.origin_lon
+    manager.dialog_data["destination_lat"] = template.destination_lat
+    manager.dialog_data["destination_lon"] = template.destination_lon
     await callback.answer("Шаблон загружен, выберите дату", show_alert=True)
     await manager.switch_to(RideCreateSG.calendar)
 
@@ -530,26 +622,72 @@ ride_create_dialog = Dialog(
     # 3b. Место отправления
     Window(
         Format("{origin_info}"),
-        MessageInput(on_origin_input),
-        Row(
-            Button(Const("Новое Поле"), id="origin_np", on_click=on_origin_np),
-            Button(Const("Минск"), id="origin_minsk", on_click=on_origin_minsk),
+        MessageInput(on_origin_input, content_types=["location", "text"]),
+        ScrollingGroup(
+            Select(
+                Format("📍 {item[name]}"),
+                id="origin_loc_sel",
+                item_id_getter=lambda item: str(item["location_id"]),
+                items="locations",
+                on_click=on_origin_location_selected,
+                when="has_locations",
+            ),
+            width=1,
+            height=6,
+            id="origin_loc_scroll",
+        ),
+        Button(
+            Format("➡️ Оставить: {current_name}"),
+            id="keep_origin",
+            on_click=on_keep_origin,
+            when="has_current",
         ),
         SwitchTo(Format("{back_btn}"), id="back", state=RideCreateSG.time),
         state=RideCreateSG.origin,
         getter=get_origin_data,
     ),
-    # 3c. Место прибытия
+    # 3c. Название точки отправления (после гео)
+    Window(
+        Const("📍 <b>Название точки отправления</b>\n\nВведите название для этой геоточки:"),
+        MessageInput(on_origin_name_input),
+        SwitchTo(Format("{back_btn}"), id="back", state=RideCreateSG.origin),
+        state=RideCreateSG.origin_name,
+        getter=get_back_btn,
+    ),
+    # 3d. Место прибытия
     Window(
         Format("{destination_info}"),
-        MessageInput(on_destination_input),
-        Row(
-            Button(Const("Новое Поле"), id="dest_np", on_click=on_destination_np),
-            Button(Const("Минск"), id="dest_minsk", on_click=on_destination_minsk),
+        MessageInput(on_destination_input, content_types=["location", "text"]),
+        ScrollingGroup(
+            Select(
+                Format("📍 {item[name]}"),
+                id="dest_loc_sel",
+                item_id_getter=lambda item: str(item["location_id"]),
+                items="locations",
+                on_click=on_destination_location_selected,
+                when="has_locations",
+            ),
+            width=1,
+            height=6,
+            id="dest_loc_scroll",
+        ),
+        Button(
+            Format("➡️ Оставить: {current_name}"),
+            id="keep_destination",
+            on_click=on_keep_destination,
+            when="has_current",
         ),
         SwitchTo(Format("{back_btn}"), id="back", state=RideCreateSG.origin),
         state=RideCreateSG.destination,
         getter=get_destination_data,
+    ),
+    # 3e. Название точки прибытия (после гео)
+    Window(
+        Const("🏁 <b>Название точки прибытия</b>\n\nВведите название для этой геоточки:"),
+        MessageInput(on_destination_name_input),
+        SwitchTo(Format("{back_btn}"), id="back", state=RideCreateSG.destination),
+        state=RideCreateSG.destination_name,
+        getter=get_back_btn,
     ),
     # 4. Цена
     Window(
