@@ -10,7 +10,7 @@ from dishka.integrations.aiogram_dialog import inject
 from seatbot.application.services.ride import RideService
 from seatbot.domain.schemas import RideStatus
 from seatbot.infrastructure.database.dao import RidesDAO
-from seatbot.infrastructure.notifications import MessageBuilder, fmt_amount
+from seatbot.infrastructure.notifications import MessageBuilder, fmt_amount, route_str
 from seatbot.infrastructure.time import LocalClock
 
 from ..user_dialogs.states import RideBookingsSG, RidesMgmtSG
@@ -37,12 +37,14 @@ async def get_rides_list(
     for rws in rides:
         emoji = _STATUS_EMOJI.get(rws.ride.status, "•")
         price_str = "бесплатно" if rws.ride.is_free else f"{fmt_amount(rws.ride.price)} BYN"
+        route = route_str(rws.ride)
+        route_part = f" • {route}" if route else ""
         items.append(
             {
                 "ride_id": rws.ride.ride_id,
                 "title": (
                     f"{emoji} {clock.fmt(rws.ride.departure_at, '%d.%m %H:%M')} • "
-                    f"{price_str} • {rws.free_seats}/{rws.ride.seats_total} мест"
+                    f"{price_str} • {rws.free_seats}/{rws.ride.seats_total} мест{route_part}"
                 ),
             }
         )

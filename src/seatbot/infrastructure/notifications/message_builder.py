@@ -30,6 +30,21 @@ def user_display(username: str | None, first_name: str | None, user_id: int) -> 
     return f"id{user_id}"
 
 
+def route_str(ride: Ride) -> str | None:
+    if ride.origin and ride.destination:
+        return f"{escape(ride.origin)} → {escape(ride.destination)}"
+    if ride.origin:
+        return escape(ride.origin)
+    if ride.destination:
+        return escape(ride.destination)
+    return None
+
+
+def route_line(ride: Ride) -> str:
+    route = route_str(ride)
+    return f"📍 Маршрут: {route}\n" if route else ""
+
+
 class MessageBuilder:
     def __init__(self, clock: LocalClock) -> None:
         self._clock = clock
@@ -51,6 +66,11 @@ class MessageBuilder:
         lines = [
             f"{status_emoji} <b>Поездка</b>",
             f"🕒 Отправление: <b>{self._clock.fmt(r.departure_at)}</b>",
+        ]
+        route = route_str(r)
+        if route:
+            lines.append(f"📍 Маршрут: <b>{route}</b>")
+        lines += [
             f"💰 Цена: <b>{price_str}</b>",
             f"🪑 Свободно мест: <b>{free}/{r.seats_total}</b>",
         ]
@@ -93,6 +113,11 @@ class MessageBuilder:
         lines = [
             f"<b>Бронь #{booking.booking_id}</b>",
             f"🕒 {self._clock.fmt(ride.departure_at)}",
+        ]
+        route = route_str(ride)
+        if route:
+            lines.append(f"📍 {route}")
+        lines += [
             payment,
             f"📋 Статус: {status_map.get(booking.status, BOOKING_STATUS_RU.get(booking.status, '—'))}",
         ]
@@ -104,6 +129,7 @@ class MessageBuilder:
         text = (
             f"✅ <b>Ваша бронь одобрена!</b>\n\n"
             f"Поездка в {self._clock.fmt(ride.departure_at)}.\n"
+            f"{route_line(ride)}"
             f"Жду вас, место закреплено."
         )
         if due_amount > 0:
@@ -114,6 +140,7 @@ class MessageBuilder:
         text = (
             f"❌ <b>Ваша бронь отклонена.</b>\n\n"
             f"Поездка в {self._clock.fmt(ride.departure_at)}.\n"
+            f"{route_line(ride)}"
         )
         if paid_amount > 0:
             text += f"Депозит <b>{fmt_amount(paid_amount)} BYN</b> возвращён на ваш баланс."
@@ -127,6 +154,7 @@ class MessageBuilder:
         text = (
             f"🚫 <b>Поездка отменена водителем.</b>\n\n"
             f"Поездка в {self._clock.fmt(ride.departure_at)}.\n"
+            f"{route_line(ride)}"
         )
         if paid_amount > 0:
             text += f"Депозит <b>{fmt_amount(paid_amount)} BYN</b> возвращён на ваш баланс."
@@ -142,6 +170,7 @@ class MessageBuilder:
         text = (
             f"🏁 <b>Поездка завершена.</b>\n\n"
             f"🕒 Отправление: {self._clock.fmt(ride.departure_at)}\n"
+            f"{route_line(ride)}"
         )
         if is_free:
             text += "💰 Поездка бесплатная."
@@ -156,6 +185,7 @@ class MessageBuilder:
         return (
             f"🙅 <b>Отмечено, что вы не явились.</b>\n\n"
             f"Поездка в {self._clock.fmt(ride.departure_at)}.\n"
+            f"{route_line(ride)}"
             f"Возврат депозита не производится."
         )
 
@@ -163,6 +193,7 @@ class MessageBuilder:
         text = (
             f"🚫 <b>Вас убрали из поездки.</b>\n\n"
             f"Поездка в {self._clock.fmt(ride.departure_at)}.\n"
+            f"{route_line(ride)}"
         )
         if reason:
             text += f"Причина: <i>{escape(reason)}</i>\n"
@@ -181,6 +212,7 @@ class MessageBuilder:
         return (
             f"🚫 <b>Пользователь отменил бронь</b>\n"
             f"Поездка {self._clock.fmt(ride.departure_at)}\n"
+            f"{route_line(ride)}"
             f"Пользователь: {user_display(user.username, user.first_name, user.user_id)} "
             f"({user.user_id}){vip_marker}\n"
             f"Бронь #{booking.booking_id}, оплата: {payment}"
@@ -198,6 +230,7 @@ class MessageBuilder:
         return (
             f"🆕 <b>Новая бронь</b>\n"
             f"Поездка {self._clock.fmt(ride.departure_at)}\n"
+            f"{route_line(ride)}"
             f"Пользователь: {user_display(user.username, user.first_name, user.user_id)} "
             f"({user.user_id}){vip_marker}\n"
             f"Бронь #{booking.booking_id}, оплата: {payment}"
@@ -246,6 +279,7 @@ class MessageBuilder:
         return (
             "🚗 <b>Новая поездка!</b>\n\n"
             f"🕒 Отправление: <b>{self._clock.fmt(ride.departure_at)}</b>\n"
+            f"{route_line(ride)}"
             f"💰 Цена: <b>{price}</b>{note}{hold}\n\n"
             "Откройте раздел «Поездки», чтобы забронировать место."
         )
@@ -254,6 +288,7 @@ class MessageBuilder:
         text = (
             f"✅ <b>Вас добавили в поездку!</b>\n\n"
             f"Поездка в {self._clock.fmt(ride.departure_at)}.\n"
+            f"{route_line(ride)}"
             f"Место закреплено за вами. Жду вас!"
         )
         if due_amount > 0:
@@ -266,12 +301,14 @@ class MessageBuilder:
             f"Поездка отправляется через "
             f"{ride.remind_minutes} мин.\n"
             f"🕒 Время: {self._clock.fmt(ride.departure_at)}\n"
+            f"{route_line(ride)}"
             f"Не опаздывайте!"
         )
 
     def ride_time_changed_notification(self, ride: Ride, old_departure: datetime) -> str:
         return (
             f"🕒 <b>Время поездки изменено!</b>\n\n"
+            f"{route_line(ride)}"
             f"Было: <s>{self._clock.fmt(old_departure)}</s>\n"
             f"Стало: <b>{self._clock.fmt(ride.departure_at)}</b>\n\n"
             "Пожалуйста, учитывайте новое время."
@@ -280,6 +317,7 @@ class MessageBuilder:
     def ride_time_changed_admin_log(self, ride: Ride, old_departure: datetime, approved_count: int) -> str:
         return (
             f"🕒 <b>Изменено время поездки</b>\n\n"
+            f"{route_line(ride)}"
             f"Было: <s>{self._clock.fmt(old_departure)}</s>\n"
             f"Стало: <b>{self._clock.fmt(ride.departure_at)}</b>\n"
             f"Уведомлено пассажиров: <b>{approved_count}</b>"
@@ -339,6 +377,7 @@ class MessageBuilder:
         return (
             f"⏰ <b>Напоминание: поездка скоро отправляется</b>\n\n"
             f"🕒 Время: {self._clock.fmt(ride.departure_at)}\n"
+            f"{route_line(ride)}"
             f"⏳ Через: <b>{ride.remind_minutes} мин.</b>\n"
             f"🪑 Подтверждённых пассажиров: <b>{approved_count}</b>"
         )

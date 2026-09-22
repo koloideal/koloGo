@@ -42,6 +42,8 @@ class RideService:
         repeat_days: int = 1,
         remind_minutes: int = 30,
         vip_hold_minutes: int = 0,
+        origin: str | None = None,
+        destination: str | None = None,
         template_ride_id: int | None = None,
     ) -> list[Ride]:
         rides = []
@@ -56,6 +58,8 @@ class RideService:
                 is_visible=is_visible,
                 remind_minutes=remind_minutes,
                 vip_hold_minutes=vip_hold_minutes,
+                origin=origin,
+                destination=destination,
             )
             rides.append(ride)
         if template_ride_id is not None:
@@ -92,6 +96,8 @@ class RideService:
             repeat_days=repeat_days,
             remind_minutes=template.remind_minutes,
             vip_hold_minutes=template.vip_hold_minutes,
+            origin=template.origin,
+            destination=template.destination,
             template_ride_id=template_ride_id,
         )
 

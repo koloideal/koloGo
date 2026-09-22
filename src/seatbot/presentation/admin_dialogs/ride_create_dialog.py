@@ -14,7 +14,7 @@ from dishka.integrations.aiogram_dialog import inject
 
 from seatbot.application.services.ride import RideService
 from seatbot.infrastructure.database.dao import RidesDAO
-from seatbot.infrastructure.notifications import fmt_amount
+from seatbot.infrastructure.notifications import fmt_amount, route_str
 from seatbot.infrastructure.time import LocalClock
 
 from ..user_dialogs.states import RideCreateSG
@@ -35,10 +35,12 @@ async def get_templates(
         price_str = "бесплатно" if t.is_free else f"{fmt_amount(t.price)} BYN"
         time_str = clock.fmt(t.departure_at, "%H:%M")
         note_str = f" • {t.note}" if t.note else ""
+        route = route_str(t)
+        route_str_ = f" • {route}" if route else ""
         items.append(
             {
                 "ride_id": t.ride_id,
-                "title": f"🕒 {time_str} • {price_str} • {t.seats_total} мест{note_str}",
+                "title": f"🕒 {time_str} • {price_str} • {t.seats_total} мест{route_str_}{note_str}",
             }
         )
     return {"has_templates": True, "templates": items, "back_btn": "⬅️ В панель"}
@@ -148,6 +150,34 @@ async def get_seats_data(
     }
 
 
+async def get_origin_data(
+    dialog_manager: DialogManager,
+    **_kwargs,
+):
+    return {
+        "origin_info": (
+            "📍 <b>Место отправления</b>\n\n"
+            "Откуда отправляется поездка?\n"
+            "Введите текст (например, <code>Колледж</code>)."
+        ),
+        "back_btn": "⬅️ Назад",
+    }
+
+
+async def get_destination_data(
+    dialog_manager: DialogManager,
+    **_kwargs,
+):
+    return {
+        "destination_info": (
+            "🏁 <b>Место прибытия</b>\n\n"
+            "Куда едет поездка?\n"
+            "Введите текст (например, <code>Минск, вокзал</code>)."
+        ),
+        "back_btn": "⬅️ Назад",
+    }
+
+
 async def get_confirm_data(
     dialog_manager: DialogManager,
     **_kwargs,
@@ -162,6 +192,9 @@ async def get_confirm_data(
     remind_minutes = dialog_manager.dialog_data.get("remind_minutes", 30)
     vip_hold_minutes = dialog_manager.dialog_data.get("vip_hold_minutes", 0)
     seats_total = dialog_manager.dialog_data.get("seats_total", 4)
+    origin = dialog_manager.dialog_data.get("origin")
+    destination = dialog_manager.dialog_data.get("destination")
+    route = f"{origin} → {destination}" if origin and destination else (origin or destination or "—")
     price_str = "Бесплатно" if price <= 0 else f"{fmt_amount(price)} BYN"
     repeat_str = f"{repeat_days} дн." if repeat_days > 1 else "1 день"
     remind_str = f"{remind_minutes} мин." if remind_minutes > 0 else "выключено"
@@ -170,6 +203,7 @@ async def get_confirm_data(
         "📝 <b>Подтвердите создание поездки</b>\n\n"
         f"📅 Дата: <b>{selected_date}</b>\n"
         f"🕒 Время: <b>{selected_time}</b>\n"
+        f"📍 Маршрут: <b>{route}</b>\n"
         f"💰 Цена: <b>{price_str}</b>\n"
         f"🪑 Мест: <b>{seats_total}</b>\n"
         f"🔁 Повтор: <b>{repeat_str}</b>\n"
@@ -237,6 +271,24 @@ class TimeChangedHandler(OnValueChanged):
 
 
 on_time_changed = TimeChangedHandler()
+
+
+async def on_origin_input(message: Message, widget: MessageInput, manager: DialogManager):
+    origin = (message.text or "").strip()[:128]
+    if not origin:
+        await message.answer("❌ Введите место отправления.")
+        return
+    manager.dialog_data["origin"] = origin
+    await manager.next()
+
+
+async def on_destination_input(message: Message, widget: MessageInput, manager: DialogManager):
+    destination = (message.text or "").strip()[:128]
+    if not destination:
+        await message.answer("❌ Введите место прибытия.")
+        return
+    manager.dialog_data["destination"] = destination
+    await manager.next()
 
 
 async def on_price_input(message: Message, widget: MessageInput, manager: DialogManager):
@@ -360,6 +412,8 @@ async def on_create(
     remind_minutes: int = manager.dialog_data.get("remind_minutes", 30)
     vip_hold_minutes: int = manager.dialog_data.get("vip_hold_minutes", 0)
     seats_total: int = manager.dialog_data.get("seats_total", 4)
+    origin: str | None = manager.dialog_data.get("origin")
+    destination: str | None = manager.dialog_data.get("destination")
 
     d = date.fromisoformat(date_str)
     departure_at = clock.local_dt(d.year, d.month, d.day, hour, minute)
@@ -370,6 +424,8 @@ async def on_create(
         auto_approve=auto_approve,
         seats_total=seats_total,
         note=note,
+        origin=origin,
+        destination=destination,
         is_visible=is_visible,
         repeat_days=repeat_days,
         remind_minutes=remind_minutes,
@@ -402,6 +458,8 @@ async def on_template_selected(
     manager.dialog_data["remind_minutes"] = template.remind_minutes
     manager.dialog_data["vip_hold_minutes"] = template.vip_hold_minutes
     manager.dialog_data["seats_total"] = template.seats_total
+    manager.dialog_data["origin"] = template.origin
+    manager.dialog_data["destination"] = template.destination
     await callback.answer("Шаблон загружен, выберите дату", show_alert=True)
     await manager.switch_to(RideCreateSG.calendar)
 
@@ -449,11 +507,27 @@ ride_create_dialog = Dialog(
         state=RideCreateSG.time,
         getter=get_time_data,
     ),
+    # 3b. Место отправления
+    Window(
+        Format("{origin_info}"),
+        MessageInput(on_origin_input),
+        SwitchTo(Format("{back_btn}"), id="back", state=RideCreateSG.time),
+        state=RideCreateSG.origin,
+        getter=get_origin_data,
+    ),
+    # 3c. Место прибытия
+    Window(
+        Format("{destination_info}"),
+        MessageInput(on_destination_input),
+        SwitchTo(Format("{back_btn}"), id="back", state=RideCreateSG.origin),
+        state=RideCreateSG.destination,
+        getter=get_destination_data,
+    ),
     # 4. Цена
     Window(
         Format("{price_info}"),
         MessageInput(on_price_input),
-        SwitchTo(Format("{back_btn}"), id="back", state=RideCreateSG.time),
+        SwitchTo(Format("{back_btn}"), id="back", state=RideCreateSG.destination),
         state=RideCreateSG.price,
         getter=get_price_data,
     ),

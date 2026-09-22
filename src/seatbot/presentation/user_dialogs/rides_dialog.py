@@ -11,7 +11,7 @@ from seatbot.domain.exceptions import (AlreadyBookedError, NoFreeSeatsError,
                                        VipHoldActiveError)
 from seatbot.domain.schemas import BookingStatus
 from seatbot.infrastructure.database.dao import BookingsDAO, RidesDAO, UsersDAO
-from seatbot.infrastructure.notifications import MessageBuilder, fmt_amount
+from seatbot.infrastructure.notifications import MessageBuilder, fmt_amount, route_str
 from seatbot.infrastructure.time import LocalClock
 
 from .states import MainMenuSG, RidesSG
@@ -34,11 +34,14 @@ async def get_rides_list(
     items = []
     for rws in rides:
         price_str = "Бесплатно" if rws.ride.is_free else f"{fmt_amount(rws.ride.price)} BYN"
+        route = route_str(rws.ride)
+        route_part = f" • {route}" if route else ""
         items.append(
             {
                 "ride_id": rws.ride.ride_id,
                 "title": (
-                    f"{clock.fmt(rws.ride.departure_at, '%d.%m %H:%M')} • {price_str} • {rws.free_seats} мест"
+                    f"{clock.fmt(rws.ride.departure_at, '%d.%m %H:%M')} • {price_str} • "
+                    f"{rws.free_seats} мест{route_part}"
                 ),
             }
         )

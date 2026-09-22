@@ -34,7 +34,7 @@ Telegram-бот на aiogram для менеджмента платных пое
 
 ## Доменная модель
 - **User**: пассажир. Поля: `balance` (депозит), `is_banned` (ЧС), `is_vip` (бесплатно + авто-апрув), `is_admin` (водитель).
-- **Ride**: поездка. `departure_at`, `price` (0 = бесплатная), `seats_total` (задаётся при создании), `is_visible` (публикация), `auto_approve`, `status` (open/closed/completed/cancelled).
+- **Ride**: поездка. `departure_at`, `origin`/`destination` (маршрут), `price` (0 = бесплатная), `seats_total` (задаётся при создании), `is_visible` (публикация), `auto_approve`, `status` (open/closed/completed/cancelled).
 - **Booking**: бронь 1 места. `status` (pending/approved/rejected/cancelled/completed/no_show), `paid_amount` (сколько списано с депозита).
 - **Transaction**: движение депозита. `type` (admin_topup/admin_decrease/ride_payment/refund), `amount`, `ride_id?`.
 

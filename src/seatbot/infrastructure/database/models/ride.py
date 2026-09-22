@@ -24,6 +24,8 @@ class Ride(Base):
     auto_approve: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="open", server_default="open")
     note: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    origin: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    destination: Mapped[str | None] = mapped_column(String(128), nullable=True)
     remind_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=30, server_default="30")
     remind_sent: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     vip_hold_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
