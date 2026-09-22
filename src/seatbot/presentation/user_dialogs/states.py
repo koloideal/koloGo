@@ -51,6 +51,7 @@ class RideCreateSG(StatesGroup):
     calendar = State()
     time = State()
     price = State()
+    seats = State()
     auto_approve = State()
     visibility = State()
     note = State()

@@ -38,7 +38,7 @@ async def get_templates(
         items.append(
             {
                 "ride_id": t.ride_id,
-                "title": f"🕒 {time_str} • {price_str}{note_str}",
+                "title": f"🕒 {time_str} • {price_str} • {t.seats_total} мест{note_str}",
             }
         )
     return {"has_templates": True, "templates": items, "back_btn": "⬅️ В панель"}
@@ -133,6 +133,21 @@ async def get_price_data(
     }
 
 
+async def get_seats_data(
+    dialog_manager: DialogManager,
+    **_kwargs,
+):
+    return {
+        "seats_info": (
+            "🪑 <b>Количество мест</b>\n\n"
+            "Сколько пассажирских мест в поездке?\n"
+            "Введите число от 1 до 8.\n\n"
+            "Пример: <code>4</code>"
+        ),
+        "back_btn": "⬅️ Назад",
+    }
+
+
 async def get_confirm_data(
     dialog_manager: DialogManager,
     **_kwargs,
@@ -146,6 +161,7 @@ async def get_confirm_data(
     repeat_days = dialog_manager.dialog_data.get("repeat_days", 1)
     remind_minutes = dialog_manager.dialog_data.get("remind_minutes", 30)
     vip_hold_minutes = dialog_manager.dialog_data.get("vip_hold_minutes", 0)
+    seats_total = dialog_manager.dialog_data.get("seats_total", 4)
     price_str = "Бесплатно" if price <= 0 else f"{fmt_amount(price)} BYN"
     repeat_str = f"{repeat_days} дн." if repeat_days > 1 else "1 день"
     remind_str = f"{remind_minutes} мин." if remind_minutes > 0 else "выключено"
@@ -155,7 +171,7 @@ async def get_confirm_data(
         f"📅 Дата: <b>{selected_date}</b>\n"
         f"🕒 Время: <b>{selected_time}</b>\n"
         f"💰 Цена: <b>{price_str}</b>\n"
-        f"🪑 Мест: <b>4</b>\n"
+        f"🪑 Мест: <b>{seats_total}</b>\n"
         f"🔁 Повтор: <b>{repeat_str}</b>\n"
         f"⏰ Напоминание: <b>{remind_str}</b>\n"
         f"⭐ VIP-холд: <b>{vip_hold_str}</b>\n"
@@ -235,6 +251,19 @@ async def on_price_input(message: Message, widget: MessageInput, manager: Dialog
         )
         return
     manager.dialog_data["price"] = price
+    await manager.next()
+
+
+async def on_seats_input(message: Message, widget: MessageInput, manager: DialogManager):
+    text = (message.text or "").strip()
+    try:
+        seats = int(text)
+        if not 1 <= seats <= 8:
+            raise ValueError
+    except ValueError:
+        await message.answer("❌ Введите число от 1 до 8.")
+        return
+    manager.dialog_data["seats_total"] = seats
     await manager.next()
 
 
@@ -330,6 +359,7 @@ async def on_create(
     repeat_days: int = manager.dialog_data.get("repeat_days", 1)
     remind_minutes: int = manager.dialog_data.get("remind_minutes", 30)
     vip_hold_minutes: int = manager.dialog_data.get("vip_hold_minutes", 0)
+    seats_total: int = manager.dialog_data.get("seats_total", 4)
 
     d = date.fromisoformat(date_str)
     departure_at = clock.local_dt(d.year, d.month, d.day, hour, minute)
@@ -338,6 +368,7 @@ async def on_create(
         departure_at=departure_at,
         price=price,
         auto_approve=auto_approve,
+        seats_total=seats_total,
         note=note,
         is_visible=is_visible,
         repeat_days=repeat_days,
@@ -370,6 +401,7 @@ async def on_template_selected(
     manager.dialog_data["note"] = template.note
     manager.dialog_data["remind_minutes"] = template.remind_minutes
     manager.dialog_data["vip_hold_minutes"] = template.vip_hold_minutes
+    manager.dialog_data["seats_total"] = template.seats_total
     await callback.answer("Шаблон загружен, выберите дату", show_alert=True)
     await manager.switch_to(RideCreateSG.calendar)
 
@@ -425,11 +457,19 @@ ride_create_dialog = Dialog(
         state=RideCreateSG.price,
         getter=get_price_data,
     ),
+    # 4b. Количество мест
+    Window(
+        Format("{seats_info}"),
+        MessageInput(on_seats_input),
+        SwitchTo(Format("{back_btn}"), id="back", state=RideCreateSG.price),
+        state=RideCreateSG.seats,
+        getter=get_seats_data,
+    ),
     # 5. Повтор (на сколько дней)
     Window(
         Format("{repeat_info}"),
         MessageInput(on_repeat_input),
-        SwitchTo(Format("{back_btn}"), id="back", state=RideCreateSG.price),
+        SwitchTo(Format("{back_btn}"), id="back", state=RideCreateSG.seats),
         state=RideCreateSG.repeat_days,
         getter=get_repeat_data,
     ),
