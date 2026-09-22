@@ -158,7 +158,7 @@ async def get_origin_data(
         "origin_info": (
             "📍 <b>Место отправления</b>\n\n"
             "Откуда отправляется поездка?\n"
-            "Введите текст (например, <code>Колледж</code>)."
+            "Введите текст или выберите кнопку."
         ),
         "back_btn": "⬅️ Назад",
     }
@@ -172,7 +172,7 @@ async def get_destination_data(
         "destination_info": (
             "🏁 <b>Место прибытия</b>\n\n"
             "Куда едет поездка?\n"
-            "Введите текст (например, <code>Минск, вокзал</code>)."
+            "Введите текст или выберите кнопку."
         ),
         "back_btn": "⬅️ Назад",
     }
@@ -282,12 +282,32 @@ async def on_origin_input(message: Message, widget: MessageInput, manager: Dialo
     await manager.next()
 
 
+async def on_origin_np(callback: CallbackQuery, button: Button, manager: DialogManager):
+    manager.dialog_data["origin"] = "Новое Поле"
+    await manager.next()
+
+
+async def on_origin_minsk(callback: CallbackQuery, button: Button, manager: DialogManager):
+    manager.dialog_data["origin"] = "Минск"
+    await manager.next()
+
+
 async def on_destination_input(message: Message, widget: MessageInput, manager: DialogManager):
     destination = (message.text or "").strip()[:128]
     if not destination:
         await message.answer("❌ Введите место прибытия.")
         return
     manager.dialog_data["destination"] = destination
+    await manager.next()
+
+
+async def on_destination_np(callback: CallbackQuery, button: Button, manager: DialogManager):
+    manager.dialog_data["destination"] = "Новое Поле"
+    await manager.next()
+
+
+async def on_destination_minsk(callback: CallbackQuery, button: Button, manager: DialogManager):
+    manager.dialog_data["destination"] = "Минск"
     await manager.next()
 
 
@@ -511,6 +531,10 @@ ride_create_dialog = Dialog(
     Window(
         Format("{origin_info}"),
         MessageInput(on_origin_input),
+        Row(
+            Button(Const("Новое Поле"), id="origin_np", on_click=on_origin_np),
+            Button(Const("Минск"), id="origin_minsk", on_click=on_origin_minsk),
+        ),
         SwitchTo(Format("{back_btn}"), id="back", state=RideCreateSG.time),
         state=RideCreateSG.origin,
         getter=get_origin_data,
@@ -519,6 +543,10 @@ ride_create_dialog = Dialog(
     Window(
         Format("{destination_info}"),
         MessageInput(on_destination_input),
+        Row(
+            Button(Const("Новое Поле"), id="dest_np", on_click=on_destination_np),
+            Button(Const("Минск"), id="dest_minsk", on_click=on_destination_minsk),
+        ),
         SwitchTo(Format("{back_btn}"), id="back", state=RideCreateSG.origin),
         state=RideCreateSG.destination,
         getter=get_destination_data,
