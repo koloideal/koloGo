@@ -107,14 +107,44 @@ class BookingsDAO:
         )
         return int(result.scalar_one() or 0)
 
-    async def sum_paid_for_user(self, user_id: int) -> float:
-        result = await self.session.execute(
+    async def sum_spent_for_user(self, user_id: int) -> float:
+        paid_result = await self.session.execute(
             select(func.coalesce(func.sum(OrmBooking.paid_amount), 0)).where(
                 OrmBooking.user_id == user_id,
                 OrmBooking.status == BookingStatus.COMPLETED.value,
             )
         )
-        return float(result.scalar_one() or 0)
+        paid = float(paid_result.scalar_one() or 0)
+        fact_result = await self.session.execute(
+            select(func.coalesce(func.sum(OrmRide.price), 0))
+            .select_from(OrmBooking)
+            .join(OrmRide, OrmBooking.ride_id == OrmRide.id)
+            .join(OrmUser, OrmBooking.user_id == OrmUser.user_id)
+            .where(
+                OrmBooking.user_id == user_id,
+                OrmBooking.status == BookingStatus.COMPLETED.value,
+                OrmBooking.paid_amount == 0,
+                OrmRide.price > 0,
+                OrmUser.is_vip.is_(False),
+            )
+        )
+        return paid + float(fact_result.scalar_one() or 0)
+
+    async def top_route_for_user(self, user_id: int) -> tuple[str, str] | None:
+        result = await self.session.execute(
+            select(OrmRide.origin, OrmRide.destination)
+            .select_from(OrmBooking)
+            .join(OrmRide, OrmBooking.ride_id == OrmRide.id)
+            .where(
+                OrmBooking.user_id == user_id,
+                OrmBooking.status == BookingStatus.COMPLETED.value,
+            )
+            .group_by(OrmRide.origin, OrmRide.destination)
+            .order_by(func.count(OrmBooking.id).desc())
+            .limit(1)
+        )
+        row = result.first()
+        return (row.origin, row.destination) if row else None
 
     async def sum_fact_revenue(self) -> float:
         result = await self.session.execute(

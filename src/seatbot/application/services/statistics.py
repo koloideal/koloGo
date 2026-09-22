@@ -21,7 +21,8 @@ class StatisticsService:
         if not user:
             return None
         total_rides = await self._bookings_dao.count_completed_for_user(user_id)
-        total_spent = await self._bookings_dao.sum_paid_for_user(user_id)
+        total_spent = await self._bookings_dao.sum_spent_for_user(user_id)
+        top_route = await self._bookings_dao.top_route_for_user(user_id)
         bookings = await self._bookings_dao.list_for_user(user_id, limit=1)
         last_ride_at = bookings[0].created_at if bookings else None
         return UserStats(
@@ -34,6 +35,8 @@ class StatisticsService:
             is_banned=user.is_banned,
             last_ride_at=last_ride_at,
             first_name=user.first_name,
+            registration_date=user.registration_date,
+            top_route=f"{top_route[0]} → {top_route[1]}" if top_route else None,
         )
 
     async def overall_stats(self) -> OverallStats:
@@ -65,7 +68,8 @@ class StatisticsService:
         out: list[UserStats] = []
         for user in users:
             total_rides = await self._bookings_dao.count_completed_for_user(user.user_id)
-            total_spent = await self._bookings_dao.sum_paid_for_user(user.user_id)
+            total_spent = await self._bookings_dao.sum_spent_for_user(user.user_id)
+            top_route = await self._bookings_dao.top_route_for_user(user.user_id)
             bookings = await self._bookings_dao.list_for_user(user.user_id, limit=1)
             last_ride_at = bookings[0].created_at if bookings else None
             out.append(
@@ -80,6 +84,7 @@ class StatisticsService:
                     last_ride_at=last_ride_at,
                     first_name=user.first_name,
                     registration_date=user.registration_date,
+                    top_route=f"{top_route[0]} → {top_route[1]}" if top_route else None,
                 )
             )
         return out

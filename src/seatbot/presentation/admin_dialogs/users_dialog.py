@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from html import escape
 from types import MappingProxyType
 from typing import Any
 
@@ -94,6 +95,7 @@ async def get_user_detail(
         return {"user_text": "🚫 Пользователь не найден", "back_btn": "⬅️ Назад"}
     last_ride = stats.last_ride_at.strftime("%d.%m.%Y") if stats.last_ride_at else "—"
     uname = user_display(user.username, user.first_name, user.user_id)
+    top_route_line = f"📍 Частый маршрут: <b>{escape(stats.top_route)}</b>\n" if stats.top_route else ""
     text = (
         f"<b>👤 Клиент</b>\n\n"
         f"ID: <code>{user.user_id}</code>\n"
@@ -101,6 +103,7 @@ async def get_user_detail(
         f"💳 Депозит: <b>{fmt_amount(user.balance)} BYN</b>\n"
         f"🚗 Поездок завершено: <b>{stats.total_rides}</b>\n"
         f"💰 Всего потрачено: <b>{fmt_amount(stats.total_spent)} BYN</b>\n"
+        f"{top_route_line}"
         f"📅 Последняя бронь: {last_ride}\n"
         f"⭐ VIP: {'да' if user.is_vip else 'нет'}\n"
         f"🚫 В ЧС: {'да' if user.is_banned else 'нет'}"

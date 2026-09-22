@@ -135,6 +135,7 @@ class UserStats:
     last_ride_at: datetime | None
     first_name: str | None = None
     registration_date: datetime | None = None
+    top_route: str | None = None
 
 
 @dataclass
