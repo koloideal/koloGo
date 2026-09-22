@@ -8,10 +8,7 @@ from ..user_dialogs.states import (AdminPanelSG, AdminRequisitesSG, AdminSetting
 
 admin_panel_dialog = Dialog(
     Window(
-        Const(
-            "🚗 Привет, <b>Создатель</b>, rewrite in Rust please\n\n"
-            "<i><b>made by kolo</b></i>"
-        ),
+        Const("🚗 Привет, <b>Создатель</b>, rewrite in Rust please\n\n<i><b>made by kolo</b></i>"),
         Row(
             Start(Const("➕ Создать поездку"), id="ride_create", state=RideCreateSG.select_template),
             Start(Const("🚗 Мои поездки"), id="rides_mgmt", state=RidesMgmtSG.rides_list),

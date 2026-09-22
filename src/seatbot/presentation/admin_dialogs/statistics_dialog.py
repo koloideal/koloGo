@@ -1,3 +1,5 @@
+from typing import Any
+
 from aiogram_dialog import Dialog, DialogManager, Window
 from aiogram_dialog.widgets.kbd import Cancel
 from aiogram_dialog.widgets.text import Format
@@ -14,8 +16,8 @@ from ..user_dialogs.states import AdminStatsSG
 async def get_admin_stats(
     dialog_manager: DialogManager,
     statistics_service: FromDishka[StatisticsService],
-    **_kwargs,
-):
+    **_kwargs: Any,
+) -> dict[str, Any]:
     stats = await statistics_service.overall_stats()
     text = (
         "📊 <b>Общая статистика</b>\n\n"

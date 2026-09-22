@@ -1,3 +1,5 @@
+from typing import Any
+
 from aiogram.types import CallbackQuery
 from aiogram_dialog import Dialog, DialogManager, StartMode, Window
 from aiogram_dialog.widgets.kbd import Button, Cancel
@@ -19,8 +21,8 @@ async def get_vip_info(
     users_dao: FromDishka[UsersDAO],
     vip_service: FromDishka[VipService],
     messages: FromDishka[MessageBuilder],
-    **_kwargs,
-):
+    **_kwargs: Any,
+) -> dict[str, Any]:
     user_id = dialog_manager.middleware_data["event_from_user"].id
     user = await users_dao.get_by_id(user_id)
     if not user:
@@ -41,7 +43,7 @@ async def on_buy_vip(
     manager: DialogManager,
     users_dao: FromDishka[UsersDAO],
     vip_service: FromDishka[VipService],
-):
+) -> None:
     user_id = manager.middleware_data["event_from_user"].id
     user = await users_dao.get_by_id(user_id)
     if not user:

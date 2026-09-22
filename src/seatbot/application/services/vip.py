@@ -56,7 +56,5 @@ class VipService:
         await self._bot_service.notify_user(
             user.user_id, self._messages.vip_purchase_notification(price, result.balance)
         )
-        await self._bot_service.send_log_to_admin(
-            self._messages.vip_purchased_admin_log(result, price)
-        )
+        await self._bot_service.send_log_to_admin(self._messages.vip_purchased_admin_log(result, price))
         return result

@@ -1,3 +1,6 @@
+from html import escape
+from typing import Any
+
 from aiogram.types import CallbackQuery, Message
 from aiogram_dialog import Dialog, DialogManager, Window
 from aiogram_dialog.widgets.input import MessageInput
@@ -18,12 +21,10 @@ from ..user_dialogs.states import AdminSettingsSG
 async def get_locations_list(
     dialog_manager: DialogManager,
     locations_dao: FromDishka[LocationsDAO],
-    **_kwargs,
-):
+    **_kwargs: Any,
+) -> dict[str, Any]:
     locations = await locations_dao.list_all()
-    items = [
-        {"location_id": loc.location_id, "title": f"🗑 {loc.name}"} for loc in locations
-    ]
+    items = [{"location_id": loc.location_id, "title": f"🗑 {loc.name}"} for loc in locations]
     return {
         "has_locations": bool(items),
         "locations": items,
@@ -32,23 +33,51 @@ async def get_locations_list(
     }
 
 
-async def on_add_location(callback: CallbackQuery, button: Button, manager: DialogManager):
+async def on_add_location(callback: CallbackQuery, button: Button, manager: DialogManager) -> None:
     await manager.switch_to(AdminSettingsSG.location_name)
 
 
-async def on_delete_location(
+async def on_location_selected(
     callback: CallbackQuery,
     select: Select,
     manager: DialogManager,
     item_id: str,
-):
-    container = manager.middleware_data["dishka_container"]
-    locations_dao: LocationsDAO = await container.get(LocationsDAO)
-    await locations_dao.delete(int(item_id))
+) -> None:
+    manager.dialog_data["location_id"] = int(item_id)
+    await manager.switch_to(AdminSettingsSG.location_delete)
+
+
+@inject
+async def get_location_delete(
+    dialog_manager: DialogManager,
+    locations_dao: FromDishka[LocationsDAO],
+    **_kwargs: Any,
+) -> dict[str, Any]:
+    location_id = dialog_manager.dialog_data.get("location_id")
+    loc = await locations_dao.get_by_id(location_id) if location_id is not None else None
+    if not loc:
+        return {"location_text": "🚫 Точка не найдена.", "back_btn": "⬅️ К точкам"}
+    return {
+        "location_text": f"🗑 <b>Удалить точку «{escape(loc.name)}»?</b>",
+        "back_btn": "⬅️ К точкам",
+    }
+
+
+@inject
+async def on_confirm_delete_location(
+    callback: CallbackQuery,
+    button: Button,
+    manager: DialogManager,
+    locations_dao: FromDishka[LocationsDAO],
+) -> None:
+    location_id = manager.dialog_data.get("location_id")
+    if location_id is not None:
+        await locations_dao.delete(int(location_id))
     await callback.answer("🗑 Точка удалена", show_alert=True)
+    await manager.switch_to(AdminSettingsSG.locations)
 
 
-async def on_location_name_input(message: Message, widget: MessageInput, manager: DialogManager):
+async def on_location_name_input(message: Message, widget: MessageInput, manager: DialogManager) -> None:
     name = (message.text or "").strip()[:128]
     if not name:
         await message.answer("❌ Введите название точки.")
@@ -57,7 +86,7 @@ async def on_location_name_input(message: Message, widget: MessageInput, manager
     await manager.next()
 
 
-async def on_location_geo_input(message: Message, widget: MessageInput, manager: DialogManager):
+async def on_location_geo_input(message: Message, widget: MessageInput, manager: DialogManager) -> None:
     if not message.location:
         await message.answer("❌ Отправьте геолокацию точки (📎 → Геопозиция).")
         return
@@ -69,7 +98,7 @@ async def on_location_geo_input(message: Message, widget: MessageInput, manager:
     await manager.switch_to(AdminSettingsSG.locations)
 
 
-async def on_location_wrong_input(message: Message, widget: MessageInput, manager: DialogManager):
+async def on_location_wrong_input(message: Message, widget: MessageInput, manager: DialogManager) -> None:
     await message.answer("❌ Отправьте геолокацию точки (📎 → Геопозиция).")
 
 
@@ -78,8 +107,8 @@ async def get_settings_main(
     dialog_manager: DialogManager,
     vip_service: FromDishka[VipService],
     payment_service: FromDishka[PaymentService],
-    **_kwargs,
-):
+    **_kwargs: Any,
+) -> dict[str, Any]:
     price = await vip_service.get_vip_price()
     rate = await payment_service.get_byn_to_usd_rate()
     stars_rate = await payment_service.get_byn_to_stars_rate()
@@ -91,7 +120,7 @@ async def get_settings_main(
     }
 
 
-async def on_vip_price_input(message: Message, widget: MessageInput, manager: DialogManager):
+async def on_vip_price_input(message: Message, widget: MessageInput, manager: DialogManager) -> None:
     text = (message.text or "").strip().replace(",", ".")
     try:
         price = float(text)
@@ -107,7 +136,7 @@ async def on_vip_price_input(message: Message, widget: MessageInput, manager: Di
     await manager.switch_to(AdminSettingsSG.main)
 
 
-async def on_exchange_rate_input(message: Message, widget: MessageInput, manager: DialogManager):
+async def on_exchange_rate_input(message: Message, widget: MessageInput, manager: DialogManager) -> None:
     text = (message.text or "").strip().replace(",", ".")
     try:
         rate = float(text)
@@ -123,7 +152,7 @@ async def on_exchange_rate_input(message: Message, widget: MessageInput, manager
     await manager.switch_to(AdminSettingsSG.main)
 
 
-async def on_stars_rate_input(message: Message, widget: MessageInput, manager: DialogManager):
+async def on_stars_rate_input(message: Message, widget: MessageInput, manager: DialogManager) -> None:
     text = (message.text or "").strip().replace(",", ".")
     try:
         rate = float(text)
@@ -201,7 +230,7 @@ settings_dialog = Dialog(
                 id="loc_sel",
                 item_id_getter=lambda item: str(item["location_id"]),
                 items="locations",
-                on_click=on_delete_location,
+                on_click=on_location_selected,
                 when="has_locations",
             ),
             width=1,
@@ -215,16 +244,24 @@ settings_dialog = Dialog(
         getter=get_locations_list,
     ),
     Window(
+        Format("{location_text}"),
+        Button(
+            Const("🗑 Да, удалить"),
+            id="confirm_del_loc",
+            on_click=on_confirm_delete_location,
+        ),
+        SwitchTo(Format("{back_btn}"), id="back", state=AdminSettingsSG.locations),
+        state=AdminSettingsSG.location_delete,
+        getter=get_location_delete,
+    ),
+    Window(
         Const("📍 <b>Новая точка</b>\n\nВведите название (например, <code>Колледж</code>):"),
         MessageInput(on_location_name_input),
         SwitchTo(Const("⬅️ Назад"), id="back", state=AdminSettingsSG.locations),
         state=AdminSettingsSG.location_name,
     ),
     Window(
-        Const(
-            "📍 <b>Геопозиция точки</b>\n\n"
-            "Отправьте геолокацию этой точки (📎 → Геопозиция)."
-        ),
+        Const("📍 <b>Геопозиция точки</b>\n\nОтправьте геолокацию этой точки (📎 → Геопозиция)."),
         MessageInput(on_location_geo_input, content_types=["location"]),
         MessageInput(on_location_wrong_input, content_types=["text"]),
         SwitchTo(Const("⬅️ Назад"), id="back", state=AdminSettingsSG.locations),

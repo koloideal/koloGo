@@ -16,22 +16,16 @@ class LocationsDAO:
         return self._map_to_domain(orm)
 
     async def get_by_id(self, location_id: int) -> Location | None:
-        result = await self.session.execute(
-            select(OrmLocation).where(OrmLocation.id == location_id)
-        )
+        result = await self.session.execute(select(OrmLocation).where(OrmLocation.id == location_id))
         orm = result.scalar_one_or_none()
         return self._map_to_domain(orm) if orm else None
 
     async def list_all(self, limit: int = 100) -> list[Location]:
-        result = await self.session.execute(
-            select(OrmLocation).order_by(OrmLocation.name.asc()).limit(limit)
-        )
+        result = await self.session.execute(select(OrmLocation).order_by(OrmLocation.name.asc()).limit(limit))
         return [self._map_to_domain(r) for r in result.scalars().all()]
 
     async def delete(self, location_id: int) -> None:
-        await self.session.execute(
-            delete(OrmLocation).where(OrmLocation.id == location_id)
-        )
+        await self.session.execute(delete(OrmLocation).where(OrmLocation.id == location_id))
 
     @staticmethod
     def _map_to_domain(orm: OrmLocation) -> Location:

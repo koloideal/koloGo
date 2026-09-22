@@ -36,6 +36,7 @@ class Ride(Base):
     started_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     track_distance_m: Mapped[float] = mapped_column(Float, nullable=False, default=0, server_default="0")
+    track_max_speed_mps: Mapped[float] = mapped_column(Float, nullable=False, default=0, server_default="0")
     live_chat_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     live_message_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     arrive_streak: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")

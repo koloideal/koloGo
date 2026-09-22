@@ -51,9 +51,7 @@ async def send_ride_reminders(container: AsyncContainer) -> None:
                 continue
             approved = await bookings_dao.list_for_ride_with_status(ride.ride_id, {BookingStatus.APPROVED})
             for booking in approved:
-                await bot_service.notify_user(
-                    booking.user_id, messages.ride_reminder_notification(ride)
-                )
+                await bot_service.notify_user(booking.user_id, messages.ride_reminder_notification(ride))
             await bot_service.send_log_to_admin(
                 messages.ride_reminder_admin_notification(ride, len(approved))
             )
@@ -67,7 +65,9 @@ async def check_cryptobot_payment_status(
     created_at: datetime,
     container: AsyncContainer,
 ) -> None:
-    logger.info("check_cryptobot_payment_status: payment_id=%s user_id=%s amount=%s", payment_id, user_id, amount)
+    logger.info(
+        "check_cryptobot_payment_status: payment_id=%s user_id=%s amount=%s", payment_id, user_id, amount
+    )
     scheduler: AsyncIOScheduler = await container.get(AsyncIOScheduler)
     cryptobot_service: CryptoBotPaymentService = await container.get(CryptoBotPaymentService)
     should_remove_job = False
@@ -84,10 +84,14 @@ async def check_cryptobot_payment_status(
                 return
             logger.info(
                 "Transaction %s: status=%s, amount=%s",
-                payment_id, transaction.status, transaction.amount,
+                payment_id,
+                transaction.status,
+                transaction.amount,
             )
             if transaction.status != TransactionStatus.PENDING:
-                logger.info("Transaction %s not pending (status=%s), skipping", payment_id, transaction.status)
+                logger.info(
+                    "Transaction %s not pending (status=%s), skipping", payment_id, transaction.status
+                )
                 should_remove_job = True
                 return
             if (datetime.now(UTC) - created_at) > timedelta(minutes=15):
@@ -109,7 +113,9 @@ async def check_cryptobot_payment_status(
                 if user:
                     logger.info(
                         "Balance updated for user %s: +%.2f, new balance=%.2f",
-                        user_id, amount, user.balance,
+                        user_id,
+                        amount,
+                        user.balance,
                     )
                     await bot_service.notify_user(
                         user_id, messages.payment_success_notification(amount, user.balance)

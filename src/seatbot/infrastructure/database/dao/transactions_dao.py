@@ -41,9 +41,7 @@ class TransactionsDAO:
 
     async def get_by_payment_id_for_update(self, payment_id: str) -> Transaction | None:
         result = await self.session.execute(
-            select(OrmTransaction)
-            .where(OrmTransaction.payment_id == payment_id)
-            .with_for_update()
+            select(OrmTransaction).where(OrmTransaction.payment_id == payment_id).with_for_update()
         )
         orm = result.scalar_one_or_none()
         return self._map_to_domain(orm) if orm else None

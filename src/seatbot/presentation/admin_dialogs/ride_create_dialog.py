@@ -1,4 +1,5 @@
 from datetime import date, datetime, time
+from typing import Any
 
 from aiogram.types import CallbackQuery, Message
 from aiogram_dialog import Dialog, DialogManager, Window
@@ -25,8 +26,8 @@ async def get_templates(
     dialog_manager: DialogManager,
     rides_dao: FromDishka[RidesDAO],
     clock: FromDishka[LocalClock],
-    **_kwargs,
-):
+    **_kwargs: Any,
+) -> dict[str, Any]:
     templates = await rides_dao.list_templates(limit=8)
     if not templates:
         return {"has_templates": False, "empty_text": "🚫 Шаблонов пока нет.", "back_btn": "⬅️ В панель"}
@@ -48,8 +49,8 @@ async def get_templates(
 
 async def get_calendar_data(
     dialog_manager: DialogManager,
-    **_kwargs,
-):
+    **_kwargs: Any,
+) -> dict[str, Any]:
     selected_date = dialog_manager.dialog_data.get("selected_date")
     return {
         "has_date": selected_date is not None,
@@ -61,8 +62,8 @@ async def get_calendar_data(
 
 async def get_time_data(
     dialog_manager: DialogManager,
-    **_kwargs,
-):
+    **_kwargs: Any,
+) -> dict[str, Any]:
     selected_date = dialog_manager.dialog_data.get("selected_date", "—")
     selected_time = dialog_manager.dialog_data.get("selected_time", "—")
     return {
@@ -75,8 +76,8 @@ async def get_time_data(
 
 async def get_repeat_data(
     dialog_manager: DialogManager,
-    **_kwargs,
-):
+    **_kwargs: Any,
+) -> dict[str, Any]:
     return {
         "repeat_info": (
             "🔁 <b>Повтор поездки</b>\n\n"
@@ -91,8 +92,8 @@ async def get_repeat_data(
 
 async def get_remind_data(
     dialog_manager: DialogManager,
-    **_kwargs,
-):
+    **_kwargs: Any,
+) -> dict[str, Any]:
     return {
         "remind_info": (
             "⏰ <b>Напоминание перед поездкой</b>\n\n"
@@ -106,8 +107,8 @@ async def get_remind_data(
 
 async def get_vip_hold_data(
     dialog_manager: DialogManager,
-    **_kwargs,
-):
+    **_kwargs: Any,
+) -> dict[str, Any]:
     return {
         "vip_hold_info": (
             "⭐ <b>VIP-холд</b>\n\n"
@@ -122,8 +123,8 @@ async def get_vip_hold_data(
 
 async def get_price_data(
     dialog_manager: DialogManager,
-    **_kwargs,
-):
+    **_kwargs: Any,
+) -> dict[str, Any]:
     return {
         "price_info": (
             "💰 <b>Цена поездки</b>\n\n"
@@ -135,14 +136,14 @@ async def get_price_data(
     }
 
 
-async def get_back_btn(dialog_manager: DialogManager, **_kwargs):
+async def get_back_btn(dialog_manager: DialogManager, **_kwargs: Any) -> dict[str, Any]:
     return {"back_btn": "⬅️ Назад"}
 
 
 async def get_seats_data(
     dialog_manager: DialogManager,
-    **_kwargs,
-):
+    **_kwargs: Any,
+) -> dict[str, Any]:
     return {
         "seats_info": (
             "🪑 <b>Количество мест</b>\n\n"
@@ -158,8 +159,8 @@ async def get_seats_data(
 async def get_origin_data(
     dialog_manager: DialogManager,
     locations_dao: FromDishka[LocationsDAO],
-    **_kwargs,
-):
+    **_kwargs: Any,
+) -> dict[str, Any]:
     locations = await locations_dao.list_all()
     current = dialog_manager.dialog_data.get("origin")
     return {
@@ -168,9 +169,7 @@ async def get_origin_data(
             "Выберите точку, отправьте геолокацию\n"
             "или введите название текстом (без гео)."
         ),
-        "locations": [
-            {"location_id": loc.location_id, "name": loc.name} for loc in locations
-        ],
+        "locations": [{"location_id": loc.location_id, "name": loc.name} for loc in locations],
         "has_locations": bool(locations),
         "has_current": bool(current),
         "current_name": current or "",
@@ -182,8 +181,8 @@ async def get_origin_data(
 async def get_destination_data(
     dialog_manager: DialogManager,
     locations_dao: FromDishka[LocationsDAO],
-    **_kwargs,
-):
+    **_kwargs: Any,
+) -> dict[str, Any]:
     locations = await locations_dao.list_all()
     current = dialog_manager.dialog_data.get("destination")
     return {
@@ -192,9 +191,7 @@ async def get_destination_data(
             "Выберите точку, отправьте геолокацию\n"
             "или введите название текстом (без гео)."
         ),
-        "locations": [
-            {"location_id": loc.location_id, "name": loc.name} for loc in locations
-        ],
+        "locations": [{"location_id": loc.location_id, "name": loc.name} for loc in locations],
         "has_locations": bool(locations),
         "has_current": bool(current),
         "current_name": current or "",
@@ -204,8 +201,8 @@ async def get_destination_data(
 
 async def get_confirm_data(
     dialog_manager: DialogManager,
-    **_kwargs,
-):
+    **_kwargs: Any,
+) -> dict[str, Any]:
     selected_date = dialog_manager.dialog_data.get("selected_date", "—")
     selected_time = dialog_manager.dialog_data.get("selected_time", "—")
     price = dialog_manager.dialog_data.get("price", 0)
@@ -248,7 +245,7 @@ async def on_date_selected(
     widget: ManagedCalendar,
     manager: DialogManager,
     selected_date: date,
-):
+) -> None:
     manager.dialog_data["selected_date"] = selected_date.strftime("%d.%m.%Y")
     manager.dialog_data["selected_date_obj"] = selected_date.isoformat()
     template_ride_id = manager.dialog_data.get("template_ride_id")
@@ -297,7 +294,7 @@ class TimeChangedHandler(OnValueChanged):
 on_time_changed = TimeChangedHandler()
 
 
-async def on_origin_input(message: Message, widget: MessageInput, manager: DialogManager):
+async def on_origin_input(message: Message, widget: MessageInput, manager: DialogManager) -> None:
     if message.location:
         manager.dialog_data["origin_lat"] = message.location.latitude
         manager.dialog_data["origin_lon"] = message.location.longitude
@@ -313,15 +310,15 @@ async def on_origin_input(message: Message, widget: MessageInput, manager: Dialo
     await manager.switch_to(RideCreateSG.destination)
 
 
-async def on_keep_origin(callback: CallbackQuery, button: Button, manager: DialogManager):
+async def on_keep_origin(callback: CallbackQuery, button: Button, manager: DialogManager) -> None:
     await manager.switch_to(RideCreateSG.destination)
 
 
-async def on_keep_destination(callback: CallbackQuery, button: Button, manager: DialogManager):
+async def on_keep_destination(callback: CallbackQuery, button: Button, manager: DialogManager) -> None:
     await manager.switch_to(RideCreateSG.price)
 
 
-async def on_origin_name_input(message: Message, widget: MessageInput, manager: DialogManager):
+async def on_origin_name_input(message: Message, widget: MessageInput, manager: DialogManager) -> None:
     name = (message.text or "").strip()[:128]
     if not name:
         await message.answer("❌ Введите название точки отправления.")
@@ -337,7 +334,7 @@ async def on_origin_location_selected(
     manager: DialogManager,
     item_id: str,
     locations_dao: FromDishka[LocationsDAO],
-):
+) -> None:
     loc = await locations_dao.get_by_id(int(item_id))
     if not loc:
         await callback.answer("Точка не найдена", show_alert=True)
@@ -348,7 +345,7 @@ async def on_origin_location_selected(
     await manager.switch_to(RideCreateSG.destination)
 
 
-async def on_destination_input(message: Message, widget: MessageInput, manager: DialogManager):
+async def on_destination_input(message: Message, widget: MessageInput, manager: DialogManager) -> None:
     if message.location:
         manager.dialog_data["destination_lat"] = message.location.latitude
         manager.dialog_data["destination_lon"] = message.location.longitude
@@ -364,7 +361,7 @@ async def on_destination_input(message: Message, widget: MessageInput, manager: 
     await manager.switch_to(RideCreateSG.price)
 
 
-async def on_destination_name_input(message: Message, widget: MessageInput, manager: DialogManager):
+async def on_destination_name_input(message: Message, widget: MessageInput, manager: DialogManager) -> None:
     name = (message.text or "").strip()[:128]
     if not name:
         await message.answer("❌ Введите название точки прибытия.")
@@ -380,7 +377,7 @@ async def on_destination_location_selected(
     manager: DialogManager,
     item_id: str,
     locations_dao: FromDishka[LocationsDAO],
-):
+) -> None:
     loc = await locations_dao.get_by_id(int(item_id))
     if not loc:
         await callback.answer("Точка не найдена", show_alert=True)
@@ -391,7 +388,7 @@ async def on_destination_location_selected(
     await manager.switch_to(RideCreateSG.price)
 
 
-async def on_price_input(message: Message, widget: MessageInput, manager: DialogManager):
+async def on_price_input(message: Message, widget: MessageInput, manager: DialogManager) -> None:
     text = (message.text or "").strip().replace(",", ".")
     try:
         price = float(text)
@@ -406,7 +403,7 @@ async def on_price_input(message: Message, widget: MessageInput, manager: Dialog
     await manager.next()
 
 
-async def on_seats_input(message: Message, widget: MessageInput, manager: DialogManager):
+async def on_seats_input(message: Message, widget: MessageInput, manager: DialogManager) -> None:
     text = (message.text or "").strip()
     try:
         seats = int(text)
@@ -419,7 +416,7 @@ async def on_seats_input(message: Message, widget: MessageInput, manager: Dialog
     await manager.next()
 
 
-async def on_repeat_input(message: Message, widget: MessageInput, manager: DialogManager):
+async def on_repeat_input(message: Message, widget: MessageInput, manager: DialogManager) -> None:
     text = (message.text or "").strip()
     try:
         repeat_days = int(text)
@@ -432,7 +429,7 @@ async def on_repeat_input(message: Message, widget: MessageInput, manager: Dialo
     await manager.next()
 
 
-async def on_remind_input(message: Message, widget: MessageInput, manager: DialogManager):
+async def on_remind_input(message: Message, widget: MessageInput, manager: DialogManager) -> None:
     text = (message.text or "").strip()
     try:
         remind_minutes = int(text)
@@ -445,7 +442,7 @@ async def on_remind_input(message: Message, widget: MessageInput, manager: Dialo
     await manager.next()
 
 
-async def on_vip_hold_input(message: Message, widget: MessageInput, manager: DialogManager):
+async def on_vip_hold_input(message: Message, widget: MessageInput, manager: DialogManager) -> None:
     text = (message.text or "").strip()
     try:
         vip_hold_minutes = int(text)
@@ -458,37 +455,37 @@ async def on_vip_hold_input(message: Message, widget: MessageInput, manager: Dia
     await manager.next()
 
 
-async def on_vip_hold_skip(callback: CallbackQuery, button: Button, manager: DialogManager):
+async def on_vip_hold_skip(callback: CallbackQuery, button: Button, manager: DialogManager) -> None:
     manager.dialog_data["vip_hold_minutes"] = 0
     await manager.next()
 
 
-async def on_note_input(message: Message, widget: MessageInput, manager: DialogManager):
+async def on_note_input(message: Message, widget: MessageInput, manager: DialogManager) -> None:
     manager.dialog_data["note"] = (message.text or "").strip()[:512] or None
     await manager.next()
 
 
-async def on_note_skip(callback: CallbackQuery, button: Button, manager: DialogManager):
+async def on_note_skip(callback: CallbackQuery, button: Button, manager: DialogManager) -> None:
     manager.dialog_data["note"] = None
     await manager.next()
 
 
-async def on_auto_yes(callback: CallbackQuery, button: Button, manager: DialogManager):
+async def on_auto_yes(callback: CallbackQuery, button: Button, manager: DialogManager) -> None:
     manager.dialog_data["auto_approve"] = True
     await manager.next()
 
 
-async def on_auto_no(callback: CallbackQuery, button: Button, manager: DialogManager):
+async def on_auto_no(callback: CallbackQuery, button: Button, manager: DialogManager) -> None:
     manager.dialog_data["auto_approve"] = False
     await manager.next()
 
 
-async def on_vis_yes(callback: CallbackQuery, button: Button, manager: DialogManager):
+async def on_vis_yes(callback: CallbackQuery, button: Button, manager: DialogManager) -> None:
     manager.dialog_data["is_visible"] = True
     await manager.next()
 
 
-async def on_vis_no(callback: CallbackQuery, button: Button, manager: DialogManager):
+async def on_vis_no(callback: CallbackQuery, button: Button, manager: DialogManager) -> None:
     manager.dialog_data["is_visible"] = False
     await manager.next()
 
@@ -500,7 +497,7 @@ async def on_create(
     manager: DialogManager,
     ride_service: FromDishka[RideService],
     clock: FromDishka[LocalClock],
-):
+) -> None:
     date_str: str = manager.dialog_data["selected_date_obj"]
     hour: int = manager.dialog_data.get("selected_hour", 18)
     minute: int = manager.dialog_data.get("selected_minute", 0)
@@ -550,7 +547,7 @@ async def on_template_selected(
     select: Select,
     manager: DialogManager,
     item_id: str,
-):
+) -> None:
     ride_id = int(item_id)
     container = manager.middleware_data["dishka_container"]
     rides_dao: RidesDAO = await container.get(RidesDAO)

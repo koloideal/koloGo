@@ -1,3 +1,5 @@
+from typing import Any
+
 from aiogram.types import CallbackQuery
 from aiogram_dialog import Dialog, DialogManager, Window
 from aiogram_dialog.widgets.kbd import Button, Row, Start
@@ -17,8 +19,8 @@ async def get_main_menu(
     dialog_manager: DialogManager,
     users_dao: FromDishka[UsersDAO],
     bookings_dao: FromDishka[BookingsDAO],
-    **_kwargs,
-):
+    **_kwargs: Any,
+) -> dict[str, Any]:
     user_id = dialog_manager.middleware_data["event_from_user"].id
     user = await users_dao.get_by_id(user_id)
     has_approved_booking = await bookings_dao.has_approved_for_user(user_id)
@@ -33,9 +35,7 @@ async def get_main_menu(
     lines.append("\n<i><b>made by kolo</b></i>")
     return {
         "menu_text": "\n".join(lines),
-        "notifications_btn": (
-            "🔔 Уведомления ✅" if user and user.notify_new_rides else "🔔 Уведомления ❌"
-        ),
+        "notifications_btn": ("🔔 Уведомления ✅" if user and user.notify_new_rides else "🔔 Уведомления ❌"),
         "has_requisites_access": has_approved_booking,
     }
 
@@ -46,7 +46,7 @@ async def on_toggle_notifications(
     button: Button,
     manager: DialogManager,
     users_dao: FromDishka[UsersDAO],
-):
+) -> None:
     user_id = manager.middleware_data["event_from_user"].id
     user = await users_dao.get_by_id(user_id)
     if not user:

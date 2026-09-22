@@ -10,9 +10,7 @@ class SettingsDAO:
         self.session = session
 
     async def get(self, key: str, default: str | None = None) -> str | None:
-        result = await self.session.execute(
-            select(OrmSetting.value).where(OrmSetting.key == key)
-        )
+        result = await self.session.execute(select(OrmSetting.value).where(OrmSetting.key == key))
         value = result.scalar_one_or_none()
         return value if value is not None else default
 

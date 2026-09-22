@@ -1,11 +1,15 @@
 import toml
 
-from .models import BotConfig, Config, CryptoBotConfig, PostgresConfig, RedisConfig
+from .models import (BotConfig, Config, CryptoBotConfig, GeoConfig, PostgresConfig,
+                     RedisConfig, TrackingConfig)
 
 
 def load_config(config_path: str) -> Config:
     raw = toml.load(config_path)
+    bot_raw = raw["bot"]
     cb = raw["cryptobot"]
+    geo_raw = raw.get("geo", {})
+    tracking_raw = raw.get("tracking", {})
     cryptobot = CryptoBotConfig(
         api_token=cb["api_token"],
         api_url=cb.get("api_url", "https://pay.crypt.bot/api/"),
@@ -23,11 +27,21 @@ def load_config(config_path: str) -> Config:
             cache_dsn=raw["redis"]["cache_dsn"],
         ),
         bot=BotConfig(
-            token=raw["bot"]["token"],
-            creator_id=raw["bot"]["creator_id"],
-            timezone=raw["bot"].get("timezone", "Europe/Minsk"),
-            arrival_radius_m=float(raw["bot"].get("arrival_radius_m", 20)),
-            arrival_debounce=int(raw["bot"].get("arrival_debounce", 2)),
+            token=bot_raw["token"],
+            creator_id=bot_raw["creator_id"],
+            timezone=bot_raw.get("timezone", "Europe/Minsk"),
         ),
         cryptobot=cryptobot,
+        geo=GeoConfig(
+            yandex_max_route_points=int(geo_raw.get("yandex_max_route_points", 20)),
+        ),
+        tracking=TrackingConfig(
+            min_point_gap_m=float(tracking_raw.get("min_point_gap_m", 2.0)),
+            max_speed_mps=float(tracking_raw.get("max_speed_mps", 60.0)),
+            max_accuracy_m=float(tracking_raw.get("max_accuracy_m", 100.0)),
+            arrival_radius_m=float(
+                tracking_raw.get("arrival_radius_m", bot_raw.get("arrival_radius_m", 20.0))
+            ),
+            arrival_debounce=int(tracking_raw.get("arrival_debounce", bot_raw.get("arrival_debounce", 2))),
+        ),
     )

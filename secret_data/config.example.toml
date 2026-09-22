@@ -17,3 +17,13 @@ timezone = "Europe/Minsk"
 [cryptobot]
 api_token = ""
 api_url = "https://pay.crypt.bot/api/"
+
+[geo]
+yandex_max_route_points = 20
+
+[tracking]
+min_point_gap_m = 2.0
+max_speed_mps = 60.0
+max_accuracy_m = 100.0
+arrival_radius_m = 20.0
+arrival_debounce = 2

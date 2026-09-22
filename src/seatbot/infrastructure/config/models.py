@@ -25,8 +25,6 @@ class BotConfig:
     token: str
     creator_id: int
     timezone: str = "Europe/Minsk"
-    arrival_radius_m: float = 20.0
-    arrival_debounce: int = 2
 
 
 @dataclass
@@ -36,8 +34,24 @@ class CryptoBotConfig:
 
 
 @dataclass
+class GeoConfig:
+    yandex_max_route_points: int = 20
+
+
+@dataclass
+class TrackingConfig:
+    min_point_gap_m: float = 2.0
+    max_speed_mps: float = 60.0
+    max_accuracy_m: float = 100.0
+    arrival_radius_m: float = 20.0
+    arrival_debounce: int = 2
+
+
+@dataclass
 class Config:
     postgres: PostgresConfig
     redis: RedisConfig
     bot: BotConfig
     cryptobot: CryptoBotConfig
+    geo: GeoConfig
+    tracking: TrackingConfig

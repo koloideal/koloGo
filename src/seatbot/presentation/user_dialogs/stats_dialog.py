@@ -1,3 +1,5 @@
+from typing import Any
+
 from aiogram_dialog import Dialog, DialogManager, Window
 from aiogram_dialog.widgets.kbd import Cancel
 from aiogram_dialog.widgets.text import Format
@@ -14,8 +16,8 @@ from .states import StatsSG
 async def get_user_stats(
     dialog_manager: DialogManager,
     statistics_service: FromDishka[StatisticsService],
-    **_kwargs,
-):
+    **_kwargs: Any,
+) -> dict[str, Any]:
     user_id = dialog_manager.middleware_data["event_from_user"].id
     stats = await statistics_service.user_stats(user_id)
     if not stats:

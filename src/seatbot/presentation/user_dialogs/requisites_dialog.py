@@ -1,3 +1,5 @@
+from typing import Any
+
 from aiogram_dialog import Dialog, DialogManager, Window
 from aiogram_dialog.widgets.kbd import Cancel, CopyText, ListGroup
 from aiogram_dialog.widgets.text import Format
@@ -14,8 +16,8 @@ from .states import RequisitesSG
 async def get_requisites(
     dialog_manager: DialogManager,
     requisites_dao: FromDishka[RequisitesDAO],
-    **_kwargs,
-):
+    **_kwargs: Any,
+) -> dict[str, Any]:
     requisites = await requisites_dao.list_all()
     if not requisites:
         text = "💳 <b>Реквизиты</b>\n\nРеквизитов пока нет."

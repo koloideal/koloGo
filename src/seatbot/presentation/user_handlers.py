@@ -21,7 +21,7 @@ async def cmd_start(
     message: Message,
     dialog_manager: DialogManager,
     create_or_get_user: FromDishka[CreateOrGetUserInteractor],
-):
+) -> None:
     from_user = dialog_manager.middleware_data["event_from_user"]
     await create_or_get_user.execute(
         CreateOrGetUserCommand(
@@ -38,7 +38,7 @@ async def on_stars_payment(
     messages: FromDishka[MessageBuilder],
     users_dao: FromDishka[UsersDAO],
     bot_service: FromDishka[BotService],
-):
+) -> None:
     sp = message.successful_payment
     if not sp:
         return
@@ -61,6 +61,4 @@ async def on_stars_payment(
     new_balance = user.balance if user else 0.0
     await message.answer(messages.payment_success_notification(amount_byn, new_balance))
     if user:
-        await bot_service.send_log_to_admin(
-            messages.payment_admin_log(user, amount_byn, "Telegram Stars")
-        )
+        await bot_service.send_log_to_admin(messages.payment_admin_log(user, amount_byn, "Telegram Stars"))

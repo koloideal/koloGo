@@ -23,7 +23,9 @@ class User(Base):
     is_admin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     is_banned: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     is_vip: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
-    notify_new_rides: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    notify_new_rides: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
 
     bookings: Mapped[list[Booking]] = relationship("Booking", back_populates="user")
     transactions: Mapped[list[Transaction]] = relationship("Transaction", back_populates="user")

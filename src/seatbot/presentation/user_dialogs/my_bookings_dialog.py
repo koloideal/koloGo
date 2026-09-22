@@ -1,3 +1,5 @@
+from typing import Any
+
 from aiogram.types import CallbackQuery
 from aiogram_dialog import Dialog, DialogManager, Window
 from aiogram_dialog.widgets.kbd import Button, Cancel, ScrollingGroup, Select, SwitchTo
@@ -31,8 +33,8 @@ async def get_my_bookings(
     users_dao: FromDishka[UsersDAO],
     messages: FromDishka[MessageBuilder],
     clock: FromDishka[LocalClock],
-    **_kwargs,
-):
+    **_kwargs: Any,
+) -> dict[str, Any]:
     user_id = dialog_manager.middleware_data["event_from_user"].id
     user = await users_dao.get_by_id(user_id)
     is_vip = bool(user and user.is_vip)
@@ -70,8 +72,8 @@ async def get_booking_detail(
     rides_dao: FromDishka[RidesDAO],
     users_dao: FromDishka[UsersDAO],
     messages: FromDishka[MessageBuilder],
-    **_kwargs,
-):
+    **_kwargs: Any,
+) -> dict[str, Any]:
     booking_id: int = dialog_manager.dialog_data["booking_id"]
     booking = await bookings_dao.get_by_id(booking_id)
     if not booking:
@@ -103,7 +105,7 @@ async def on_show_origin(
     manager: DialogManager,
     bookings_dao: FromDishka[BookingsDAO],
     rides_dao: FromDishka[RidesDAO],
-):
+) -> None:
     booking_id: int = manager.dialog_data["booking_id"]
     booking = await bookings_dao.get_by_id(booking_id)
     if not booking:
@@ -127,7 +129,7 @@ async def on_cancel_booking(
     button: Button,
     manager: DialogManager,
     ride_service: FromDishka[RideService],
-):
+) -> None:
     booking_id: int = manager.dialog_data["booking_id"]
     user_id = manager.middleware_data["event_from_user"].id
     booking = await ride_service.cancel_booking_by_user(booking_id, user_id)
@@ -143,7 +145,7 @@ async def on_booking_selected(
     select: Select,
     manager: DialogManager,
     item_id: str,
-):
+) -> None:
     manager.dialog_data["booking_id"] = int(item_id)
     await manager.next()
 

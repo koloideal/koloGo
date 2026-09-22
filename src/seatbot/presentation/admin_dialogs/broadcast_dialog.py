@@ -1,3 +1,5 @@
+from typing import Any
+
 from aiogram.types import CallbackQuery, Message
 from aiogram_dialog import Dialog, DialogManager, StartMode, Window
 from aiogram_dialog.widgets.input import MessageInput
@@ -15,7 +17,7 @@ async def on_broadcast_message_input(
     message: Message,
     widget: MessageInput,
     manager: DialogManager,
-):
+) -> None:
     if not message or not message.message_id:
         await message.answer("❌ Не удалось получить сообщение.")
         return
@@ -24,7 +26,7 @@ async def on_broadcast_message_input(
     await manager.next()
 
 
-async def get_broadcast_confirm(dialog_manager: DialogManager, **_kwargs):
+async def get_broadcast_confirm(dialog_manager: DialogManager, **_kwargs: Any) -> dict[str, Any]:
     from_chat_id: int = dialog_manager.dialog_data.get("from_chat_id", 0)
     message_id: int = dialog_manager.dialog_data.get("message_id", 0)
     has_msg = bool(from_chat_id and message_id)
@@ -41,7 +43,7 @@ async def on_send_broadcast(
     button: Button,
     manager: DialogManager,
     broadcast_service: FromDishka[BroadcastService],
-):
+) -> None:
     from_chat_id: int = manager.dialog_data["from_chat_id"]
     message_id: int = manager.dialog_data["message_id"]
     await callback.answer("📤 Рассылка запущена в фоне. Статистика придёт позже.")

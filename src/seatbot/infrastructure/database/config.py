@@ -1,5 +1,7 @@
 from sqlalchemy import event
+from sqlalchemy.engine.interfaces import DBAPIConnection
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import ConnectionPoolEntry
 
 
 def new_session_maker(db_url: str) -> async_sessionmaker[AsyncSession]:
@@ -14,7 +16,7 @@ def new_session_maker(db_url: str) -> async_sessionmaker[AsyncSession]:
     )
 
     @event.listens_for(engine.sync_engine, "connect")
-    def on_connect(dbapi_conn, connection_record):
+    def on_connect(dbapi_conn: DBAPIConnection, connection_record: ConnectionPoolEntry) -> None:
         dbapi_conn.run_async(
             lambda conn: conn.set_type_codec(
                 "numeric",

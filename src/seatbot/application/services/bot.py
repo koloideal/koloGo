@@ -1,8 +1,7 @@
 from aiogram import Bot
 from aiogram.exceptions import (TelegramBadRequest, TelegramForbiddenError,
                                 TelegramRetryAfter)
-from aiogram.types import (BotCommand, BotCommandScopeChat, BufferedInputFile,
-                           InlineKeyboardMarkup)
+from aiogram.types import BotCommand, BotCommandScopeChat, InlineKeyboardMarkup
 
 from seatbot.infrastructure.config.models import Config
 from seatbot.infrastructure.database.dao import UsersDAO
@@ -35,17 +34,6 @@ class BotService:
     async def notify_user(self, user_id: int, text: str) -> bool:
         try:
             await self._bot.send_message(chat_id=user_id, text=text)
-            return True
-        except (TelegramForbiddenError, TelegramBadRequest, TelegramRetryAfter):
-            return False
-
-    async def send_track_map(self, chat_id: int, png: bytes, caption: str = "") -> bool:
-        try:
-            await self._bot.send_photo(
-                chat_id=chat_id,
-                photo=BufferedInputFile(png, filename="track.png"),
-                caption=caption,
-            )
             return True
         except (TelegramForbiddenError, TelegramBadRequest, TelegramRetryAfter):
             return False

@@ -71,8 +71,11 @@ class MessageBuilder:
             approved = pending = finished = 0
         price_str = "Бесплатно" if r.is_free else f"{fmt_amount(r.price)} BYN"
         status_emoji = {
-            "open": "🟢", "closed": "🟡", "in_progress": "🚙",
-            "completed": "✅", "cancelled": "❌",
+            "open": "🟢",
+            "closed": "🟡",
+            "in_progress": "🚙",
+            "completed": "✅",
+            "cancelled": "❌",
         }.get(r.status.value, "•")
         lines = [
             f"{status_emoji} <b>Поездка</b>",
@@ -84,7 +87,7 @@ class MessageBuilder:
         lines.append(f"💰 Цена: <b>{price_str}</b>")
         if r.status == RideStatus.COMPLETED:
             lines.append(f"🏁 Ехало: <b>{finished}/{r.seats_total}</b>")
-            lines.extend(self._track_stats_lines(r))
+            lines.extend(self.track_stats_lines(r))
         elif r.status == RideStatus.IN_PROGRESS:
             lines.append(f"🚙 <b>В пути</b> (дистанция: {r.track_distance_m / 1000:.1f} км)")
         elif r.status == RideStatus.CANCELLED:
@@ -104,7 +107,7 @@ class MessageBuilder:
         return "\n".join(lines)
 
     @staticmethod
-    def _track_stats_lines(r: Ride) -> list[str]:
+    def track_stats_lines(r: Ride) -> list[str]:
         if not r.started_at or not r.finished_at:
             return []
         duration = (r.finished_at - r.started_at).total_seconds()
@@ -115,6 +118,8 @@ class MessageBuilder:
         ]
         if duration > 0 and km > 0:
             lines.append(f"⚡ Ср. скорость: <b>{km / (duration / 3600):.0f} км/ч</b>")
+        if r.track_max_speed_mps > 0:
+            lines.append(f"🚀 Макс. скорость: <b>{r.track_max_speed_mps * 3.6:.0f} км/ч</b>")
         return lines
 
     def payment_short(self, paid_amount: float, price: float, is_free: bool) -> str:
@@ -152,6 +157,8 @@ class MessageBuilder:
             payment,
             f"📋 Статус: {status_map.get(booking.status, BOOKING_STATUS_RU.get(booking.status, '—'))}",
         ]
+        if ride.status == RideStatus.COMPLETED:
+            lines.extend(self.track_stats_lines(ride))
         if ride.note:
             lines.append(f"📝 {escape(ride.note)}")
         return "\n".join(lines)
@@ -209,6 +216,9 @@ class MessageBuilder:
             text += f"💰 Списано с депозита: <b>{fmt_amount(paid_amount)} BYN</b>."
         else:
             text += f"💰 Оплата по факту: <b>{fmt_amount(price)} BYN</b>."
+        stats_lines = self.track_stats_lines(ride)
+        if stats_lines:
+            text += "\n" + "\n".join(stats_lines)
         text += "\nСпасибо за поездку!"
         return text
 
@@ -369,10 +379,7 @@ class MessageBuilder:
             "<b>Привилегии VIP:</b>",
             "• 🚗 Все поездки бесплатны",
             "• ⚡ Авто-одобрение без ожидания водителя",
-            (
-                "• 🏃 Доступ к бронированию во время VIP-холда "
-                "(первые минуты после публикации поездки)"
-            ),
+            ("• 🏃 Доступ к бронированию во время VIP-холда (первые минуты после публикации поездки)"),
             "",
             f"💰 Стоимость: <b>{fmt_amount(price)} BYN</b> (единоразово)",
             f"💳 Ваш баланс: <b>{fmt_amount(balance)} BYN</b>",
@@ -382,8 +389,7 @@ class MessageBuilder:
         else:
             shortage = price - balance
             lines.append(
-                f"\n❌ Не хватает <b>{fmt_amount(shortage)} BYN</b>. "
-                "Попросите админа пополнить депозит."
+                f"\n❌ Не хватает <b>{fmt_amount(shortage)} BYN</b>. Попросите админа пополнить депозит."
             )
         return "\n".join(lines)
 
@@ -410,7 +416,19 @@ class MessageBuilder:
             f"📍 Маршрут: {route_str(ride) or '—'}",
             f"🕒 Отправление: {self._clock.fmt(ride.departure_at)}",
         ]
-        lines.extend(self._track_stats_lines(ride))
+        lines.extend(self.track_stats_lines(ride))
+        return "\n".join(lines)
+
+    def ride_completed_admin_log(self, ride: Ride, passengers_count: int, map_url: str | None = None) -> str:
+        lines = [
+            f"🏁 <b>Поездка #{ride.ride_id} завершена</b>\n",
+            f"📍 Маршрут: {route_str(ride) or '—'}",
+            f"🕒 Отправление: {self._clock.fmt(ride.departure_at)}",
+            f"🧍 Ехало: <b>{passengers_count}</b>",
+        ]
+        lines.extend(self.track_stats_lines(ride))
+        if map_url:
+            lines.append(f"🗺 {map_url}")
         return "\n".join(lines)
 
     def tracking_started_admin_log(self, ride: Ride) -> str:
@@ -457,10 +475,7 @@ class MessageBuilder:
         )
 
     def payment_expired_notification(self) -> str:
-        return (
-            "⏰ <b>Время оплаты истекло</b>\n\n"
-            "Инвойс отменён. Попробуйте пополнить баланс снова."
-        )
+        return "⏰ <b>Время оплаты истекло</b>\n\nИнвойс отменён. Попробуйте пополнить баланс снова."
 
     def payment_admin_log(self, user: User, amount: float, method: str = "CryptoBot (USDT)") -> str:
         name = escape(user.first_name or user.username or str(user.user_id))

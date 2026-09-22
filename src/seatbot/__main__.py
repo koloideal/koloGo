@@ -16,14 +16,41 @@ from dishka import make_async_container
 from dishka.integrations.aiogram import setup_dishka
 from redis.asyncio import Redis
 
+from seatbot.application.services.bot import BotService
 from seatbot.infrastructure.config import load_config
 from seatbot.infrastructure.config.models import Config
 from seatbot.infrastructure.ioc import (DatabaseProvider, RedisProvider,
                                         SchedulerProvider, ServicesProvider, TimeProvider,
                                         UserAppProvider)
 from seatbot.infrastructure.logging.logger import setup_logging
+from seatbot.presentation.admin_dialogs import \
+    admin_panel_dialog as admin_panel_dialog_mod
+from seatbot.presentation.admin_dialogs import broadcast_dialog as broadcast_dialog_mod
+from seatbot.presentation.admin_dialogs import deposit_dialog as deposit_dialog_mod
+from seatbot.presentation.admin_dialogs import \
+    requisites_dialog as admin_requisites_dialog_mod
+from seatbot.presentation.admin_dialogs import \
+    ride_create_dialog as ride_create_dialog_mod
+from seatbot.presentation.admin_dialogs import \
+    ride_detail_dialog as ride_detail_dialog_mod
+from seatbot.presentation.admin_dialogs import \
+    rides_management_dialog as rides_management_dialog_mod
+from seatbot.presentation.admin_dialogs import settings_dialog as settings_dialog_mod
+from seatbot.presentation.admin_dialogs import statistics_dialog as statistics_dialog_mod
+from seatbot.presentation.admin_dialogs import users_dialog as users_dialog_mod
+from seatbot.presentation.admin_handlers import admin_router
+from seatbot.presentation.error_handlers import error_router
 from seatbot.presentation.middlewares.check_ban import CheckBanMiddleware
 from seatbot.presentation.middlewares.reject_not_admin import RejectNotAdminMiddleware
+from seatbot.presentation.user_dialogs import balance_dialog as balance_dialog_mod
+from seatbot.presentation.user_dialogs import main_menu_dialog as main_menu_dialog_mod
+from seatbot.presentation.user_dialogs import my_bookings_dialog as my_bookings_dialog_mod
+from seatbot.presentation.user_dialogs import \
+    requisites_dialog as user_requisites_dialog_mod
+from seatbot.presentation.user_dialogs import rides_dialog as rides_dialog_mod
+from seatbot.presentation.user_dialogs import stats_dialog as stats_dialog_mod
+from seatbot.presentation.user_dialogs import vip_dialog as vip_dialog_mod
+from seatbot.presentation.user_handlers import user_router
 
 config: Config = load_config("secret_data/config.toml")
 bot_token: str = config.bot.token
@@ -63,36 +90,6 @@ dp: Dispatcher = Dispatcher(storage=storage)
 
 
 async def main() -> None:
-    from seatbot.presentation.admin_dialogs import \
-        admin_panel_dialog as admin_panel_dialog_mod
-    from seatbot.presentation.admin_dialogs import \
-        broadcast_dialog as broadcast_dialog_mod
-    from seatbot.presentation.admin_dialogs import deposit_dialog as deposit_dialog_mod
-    from seatbot.presentation.admin_dialogs import \
-        requisites_dialog as admin_requisites_dialog_mod
-    from seatbot.presentation.admin_dialogs import \
-        ride_create_dialog as ride_create_dialog_mod
-    from seatbot.presentation.admin_dialogs import \
-        ride_detail_dialog as ride_detail_dialog_mod
-    from seatbot.presentation.admin_dialogs import \
-        rides_management_dialog as rides_management_dialog_mod
-    from seatbot.presentation.admin_dialogs import settings_dialog as settings_dialog_mod
-    from seatbot.presentation.admin_dialogs import \
-        statistics_dialog as statistics_dialog_mod
-    from seatbot.presentation.admin_dialogs import users_dialog as users_dialog_mod
-    from seatbot.presentation.admin_handlers import admin_router
-    from seatbot.presentation.error_handlers import error_router
-    from seatbot.presentation.user_dialogs import balance_dialog as balance_dialog_mod
-    from seatbot.presentation.user_dialogs import main_menu_dialog as main_menu_dialog_mod
-    from seatbot.presentation.user_dialogs import \
-        my_bookings_dialog as my_bookings_dialog_mod
-    from seatbot.presentation.user_dialogs import \
-        requisites_dialog as user_requisites_dialog_mod
-    from seatbot.presentation.user_dialogs import rides_dialog as rides_dialog_mod
-    from seatbot.presentation.user_dialogs import stats_dialog as stats_dialog_mod
-    from seatbot.presentation.user_dialogs import vip_dialog as vip_dialog_mod
-    from seatbot.presentation.user_handlers import user_router
-
     dp.include_routers(error_router, user_router, admin_router)
     dp.include_routers(
         main_menu_dialog_mod.main_menu_dialog,
@@ -124,8 +121,6 @@ async def main() -> None:
 
     setup_dialogs(dp)
     setup_dishka(router=dp, container=container, auto_inject=True)
-
-    from seatbot.application.services.bot import BotService
 
     async with container() as nested_container:
         bot_service = await nested_container.get(BotService)

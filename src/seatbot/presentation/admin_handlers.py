@@ -15,7 +15,7 @@ admin_router = Router()
 
 
 @admin_router.message(Command("admin"))
-async def cmd_admin(message: Message, dialog_manager: DialogManager):
+async def cmd_admin(message: Message, dialog_manager: DialogManager) -> None:
     await dialog_manager.start(AdminPanelSG.main, mode=StartMode.RESET_STACK)
 
 
@@ -23,18 +23,10 @@ async def _edit_log_message(callback: CallbackQuery, suffix: str, ride_id: int) 
     if not isinstance(callback.message, Message):
         return
     keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="🚗 К поездке", callback_data=f"adm_ride:{ride_id}"
-                )
-            ]
-        ]
+        inline_keyboard=[[InlineKeyboardButton(text="🚗 К поездке", callback_data=f"adm_ride:{ride_id}")]]
     )
     try:
-        await callback.message.edit_text(
-            f"{callback.message.html_text}\n\n{suffix}", reply_markup=keyboard
-        )
+        await callback.message.edit_text(f"{callback.message.html_text}\n\n{suffix}", reply_markup=keyboard)
     except TelegramBadRequest:
         pass
 
@@ -43,7 +35,7 @@ async def _edit_log_message(callback: CallbackQuery, suffix: str, ride_id: int) 
 async def cb_approve_booking(
     callback: CallbackQuery,
     ride_service: FromDishka[RideService],
-):
+) -> None:
     booking_id = int((callback.data or "").split(":", 1)[1])
     booking = await ride_service.approve_booking(booking_id)
     if booking:
@@ -57,7 +49,7 @@ async def cb_approve_booking(
 async def cb_reject_booking(
     callback: CallbackQuery,
     ride_service: FromDishka[RideService],
-):
+) -> None:
     booking_id = int((callback.data or "").split(":", 1)[1])
     booking = await ride_service.reject_booking(booking_id)
     if booking:
@@ -68,7 +60,7 @@ async def cb_reject_booking(
 
 
 @admin_router.callback_query(F.data.startswith("adm_ride:"))
-async def cb_open_ride(callback: CallbackQuery, dialog_manager: DialogManager):
+async def cb_open_ride(callback: CallbackQuery, dialog_manager: DialogManager) -> None:
     ride_id = int((callback.data or "").split(":", 1)[1])
     await callback.answer()
     await dialog_manager.start(RidesMgmtSG.ride_detail, data={"ride_id": ride_id})
@@ -78,7 +70,7 @@ async def cb_open_ride(callback: CallbackQuery, dialog_manager: DialogManager):
 async def msg_live_location(
     message: Message,
     tracking_service: FromDishka[TrackingService],
-):
+) -> None:
     loc = message.location
     if loc is None or message.chat is None:
         return
@@ -102,7 +94,7 @@ async def msg_live_location(
 async def msg_live_location_update(
     message: Message,
     tracking_service: FromDishka[TrackingService],
-):
+) -> None:
     loc = message.location
     if loc is None or message.chat is None:
         return

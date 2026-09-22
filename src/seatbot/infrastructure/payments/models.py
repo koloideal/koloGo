@@ -11,9 +11,7 @@ class CryptoBotPayment:
     status: Literal["waiting", "paid", "not_paid"]
 
     @classmethod
-    def from_dict(
-        cls, data: dict[str, Any], status: Literal["waiting", "paid", "not_paid"]
-    ) -> Self:
+    def from_dict(cls, data: dict[str, Any], status: Literal["waiting", "paid", "not_paid"]) -> Self:
         return cls(
             invoice_id=data["invoice_id"],
             bot_invoice_url=data["bot_invoice_url"],

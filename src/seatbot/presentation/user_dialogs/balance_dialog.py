@@ -1,3 +1,5 @@
+from typing import Any
+
 from aiogram import Bot
 from aiogram.types import CallbackQuery, LabeledPrice, Message
 from aiogram_dialog import Dialog, DialogManager, StartMode, Window
@@ -20,8 +22,8 @@ async def get_balance_data(
     dialog_manager: DialogManager,
     users_dao: FromDishka[UsersDAO],
     messages: FromDishka[MessageBuilder],
-    **_kwargs,
-):
+    **_kwargs: Any,
+) -> dict[str, Any]:
     user_id = dialog_manager.middleware_data["event_from_user"].id
     user = await users_dao.get_by_id(user_id)
     if not user:
@@ -33,18 +35,16 @@ async def get_balance_data(
     }
 
 
-async def get_top_up_amount_data(**_kwargs):
+async def get_top_up_amount_data(**_kwargs: Any) -> dict[str, Any]:
     return {
         "amount_prompt": (
-            "💳 <b>Пополнение баланса</b>\n\n"
-            "Введите сумму в BYN (от 1 до 1000):\n"
-            "Пример: <code>50</code>"
+            "💳 <b>Пополнение баланса</b>\n\nВведите сумму в BYN (от 1 до 1000):\nПример: <code>50</code>"
         ),
         "back_btn": "⬅️ Назад",
     }
 
 
-async def get_top_up_method_data(**_kwargs):
+async def get_top_up_method_data(**_kwargs: Any) -> dict[str, Any]:
     return {
         "method_prompt": "💳 <b>Выберите способ оплаты</b>",
         "cryptobot_btn": "🤖 CryptoBot (USDT)",
@@ -58,8 +58,8 @@ async def get_invoice_data(
     dialog_manager: DialogManager,
     transactions_dao: FromDishka[TransactionsDAO],
     payment_service: FromDishka[PaymentService],
-    **_kwargs,
-):
+    **_kwargs: Any,
+) -> dict[str, Any]:
     amount: float = dialog_manager.dialog_data["top_up_amount"]
     url: str = dialog_manager.dialog_data["invoice_url"]
     has_pending = dialog_manager.dialog_data.get("has_pending_transaction", False)
@@ -93,7 +93,7 @@ async def on_top_up_clicked(
     button: Button,
     manager: DialogManager,
     transactions_dao: FromDishka[TransactionsDAO],
-):
+) -> None:
     pending = await transactions_dao.get_pending_by_user_id(callback.from_user.id)
     if pending and pending.payment_url:
         manager.dialog_data["top_up_amount"] = pending.amount
@@ -106,7 +106,7 @@ async def on_top_up_clicked(
         await manager.switch_to(BalanceSG.top_up_amount)
 
 
-async def on_amount_entered(message: Message, widget: MessageInput, manager: DialogManager):
+async def on_amount_entered(message: Message, widget: MessageInput, manager: DialogManager) -> None:
     text = (message.text or "").strip().replace(",", ".")
     try:
         amount = float(text)
@@ -125,7 +125,7 @@ async def on_cryptobot_clicked(
     button: Button,
     manager: DialogManager,
     payment_service: FromDishka[PaymentService],
-):
+) -> None:
     amount: float = manager.dialog_data["top_up_amount"]
     user_id = callback.from_user.id
     payment = await payment_service.create_cryptobot_invoice(user_id, amount)
@@ -142,7 +142,7 @@ async def on_stars_clicked(
     manager: DialogManager,
     payment_service: FromDishka[PaymentService],
     bot: FromDishka[Bot],
-):
+) -> None:
     amount: float = manager.dialog_data["top_up_amount"]
     user_id = callback.from_user.id
     stars = await payment_service.byn_to_stars(amount)
@@ -163,7 +163,7 @@ async def on_cancel_invoice_clicked(
     button: Button,
     manager: DialogManager,
     transactions_dao: FromDishka[TransactionsDAO],
-):
+) -> None:
     invoice_id: str = manager.dialog_data["invoice_id"]
     transaction = await transactions_dao.get_by_payment_id_for_update(invoice_id)
     if transaction and transaction.status == TransactionStatus.COMPLETED:

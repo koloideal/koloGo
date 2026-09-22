@@ -26,7 +26,9 @@ class Transaction(Base):
     )
     payment_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
     payment_url: Mapped[str | None] = mapped_column(Text, nullable=True)
-    status: Mapped[str] = mapped_column(String(16), nullable=False, default="completed", server_default="completed")
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="completed", server_default="completed"
+    )
 
     user: Mapped[User] = relationship("User", back_populates="transactions")
 

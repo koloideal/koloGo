@@ -60,7 +60,9 @@ class StatisticsService:
         users = await self._users_dao.get_all(limit=limit, exclude_user_id=exclude_user_id)
         return await self._build_stats(users)
 
-    async def search_users_stats(self, query: str, limit: int = 50, exclude_user_id: int | None = None) -> list[UserStats]:
+    async def search_users_stats(
+        self, query: str, limit: int = 50, exclude_user_id: int | None = None
+    ) -> list[UserStats]:
         users = await self._users_dao.search(query, limit=limit, exclude_user_id=exclude_user_id)
         return await self._build_stats(users)
 

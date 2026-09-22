@@ -1,3 +1,5 @@
+from typing import Any
+
 from aiogram.types import CallbackQuery, Message
 from aiogram_dialog import Dialog, DialogManager, Window
 from aiogram_dialog.widgets.input import MessageInput
@@ -36,8 +38,8 @@ async def get_ride_bookings(
     users_dao: FromDishka[UsersDAO],
     rides_dao: FromDishka[RidesDAO],
     messages: FromDishka[MessageBuilder],
-    **_kwargs,
-):
+    **_kwargs: Any,
+) -> dict[str, Any]:
     if "ride_id" not in dialog_manager.dialog_data:
         start_data = dialog_manager.start_data
         if isinstance(start_data, dict):
@@ -59,8 +61,7 @@ async def get_ride_bookings(
         latest_by_user[b.user_id] = b
     if ride is not None and ride.status == RideStatus.OPEN:
         bookings = [
-            b for b in latest_by_user.values()
-            if b.status in (BookingStatus.PENDING, BookingStatus.APPROVED)
+            b for b in latest_by_user.values() if b.status in (BookingStatus.PENDING, BookingStatus.APPROVED)
         ]
     else:
         bookings = list(latest_by_user.values())
@@ -93,7 +94,13 @@ async def get_ride_bookings(
                 "title": f"{emoji} #{b.booking_id} • {uname}{vip} • {status_ru} • {pay}",
             }
         )
-    return {"has_bookings": True, "bookings": items, "back_btn": "⬅️ К поездке", "can_add_passenger": can_add, "has_approved": any(b.status == BookingStatus.APPROVED for b in bookings) if bookings else False}
+    return {
+        "has_bookings": True,
+        "bookings": items,
+        "back_btn": "⬅️ К поездке",
+        "can_add_passenger": can_add,
+        "has_approved": any(b.status == BookingStatus.APPROVED for b in bookings) if bookings else False,
+    }
 
 
 @inject
@@ -104,8 +111,8 @@ async def get_booking_detail(
     rides_dao: FromDishka[RidesDAO],
     messages: FromDishka[MessageBuilder],
     clock: FromDishka[LocalClock],
-    **_kwargs,
-):
+    **_kwargs: Any,
+) -> dict[str, Any]:
     booking_id: int = dialog_manager.dialog_data["booking_id"]
     booking = await bookings_dao.get_by_id(booking_id)
     if not booking:
@@ -148,7 +155,7 @@ async def on_booking_selected(
     select: Select,
     manager: DialogManager,
     item_id: str,
-):
+) -> None:
     manager.dialog_data["booking_id"] = int(item_id)
     await manager.next()
 
@@ -159,7 +166,7 @@ async def on_approve(
     button: Button,
     manager: DialogManager,
     ride_service: FromDishka[RideService],
-):
+) -> None:
     booking_id: int = manager.dialog_data["booking_id"]
     await ride_service.approve_booking(booking_id)
     await callback.answer("Одобрено", show_alert=True)
@@ -172,7 +179,7 @@ async def on_reject(
     button: Button,
     manager: DialogManager,
     ride_service: FromDishka[RideService],
-):
+) -> None:
     booking_id: int = manager.dialog_data["booking_id"]
     await ride_service.reject_booking(booking_id)
     await callback.answer("Отклонено, возврат выполнен", show_alert=True)
@@ -185,14 +192,14 @@ async def on_noshow(
     button: Button,
     manager: DialogManager,
     ride_service: FromDishka[RideService],
-):
+) -> None:
     booking_id: int = manager.dialog_data["booking_id"]
     await ride_service.mark_no_show(booking_id)
     await callback.answer("Отмечена неявка", show_alert=True)
     await manager.switch_to(RideBookingsSG.bookings_list)
 
 
-async def on_kick(callback: CallbackQuery, button: Button, manager: DialogManager):
+async def on_kick(callback: CallbackQuery, button: Button, manager: DialogManager) -> None:
     await manager.switch_to(RideBookingsSG.kick_reason)
 
 
@@ -202,7 +209,7 @@ async def on_kick_reason_input(
     widget: MessageInput,
     manager: DialogManager,
     ride_service: FromDishka[RideService],
-):
+) -> None:
     booking_id: int = manager.dialog_data["booking_id"]
     reason = (message.text or "").strip()[:512]
     booking = await ride_service.kick_booking(booking_id, reason)
@@ -213,11 +220,11 @@ async def on_kick_reason_input(
     await manager.switch_to(RideBookingsSG.bookings_list)
 
 
-async def on_broadcast_click(callback: CallbackQuery, button: Button, manager: DialogManager):
+async def on_broadcast_click(callback: CallbackQuery, button: Button, manager: DialogManager) -> None:
     await manager.switch_to(RideBookingsSG.broadcast_text)
 
 
-async def on_broadcast_text_input(message: Message, widget: MessageInput, manager: DialogManager):
+async def on_broadcast_text_input(message: Message, widget: MessageInput, manager: DialogManager) -> None:
     text = (message.text or "").strip()
     if not text:
         await message.answer("❌ Текст не может быть пустым.")
@@ -226,7 +233,7 @@ async def on_broadcast_text_input(message: Message, widget: MessageInput, manage
     await manager.switch_to(RideBookingsSG.broadcast_confirm)
 
 
-async def get_broadcast_preview(dialog_manager: DialogManager, **_kwargs):
+async def get_broadcast_preview(dialog_manager: DialogManager, **_kwargs: Any) -> dict[str, Any]:
     text = dialog_manager.dialog_data.get("broadcast_text", "")
     return {"broadcast_text": text, "send_btn": "📢 Отправить", "back_btn": "⬅️ Назад"}
 
@@ -238,7 +245,7 @@ async def on_broadcast_send(
     manager: DialogManager,
     ride_service: FromDishka[RideService],
     bookings_dao: FromDishka[BookingsDAO],
-):
+) -> None:
     ride_id: int = manager.dialog_data.get("ride_id", 0)
     text: str = manager.dialog_data.get("broadcast_text", "")
     if not ride_id or not text:
@@ -257,8 +264,8 @@ async def get_passengers_list(
     statistics_service: FromDishka[StatisticsService],
     bookings_dao: FromDishka[BookingsDAO],
     config: FromDishka[Config],
-    **_kwargs,
-):
+    **_kwargs: Any,
+) -> dict[str, Any]:
     ride_id: int = dialog_manager.dialog_data.get("ride_id", 0)
     if not ride_id:
         return {"has_users": False, "empty_text": "🚫 Поездка не найдена.", "back_btn": "⬅️ К броням"}
@@ -294,7 +301,7 @@ async def on_passenger_selected(
     select: Select,
     manager: DialogManager,
     item_id: str,
-):
+) -> None:
     ride_id: int = manager.dialog_data.get("ride_id", 0)
     user_id = int(item_id)
     container = manager.middleware_data["dishka_container"]

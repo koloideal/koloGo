@@ -55,9 +55,7 @@ class CryptoBotPaymentService:
             self._session = None
             raise
 
-    async def _parse_response(
-        self, response: aiohttp.ClientResponse, method: str, endpoint: str
-    ) -> Any:
+    async def _parse_response(self, response: aiohttp.ClientResponse, method: str, endpoint: str) -> Any:
         if response.status >= 400:
             text = await response.text()
             logger.error("CryptoBot API error %s %s → %d: %s", method, endpoint, response.status, text)
@@ -91,7 +89,5 @@ class CryptoBotPaymentService:
             return "not_paid"
         result: dict[str, Any] = items[0]
         invoice_status = result.get("status", "unknown")
-        logger.info(
-            "CryptoBot invoice %s status=%s", invoice_id, invoice_status
-        )
+        logger.info("CryptoBot invoice %s status=%s", invoice_id, invoice_status)
         return cast(Literal["paid", "not_paid"], "not_paid" if invoice_status == "active" else "paid")

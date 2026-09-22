@@ -1,4 +1,5 @@
 from html import escape
+from typing import Any
 
 from aiogram.types import CallbackQuery, Message
 from aiogram_dialog import Dialog, DialogManager, Window
@@ -17,14 +18,13 @@ from ..user_dialogs.states import AdminRequisitesSG
 async def get_requisites(
     dialog_manager: DialogManager,
     requisites_dao: FromDishka[RequisitesDAO],
-    **_kwargs,
-):
+    **_kwargs: Any,
+) -> dict[str, Any]:
     requisites = await requisites_dao.list_all()
     return {
         "has_requisites": bool(requisites),
         "requisites": [
-            {"requisite_id": item.requisite_id, "title": escape(item.title)}
-            for item in requisites
+            {"requisite_id": item.requisite_id, "title": escape(item.title)} for item in requisites
         ],
         "empty_text": "Реквизитов пока нет.",
     }
@@ -34,18 +34,13 @@ async def get_requisites(
 async def get_requisite_detail(
     dialog_manager: DialogManager,
     requisites_dao: FromDishka[RequisitesDAO],
-    **_kwargs,
-):
+    **_kwargs: Any,
+) -> dict[str, Any]:
     requisite_id = dialog_manager.dialog_data.get("requisite_id", 0)
     requisite = await requisites_dao.get_by_id(requisite_id)
     if not requisite:
         return {"requisite_text": "Реквизит не найден."}
-    return {
-        "requisite_text": (
-            f"<b>{escape(requisite.title)}</b>\n\n"
-            f"<code>{escape(requisite.value)}</code>"
-        )
-    }
+    return {"requisite_text": (f"<b>{escape(requisite.title)}</b>\n\n<code>{escape(requisite.value)}</code>")}
 
 
 async def on_requisite_selected(
@@ -53,7 +48,7 @@ async def on_requisite_selected(
     select: Select,
     manager: DialogManager,
     item_id: str,
-):
+) -> None:
     manager.dialog_data["requisite_id"] = int(item_id)
     await manager.switch_to(AdminRequisitesSG.detail)
 
@@ -62,7 +57,7 @@ async def on_title_input(
     message: Message,
     widget: MessageInput,
     manager: DialogManager,
-):
+) -> None:
     title = (message.text or "").strip()
     if not title:
         await message.answer("Введите название реквизита.")
@@ -75,7 +70,7 @@ async def on_value_input(
     message: Message,
     widget: MessageInput,
     manager: DialogManager,
-):
+) -> None:
     value = (message.text or "").strip()
     if not value:
         await message.answer("Введите значение реквизита.")
@@ -95,7 +90,7 @@ async def on_delete(
     callback: CallbackQuery,
     button: Button,
     manager: DialogManager,
-):
+) -> None:
     requisite_id = manager.dialog_data.get("requisite_id", 0)
     container = manager.middleware_data["dishka_container"]
     requisites_dao: RequisitesDAO = await container.get(RequisitesDAO)

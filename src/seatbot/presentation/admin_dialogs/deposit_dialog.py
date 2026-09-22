@@ -39,7 +39,7 @@ async def on_topup_input(
     widget: MessageInput,
     manager: DialogManager,
     deposit_service: FromDishka[DepositService],
-):
+) -> None:
     amount = await _parse_amount(message.text or "")
     if amount is None:
         await message.answer("❌ Введите положительное число (например, <code>50.00</code>).")
@@ -52,7 +52,9 @@ async def on_topup_input(
     if not user:
         await message.answer("❌ Пользователь не найден.")
         return
-    await message.answer(f"✅ Депозит пополнен на {fmt_amount(amount)} BYN. Баланс: {fmt_amount(user.balance)} BYN")
+    await message.answer(
+        f"✅ Депозит пополнен на {fmt_amount(amount)} BYN. Баланс: {fmt_amount(user.balance)} BYN"
+    )
     await manager.done()
 
 
@@ -62,7 +64,7 @@ async def on_decrease_input(
     widget: MessageInput,
     manager: DialogManager,
     deposit_service: FromDishka[DepositService],
-):
+) -> None:
     amount = await _parse_amount(message.text or "")
     if amount is None:
         await message.answer("❌ Введите положительное число (например, <code>10.00</code>).")

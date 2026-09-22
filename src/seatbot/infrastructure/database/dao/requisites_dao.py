@@ -16,22 +16,16 @@ class RequisitesDAO:
         return self._map_to_domain(orm)
 
     async def get_by_id(self, requisite_id: int) -> Requisite | None:
-        result = await self.session.execute(
-            select(OrmRequisite).where(OrmRequisite.id == requisite_id)
-        )
+        result = await self.session.execute(select(OrmRequisite).where(OrmRequisite.id == requisite_id))
         orm = result.scalar_one_or_none()
         return self._map_to_domain(orm) if orm else None
 
     async def list_all(self) -> list[Requisite]:
-        result = await self.session.execute(
-            select(OrmRequisite).order_by(OrmRequisite.created_at.asc())
-        )
+        result = await self.session.execute(select(OrmRequisite).order_by(OrmRequisite.created_at.asc()))
         return [self._map_to_domain(orm) for orm in result.scalars().all()]
 
     async def delete(self, requisite_id: int) -> bool:
-        result = await self.session.execute(
-            select(OrmRequisite).where(OrmRequisite.id == requisite_id)
-        )
+        result = await self.session.execute(select(OrmRequisite).where(OrmRequisite.id == requisite_id))
         orm = result.scalar_one_or_none()
         if not orm:
             return False

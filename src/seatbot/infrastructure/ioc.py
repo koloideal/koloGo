@@ -20,11 +20,12 @@ from seatbot.application.services.tracking import TrackingService
 from seatbot.application.services.user import UserService
 from seatbot.application.services.vip import VipService
 from seatbot.infrastructure.cache import CacheKeys, RedisService
-from seatbot.infrastructure.config.models import Config
+from seatbot.infrastructure.config.models import Config, GeoConfig, TrackingConfig
 from seatbot.infrastructure.database.config import new_session_maker
 from seatbot.infrastructure.database.dao import (BookingsDAO, LocationsDAO, RequisitesDAO,
                                                  RidesDAO, SettingsDAO, TrackPointsDAO,
                                                  TransactionsDAO, UsersDAO)
+from seatbot.infrastructure.geo import GeoService
 from seatbot.infrastructure.notifications import MessageBuilder
 from seatbot.infrastructure.payments import CryptoBotPaymentService
 from seatbot.infrastructure.scheduling.payment_poller import PaymentStatusPoller
@@ -140,6 +141,18 @@ class SchedulerProvider(Provider):
 class ServicesProvider(Provider):
     scope = Scope.REQUEST
 
+    @provide(scope=Scope.APP)
+    def get_geo_config(self, config: Config) -> GeoConfig:
+        return config.geo
+
+    @provide(scope=Scope.APP)
+    def get_tracking_config(self, config: Config) -> TrackingConfig:
+        return config.tracking
+
+    @provide(scope=Scope.APP)
+    def get_geo_service(self, geo_config: GeoConfig) -> GeoService:
+        return GeoService(geo_config)
+
     @provide
     def get_message_builder(self, clock: LocalClock) -> MessageBuilder:
         return MessageBuilder(clock)
@@ -157,12 +170,22 @@ class ServicesProvider(Provider):
         bookings_dao: BookingsDAO,
         users_dao: UsersDAO,
         transactions_dao: TransactionsDAO,
+        track_dao: TrackPointsDAO,
         bot_service: BotService,
         message_builder: MessageBuilder,
         clock: LocalClock,
+        geo: GeoService,
     ) -> RideService:
         return RideService(
-            rides_dao, bookings_dao, users_dao, transactions_dao, bot_service, message_builder, clock
+            rides_dao,
+            bookings_dao,
+            users_dao,
+            transactions_dao,
+            track_dao,
+            bot_service,
+            message_builder,
+            clock,
+            geo,
         )
 
     @provide
@@ -242,7 +265,8 @@ class ServicesProvider(Provider):
         bot_service: BotService,
         message_builder: MessageBuilder,
         clock: LocalClock,
-        config: Config,
+        geo: GeoService,
+        tracking_config: TrackingConfig,
     ) -> TrackingService:
         return TrackingService(
             rides_dao,
@@ -252,7 +276,8 @@ class ServicesProvider(Provider):
             bot_service,
             message_builder,
             clock,
-            config,
+            geo,
+            tracking_config,
         )
 
 

@@ -49,11 +49,16 @@ async def get_users_list(
     dialog_manager: DialogManager,
     statistics_service: FromDishka[StatisticsService],
     config: FromDishka[Config],
-    **_kwargs,
-):
+    **_kwargs: Any,
+) -> dict[str, Any]:
     stats = await statistics_service.all_users_stats(limit=100, exclude_user_id=config.bot.creator_id)
     if not stats:
-        return {"has_users": False, "empty_text": "🚫 Нет пользователей.", "back_btn": "⬅️ В панель", "sort_btn": "📅 Новизна ↓"}
+        return {
+            "has_users": False,
+            "empty_text": "🚫 Нет пользователей.",
+            "back_btn": "⬅️ В панель",
+            "sort_btn": "📅 Новизна ↓",
+        }
     sort_mode = dialog_manager.dialog_data.get("sort_mode", "reg_desc")
     stats = _sort_stats(stats, sort_mode)
     items = []
@@ -72,7 +77,12 @@ async def get_users_list(
                 "title": f"{uname}{badge_str} • {first}",
             }
         )
-    return {"has_users": True, "users": items, "back_btn": "⬅️ В панель", "sort_btn": _SORT_LABELS.get(sort_mode, "📅 Новизна ↓")}
+    return {
+        "has_users": True,
+        "users": items,
+        "back_btn": "⬅️ В панель",
+        "sort_btn": _SORT_LABELS.get(sort_mode, "📅 Новизна ↓"),
+    }
 
 
 @inject
@@ -80,8 +90,8 @@ async def get_user_detail(
     dialog_manager: DialogManager,
     statistics_service: FromDishka[StatisticsService],
     users_dao: FromDishka[UsersDAO],
-    **_kwargs,
-):
+    **_kwargs: Any,
+) -> dict[str, Any]:
     if "user_id" not in dialog_manager.dialog_data:
         start_data = dialog_manager.start_data
         if isinstance(start_data, dict) and "user_id" in start_data:
@@ -126,7 +136,7 @@ async def on_toggle_ban(
     button: Button,
     manager: DialogManager,
     user_service: FromDishka[UserService],
-):
+) -> None:
     user_id: int = manager.dialog_data["user_id"]
     user = await user_service.is_banned(user_id)
     if user:
@@ -144,7 +154,7 @@ async def on_toggle_vip(
     button: Button,
     manager: DialogManager,
     user_service: FromDishka[UserService],
-):
+) -> None:
     user_id: int = manager.dialog_data["user_id"]
     is_vip = await user_service.is_vip(user_id)
     await user_service.set_vip(user_id, not is_vip)
@@ -152,12 +162,12 @@ async def on_toggle_vip(
     await manager.update({})
 
 
-async def on_deposit_click(callback: CallbackQuery, button: Button, manager: DialogManager):
+async def on_deposit_click(callback: CallbackQuery, button: Button, manager: DialogManager) -> None:
     user_id: int = manager.dialog_data["user_id"]
     await manager.start(DepositSG.deposit_amount, data={"user_id": user_id})
 
 
-async def on_decrease_click(callback: CallbackQuery, button: Button, manager: DialogManager):
+async def on_decrease_click(callback: CallbackQuery, button: Button, manager: DialogManager) -> None:
     user_id: int = manager.dialog_data["user_id"]
     await manager.start(DepositSG.decrease_amount, data={"user_id": user_id})
 
@@ -167,22 +177,22 @@ async def on_user_selected(
     select: Select,
     manager: DialogManager,
     item_id: str,
-):
+) -> None:
     manager.dialog_data["user_id"] = int(item_id)
     await manager.next()
 
 
-async def on_search_click(callback: CallbackQuery, button: Button, manager: DialogManager):
+async def on_search_click(callback: CallbackQuery, button: Button, manager: DialogManager) -> None:
     await manager.switch_to(UsersSG.search)
 
 
-async def on_sort_click(callback: CallbackQuery, button: Button, manager: DialogManager):
+async def on_sort_click(callback: CallbackQuery, button: Button, manager: DialogManager) -> None:
     current = manager.dialog_data.get("sort_mode", "reg_desc")
     manager.dialog_data["sort_mode"] = _next_sort_mode(current)
     await manager.update({})
 
 
-async def on_search_input(message: Message, widget: MessageInput, manager: DialogManager):
+async def on_search_input(message: Message, widget: MessageInput, manager: DialogManager) -> None:
     query = (message.text or "").strip()
     if not query:
         await message.answer("❌ Введите запрос для поиска.")
@@ -206,8 +216,8 @@ async def get_search_results(
     dialog_manager: DialogManager,
     statistics_service: FromDishka[StatisticsService],
     config: FromDishka[Config],
-    **_kwargs,
-):
+    **_kwargs: Any,
+) -> dict[str, Any]:
     query: str = dialog_manager.dialog_data.get("search_query", "")
     if not query:
         return {"has_users": False, "empty_text": "🚫 Пустой запрос.", "back_btn": "⬅️ Назад"}
@@ -275,10 +285,7 @@ users_dialog = Dialog(
         getter=get_user_detail,
     ),
     Window(
-        Const(
-            "🔍 <b>Поиск клиентов</b>\n\n"
-            "Введите имя, username или ID для поиска:"
-        ),
+        Const("🔍 <b>Поиск клиентов</b>\n\nВведите имя, username или ID для поиска:"),
         MessageInput(on_search_input),
         SwitchTo(Const("⬅️ Назад"), id="back", state=UsersSG.users_list),
         state=UsersSG.search,

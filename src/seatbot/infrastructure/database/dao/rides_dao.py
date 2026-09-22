@@ -56,9 +56,7 @@ class RidesDAO:
         return self._map_to_domain(orm_ride) if orm_ride else None
 
     async def get_by_id_for_update(self, ride_id: int) -> Ride | None:
-        result = await self.session.execute(
-            select(OrmRide).where(OrmRide.id == ride_id).with_for_update()
-        )
+        result = await self.session.execute(select(OrmRide).where(OrmRide.id == ride_id).with_for_update())
         orm_ride = result.scalar_one_or_none()
         return self._map_to_domain(orm_ride) if orm_ride else None
 
@@ -92,7 +90,16 @@ class RidesDAO:
             (OrmRide.status == RideStatus.CANCELLED.value, 4),
             else_=5,
         )
-        query = select(OrmRide).order_by(status_order, OrmRide.departure_at.asc()).limit(limit)
+        done_ts = func.extract("epoch", func.coalesce(OrmRide.finished_at, OrmRide.departure_at))
+        dep_ts = func.extract("epoch", OrmRide.departure_at)
+        recency = case(
+            (
+                OrmRide.status.in_([RideStatus.COMPLETED.value, RideStatus.CANCELLED.value]),
+                -done_ts,
+            ),
+            else_=dep_ts,
+        )
+        query = select(OrmRide).order_by(status_order, recency).limit(limit)
         result = await self.session.execute(query)
         rides = [self._map_to_domain(r) for r in result.scalars().all()]
         return [await self._with_stats(ride) for ride in rides]
@@ -258,4 +265,5 @@ class RidesDAO:
             started_at=orm_ride.started_at,
             finished_at=orm_ride.finished_at,
             track_distance_m=orm_ride.track_distance_m,
+            track_max_speed_mps=orm_ride.track_max_speed_mps,
         )

@@ -1,3 +1,5 @@
+from typing import Any
+
 from aiogram.types import CallbackQuery
 from aiogram_dialog import Dialog, DialogManager, StartMode, Window
 from aiogram_dialog.widgets.kbd import Button, Cancel, ScrollingGroup, Select, SwitchTo
@@ -22,8 +24,8 @@ async def get_rides_list(
     dialog_manager: DialogManager,
     rides_dao: FromDishka[RidesDAO],
     clock: FromDishka[LocalClock],
-    **_kwargs,
-):
+    **_kwargs: Any,
+) -> dict[str, Any]:
     rides = await rides_dao.list_upcoming_visible()
     if not rides:
         return {
@@ -39,8 +41,7 @@ async def get_rides_list(
             {
                 "ride_id": rws.ride.ride_id,
                 "title": (
-                    f"{clock.fmt(rws.ride.departure_at, '%d.%m %H:%M')} • "
-                    f"{rws.free_seats} мест{route_part}"
+                    f"{clock.fmt(rws.ride.departure_at, '%d.%m %H:%M')} • {rws.free_seats} мест{route_part}"
                 ),
             }
         )
@@ -59,8 +60,8 @@ async def get_ride_detail(
     users_dao: FromDishka[UsersDAO],
     messages: FromDishka[MessageBuilder],
     clock: FromDishka[LocalClock],
-    **_kwargs,
-):
+    **_kwargs: Any,
+) -> dict[str, Any]:
     ride_id: int = dialog_manager.dialog_data["ride_id"]
     rws = await rides_dao.get_with_stats(ride_id)
     if not rws:
@@ -124,7 +125,7 @@ async def on_ride_selected(
     select: Select,
     manager: DialogManager,
     item_id: str,
-):
+) -> None:
     manager.dialog_data["ride_id"] = int(item_id)
     await manager.next()
 
@@ -137,7 +138,7 @@ async def on_book_click(
     ride_service: FromDishka[RideService],
     rides_dao: FromDishka[RidesDAO],
     users_dao: FromDishka[UsersDAO],
-):
+) -> None:
     ride_id: int = manager.dialog_data["ride_id"]
     user_id = manager.middleware_data["event_from_user"].id
     user = await users_dao.get_by_id(user_id)
@@ -161,8 +162,7 @@ async def on_book_click(
     except VipHoldActiveError as e:
         mins, secs = divmod(e.remaining_seconds, 60)
         await callback.answer(
-            f"⭐ Сейчас VIP-холд — только VIP могут бронировать. "
-            f"Подождите ещё {mins}:{secs:02d}.",
+            f"⭐ Сейчас VIP-холд — только VIP могут бронировать. Подождите ещё {mins}:{secs:02d}.",
             show_alert=True,
         )
         return
@@ -189,7 +189,7 @@ async def on_show_origin(
     button: Button,
     manager: DialogManager,
     rides_dao: FromDishka[RidesDAO],
-):
+) -> None:
     ride_id: int = manager.dialog_data["ride_id"]
     ride = await rides_dao.get_by_id(ride_id)
     if not ride or ride.origin_lat is None or ride.origin_lon is None:
