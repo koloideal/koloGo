@@ -63,6 +63,7 @@ class CacheKeys:
         "user_booking_counts",
         "user_next_booking",
         "user_vip",
+        "users_stats",
         "vip_price",
     )
 
@@ -80,6 +81,7 @@ class CacheKeys:
         self.ride_templates: CacheKey[dict[str, Any]] = json_key("seatbot:rides:templates", 120)
         self.bookings_pending: CacheKey[dict[str, Any]] = json_key("seatbot:bookings:pending", 45)
         self.locations_all: CacheKey[dict[str, Any]] = json_key("seatbot:locations:all", 600)
+        self.users_stats: CacheKey[dict[str, Any]] = json_key("seatbot:stats:users", 120)
         self.vip_price: CacheKey[float] = float_key("seatbot:settings:vip_price", 600)
         self.rate_byn_usd: CacheKey[float] = float_key("seatbot:settings:byn_to_usd", 600)
         self.rate_byn_stars: CacheKey[float] = float_key("seatbot:settings:byn_to_stars", 600)

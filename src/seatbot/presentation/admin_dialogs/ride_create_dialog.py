@@ -3,6 +3,7 @@ from datetime import date, datetime, time, timezone
 from html import escape
 from typing import Any
 
+from aiogram import F
 from aiogram.fsm.state import State
 from aiogram.types import CallbackQuery, Message
 from aiogram_dialog import Dialog, DialogManager, Window
@@ -879,7 +880,7 @@ ride_create_dialog = Dialog(
                 when="has_templates",
             ),
         ),
-        Format("{empty_text}", when="not has_templates"),
+        Format("{empty_text}", when=~F["has_templates"]),
         SwitchTo(Const("🆕 Новая поездка"), id="new_ride", state=RideCreateSG.calendar),
         SwitchTo(
             Const("🗑 Удалить шаблоны"),
@@ -903,7 +904,7 @@ ride_create_dialog = Dialog(
                 when="has_templates",
             ),
         ),
-        Format("{empty_text}", when="not has_templates"),
+        Format("{empty_text}", when=~F["has_templates"]),
         SwitchTo(Const("⬅️ Назад"), id="back", state=RideCreateSG.select_template),
         state=RideCreateSG.template_delete,
         getter=get_templates,

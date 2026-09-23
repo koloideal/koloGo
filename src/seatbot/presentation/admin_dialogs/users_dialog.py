@@ -3,6 +3,7 @@ from html import escape
 from types import MappingProxyType
 from typing import Any
 
+from aiogram import F
 from aiogram.types import CallbackQuery, Message
 from aiogram_dialog import Dialog, DialogManager, Window
 from aiogram_dialog.widgets.input import MessageInput
@@ -261,7 +262,7 @@ users_dialog = Dialog(
             height=8,
             id="users_scroll",
         ),
-        Format("{empty_text}", when="not has_users"),
+        Format("{empty_text}", when=~F["has_users"]),
         Button(Format("{sort_btn}"), id="sort", on_click=on_sort_click, when="has_users"),
         Button(Const("🔍 Поиск"), id="search", on_click=on_search_click),
         Cancel(Format("{back_btn}")),
@@ -305,7 +306,7 @@ users_dialog = Dialog(
             height=8,
             id="users_search_scroll",
         ),
-        Format("{empty_text}", when="not has_users"),
+        Format("{empty_text}", when=~F["has_users"]),
         SwitchTo(Const("⬅️ Назад"), id="back", state=UsersSG.users_list),
         state=UsersSG.search_results,
         getter=get_search_results,

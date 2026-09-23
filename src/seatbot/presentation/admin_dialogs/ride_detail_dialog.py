@@ -1,5 +1,6 @@
 from typing import Any
 
+from aiogram import F
 from aiogram.types import CallbackQuery, Message
 from aiogram_dialog import Dialog, DialogManager, Window
 from aiogram_dialog.widgets.input import MessageInput
@@ -372,7 +373,7 @@ ride_detail_dialog = Dialog(
             height=8,
             id="bookings_scroll",
         ),
-        Format("{empty_text}", when="not has_bookings"),
+        Format("{empty_text}", when=~F["has_bookings"]),
         SwitchTo(
             Const("➕ Добавить клиента"),
             id="add_passenger",
@@ -417,7 +418,7 @@ ride_detail_dialog = Dialog(
             height=8,
             id="users_scroll",
         ),
-        Format("{empty_text}", when="not has_users"),
+        Format("{empty_text}", when=~F["has_users"]),
         SwitchTo(Format("{back_btn}"), id="back", state=RideBookingsSG.bookings_list),
         state=RideBookingsSG.add_passenger,
         getter=get_passengers_list,

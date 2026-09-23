@@ -1,5 +1,6 @@
 from typing import Any
 
+from aiogram import F
 from aiogram.types import CallbackQuery
 from aiogram_dialog import Dialog, DialogManager, Window
 from aiogram_dialog.widgets.kbd import (Button, Cancel, ScrollingGroup, Select, SwitchTo,
@@ -201,7 +202,7 @@ my_bookings_dialog = Dialog(
             height=8,
             id="bookings_scroll",
         ),
-        Format("{empty_text}", when="not has_bookings"),
+        Format("{empty_text}", when=~F["has_bookings"]),
         Cancel(Format("{back_btn}")),
         state=MyBookingsSG.list,
         getter=get_my_bookings,

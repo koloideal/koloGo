@@ -1,5 +1,6 @@
 from typing import Any
 
+from aiogram import F
 from aiogram.types import CallbackQuery
 from aiogram_dialog import Dialog, DialogManager, StartMode, Window
 from aiogram_dialog.widgets.kbd import Button, ScrollingGroup, Select, Start, SwitchTo
@@ -302,7 +303,7 @@ rides_dialog = Dialog(
             height=8,
             id="rides_scroll",
         ),
-        Format("{empty_text}", when="not has_rides"),
+        Format("{empty_text}", when=~F["has_rides"]),
         Start(Format("{back_btn}"), id="to_menu", state=MainMenuSG.main, mode=StartMode.RESET_STACK),
         state=RidesSG.list,
         getter=get_rides_list,

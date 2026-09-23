@@ -149,6 +149,7 @@ class RideService:
         keys = self._cache_keys
         await self._cache.delete(keys.user_next_booking, user_id=user_id)
         await self._cache.delete(keys.user_booking_counts, user_id=user_id)
+        await self._cache.delete(keys.users_stats)
 
     async def _invalidate_booking_caches(self, ride_id: int, user_ids: set[int]) -> None:
         await self._invalidate_ride_caches(ride_id)

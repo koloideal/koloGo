@@ -1,6 +1,7 @@
 from html import escape
 from typing import Any
 
+from aiogram import F
 from aiogram.types import CallbackQuery, Message
 from aiogram_dialog import Dialog, DialogManager, Window
 from aiogram_dialog.widgets.input import MessageInput
@@ -112,7 +113,7 @@ requisites_dialog = Dialog(
                 when="has_requisites",
             )
         ),
-        Format("{empty_text}", when="not has_requisites"),
+        Format("{empty_text}", when=~F["has_requisites"]),
         SwitchTo(Const("➕ Добавить"), id="add", state=AdminRequisitesSG.title),
         Cancel(Const("⬅️ В панель")),
         state=AdminRequisitesSG.list,

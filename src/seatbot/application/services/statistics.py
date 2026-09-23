@@ -1,4 +1,6 @@
 from seatbot.domain.schemas import OverallStats, RideStatus, UserStats
+from seatbot.infrastructure.cache import CacheKeys, RedisService
+from seatbot.infrastructure.cache.serializers import dump_user_stats, load_user_stats
 from seatbot.infrastructure.database.dao import (BookingsDAO, RidesDAO, TransactionsDAO,
                                                  UsersDAO)
 
@@ -10,11 +12,15 @@ class StatisticsService:
         rides_dao: RidesDAO,
         bookings_dao: BookingsDAO,
         transactions_dao: TransactionsDAO,
+        cache: RedisService,
+        cache_keys: CacheKeys,
     ) -> None:
         self._users_dao = users_dao
         self._rides_dao = rides_dao
         self._bookings_dao = bookings_dao
         self._transactions_dao = transactions_dao
+        self._cache = cache
+        self._cache_keys = cache_keys
 
     async def user_stats(self, user_id: int) -> UserStats | None:
         user = await self._users_dao.get_by_id(user_id)
@@ -58,8 +64,16 @@ class StatisticsService:
         )
 
     async def all_users_stats(self, limit: int = 100, exclude_user_id: int | None = None) -> list[UserStats]:
+        cached = await self._cache.get(self._cache_keys.users_stats)
+        if cached is not None:
+            return [load_user_stats(d) for d in cached["items"]]
         users = await self._users_dao.get_all(limit=limit, exclude_user_id=exclude_user_id)
-        return await self._build_stats(users)
+        stats = await self._build_stats(users)
+        await self._cache.set(self._cache_keys.users_stats, {"items": [dump_user_stats(s) for s in stats]})
+        return stats
+
+    async def invalidate_users_stats(self) -> None:
+        await self._cache.delete(self._cache_keys.users_stats)
 
     async def search_users_stats(
         self, query: str, limit: int = 50, exclude_user_id: int | None = None

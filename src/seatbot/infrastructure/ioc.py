@@ -213,8 +213,10 @@ class ServicesProvider(Provider):
         transactions_dao: TransactionsDAO,
         bot_service: BotService,
         message_builder: MessageBuilder,
+        cache: RedisService,
+        cache_keys: CacheKeys,
     ) -> DepositService:
-        return DepositService(users_dao, transactions_dao, bot_service, message_builder)
+        return DepositService(users_dao, transactions_dao, bot_service, message_builder, cache, cache_keys)
 
     @provide
     def get_statistics_service(
@@ -223,8 +225,10 @@ class ServicesProvider(Provider):
         rides_dao: RidesDAO,
         bookings_dao: BookingsDAO,
         transactions_dao: TransactionsDAO,
+        cache: RedisService,
+        cache_keys: CacheKeys,
     ) -> StatisticsService:
-        return StatisticsService(users_dao, rides_dao, bookings_dao, transactions_dao)
+        return StatisticsService(users_dao, rides_dao, bookings_dao, transactions_dao, cache, cache_keys)
 
     @provide
     def get_broadcast_service(self, bot: Bot, config: Config, users_dao: UsersDAO) -> BroadcastService:
@@ -313,6 +317,11 @@ class UserAppProvider(Provider):
 
     @provide
     def create_or_get_user(
-        self, users_dao: UsersDAO, bot_service: BotService, message_builder: MessageBuilder
+        self,
+        users_dao: UsersDAO,
+        bot_service: BotService,
+        message_builder: MessageBuilder,
+        cache: RedisService,
+        cache_keys: CacheKeys,
     ) -> CreateOrGetUserInteractor:
-        return CreateOrGetUserInteractor(users_dao, bot_service, message_builder)
+        return CreateOrGetUserInteractor(users_dao, bot_service, message_builder, cache, cache_keys)

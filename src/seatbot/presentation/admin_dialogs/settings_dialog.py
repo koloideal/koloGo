@@ -2,6 +2,7 @@ import math
 from html import escape
 from typing import Any
 
+from aiogram import F
 from aiogram.types import CallbackQuery, Message
 from aiogram_dialog import Dialog, DialogManager, Window
 from aiogram_dialog.widgets.input import MessageInput
@@ -25,7 +26,7 @@ async def get_locations_list(
     **_kwargs: Any,
 ) -> dict[str, Any]:
     locations = await location_service.list_all()
-    items = [{"location_id": loc.location_id, "title": f"� {loc.name}"} for loc in locations]
+    items = [{"location_id": loc.location_id, "title": f"📍 {loc.name}"} for loc in locations]
     return {
         "has_locations": bool(items),
         "locations": items,
@@ -305,7 +306,7 @@ settings_dialog = Dialog(
             height=8,
             id="loc_scroll",
         ),
-        Format("{empty_text}", when="not has_locations"),
+        Format("{empty_text}", when=~F["has_locations"]),
         Button(Const("➕ Добавить точку"), id="add_loc", on_click=on_add_location),
         SwitchTo(Format("{back_btn}"), id="back", state=AdminSettingsSG.main),
         state=AdminSettingsSG.locations,

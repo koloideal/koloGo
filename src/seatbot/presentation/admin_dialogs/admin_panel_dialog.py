@@ -1,5 +1,6 @@
 from typing import Any
 
+from aiogram import F
 from aiogram.types import CallbackQuery
 from aiogram_dialog import Dialog, DialogManager, Window
 from aiogram_dialog.widgets.kbd import Button, Row, Start
@@ -92,7 +93,7 @@ admin_panel_dialog = Dialog(
                 Const("➕ Создать поездку"),
                 id="ride_create_direct",
                 state=RideCreateSG.calendar,
-                when="not has_templates",
+                when=~F["has_templates"],
             ),
             Start(Const("🚗 Мои поездки"), id="rides_mgmt", state=RidesMgmtSG.rides_list),
         ),

@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Any
 
 from seatbot.domain.schemas import (Booking, BookingStatus, Location, Ride, RideStatus,
-                                    RideWithStats)
+                                    RideWithStats, UserStats)
 
 
 def _dt(value: Any) -> datetime:
@@ -90,4 +90,24 @@ def load_location(data: dict[str, Any]) -> Location:
         lat=float(data["lat"]),
         lon=float(data["lon"]),
         created_at=_dt(data["created_at"]),
+    )
+
+
+def dump_user_stats(stats: UserStats) -> dict[str, Any]:
+    return asdict(stats)
+
+
+def load_user_stats(data: dict[str, Any]) -> UserStats:
+    return UserStats(
+        user_id=data["user_id"],
+        username=data.get("username"),
+        total_rides=data["total_rides"],
+        total_spent=float(data["total_spent"]),
+        balance=float(data["balance"]),
+        is_vip=data["is_vip"],
+        is_banned=data["is_banned"],
+        last_ride_at=_opt_dt(data.get("last_ride_at")),
+        first_name=data.get("first_name"),
+        registration_date=_opt_dt(data.get("registration_date")),
+        top_route=data.get("top_route"),
     )

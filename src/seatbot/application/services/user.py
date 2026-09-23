@@ -30,14 +30,17 @@ class UserService:
     async def set_banned(self, user_id: int) -> User | None:
         user = await self._users_dao.ban_user(user_id)
         await self._cache.delete(self._cache_keys.user_banned, user_id=user_id)
+        await self._cache.delete(self._cache_keys.users_stats)
         return user
 
     async def set_unbanned(self, user_id: int) -> User | None:
         user = await self._users_dao.unban_user(user_id)
         await self._cache.delete(self._cache_keys.user_banned, user_id=user_id)
+        await self._cache.delete(self._cache_keys.users_stats)
         return user
 
     async def set_vip(self, user_id: int, is_vip: bool) -> User | None:
         user = await self._users_dao.set_vip(user_id, is_vip)
         await self._cache.delete(self._cache_keys.user_vip, user_id=user_id)
+        await self._cache.delete(self._cache_keys.users_stats)
         return user
