@@ -174,6 +174,26 @@ class BookingsDAO:
         )
         return float(result.scalar_one() or 0)
 
+    async def status_counts_for_user(self, user_id: int) -> dict[BookingStatus, int]:
+        result = await self.session.execute(
+            select(OrmBooking.status, func.count(OrmBooking.id))
+            .where(OrmBooking.user_id == user_id)
+            .group_by(OrmBooking.status)
+        )
+        return {BookingStatus(status): int(cnt) for status, cnt in result.all()}
+
+    async def list_pending_upcoming(self) -> list[Booking]:
+        result = await self.session.execute(
+            select(OrmBooking)
+            .join(OrmRide, OrmBooking.ride_id == OrmRide.id)
+            .where(
+                OrmBooking.status == BookingStatus.PENDING.value,
+                OrmRide.status.in_(["open", "closed"]),
+            )
+            .order_by(OrmRide.departure_at.asc(), OrmBooking.created_at.asc())
+        )
+        return [self._map_to_domain(b) for b in result.scalars().all()]
+
     async def next_active_for_user(self, user_id: int) -> Booking | None:
         result = await self.session.execute(
             select(OrmBooking)

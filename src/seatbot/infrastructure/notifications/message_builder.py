@@ -272,7 +272,29 @@ class MessageBuilder:
             f"Бронь #{booking.booking_id}, оплата: {payment}"
         )
 
-    def new_booking_admin_log(self, booking: Booking, user: User, ride: Ride) -> str:
+    def user_brief(self, user: User, counts: dict[BookingStatus, int]) -> str:
+        no_show = counts.get(BookingStatus.NO_SHOW, 0)
+        history = (
+            f"🧾 Поездок: <b>{counts.get(BookingStatus.COMPLETED, 0)}</b> · "
+            f"неявок: <b>{no_show}</b>{' ⚠️' if no_show else ''} · "
+            f"отмен: <b>{counts.get(BookingStatus.CANCELLED, 0)}</b> · "
+            f"отклонено: <b>{counts.get(BookingStatus.REJECTED, 0)}</b>"
+        )
+        since = self._clock.fmt(user.registration_date, "%d.%m.%Y")
+        return f"{history}\n💰 Баланс: <b>{fmt_amount(user.balance)} BYN</b> · с нами с {since}"
+
+    @staticmethod
+    def seats_line(ride: Ride, approved: int, pending: int) -> str:
+        return f"🪑 Одобрено: <b>{approved}/{ride.seats_total}</b> · заявок: <b>{pending}</b>"
+
+    def new_booking_admin_log(
+        self,
+        booking: Booking,
+        user: User,
+        ride: Ride,
+        counts: dict[BookingStatus, int] | None = None,
+        seats: tuple[int, int] | None = None,
+    ) -> str:
         vip_marker = " ⭐VIP" if user.is_vip else ""
         is_free = ride.is_free or user.is_vip
         if is_free:
@@ -281,7 +303,7 @@ class MessageBuilder:
             payment = f"списано с депозита {fmt_amount(booking.paid_amount)} BYN"
         else:
             payment = f"по факту {fmt_amount(float(ride.price))} BYN"
-        return (
+        text = (
             f"🆕 <b>Новая бронь</b>\n"
             f"Поездка {self._clock.fmt(ride.departure_at)}\n"
             f"{route_line(ride)}"
@@ -289,6 +311,11 @@ class MessageBuilder:
             f"({user.user_id}){vip_marker}\n"
             f"Бронь #{booking.booking_id}, оплата: {payment}"
         )
+        if counts is not None:
+            text += f"\n\n{self.user_brief(user, counts)}"
+        if seats is not None:
+            text += f"\n{self.seats_line(ride, *seats)}"
+        return text
 
     def booking_approve_keyboard(self, booking_id: int) -> InlineKeyboardMarkup:
         return InlineKeyboardMarkup(

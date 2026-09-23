@@ -39,6 +39,11 @@ class AdminPanelSG(StatesGroup):
     main = State()
 
 
+class PendingSG(StatesGroup):
+    list = State()
+    detail = State()
+
+
 class RidesMgmtSG(StatesGroup):
     rides_list = State()
     ride_detail = State()

@@ -131,6 +131,16 @@ class RidesDAO:
         await self.session.flush()
         return True
 
+    async def get_in_progress(self) -> Ride | None:
+        result = await self.session.execute(
+            select(OrmRide)
+            .where(OrmRide.status == RideStatus.IN_PROGRESS.value)
+            .order_by(OrmRide.started_at.desc())
+            .limit(1)
+        )
+        orm_ride = result.scalar_one_or_none()
+        return self._map_to_domain(orm_ride) if orm_ride else None
+
     async def list_templates(self, limit: int = 10) -> list[Ride]:
         query = (
             select(OrmRide)

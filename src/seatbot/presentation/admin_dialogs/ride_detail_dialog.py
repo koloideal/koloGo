@@ -123,6 +123,8 @@ async def get_booking_detail(
     uname = user_display(user.username, user.first_name, booking.user_id) if user else f"id:{booking.user_id}"
     vip = " ⭐VIP" if (user and user.is_vip) else ""
     text = f"<b>Бронь #{booking.booking_id}</b>\n\n👤 Пользователь: {uname}{vip} ({booking.user_id})\n"
+    if user:
+        text += messages.user_brief(user, await bookings_dao.status_counts_for_user(user.user_id)) + "\n\n"
     if ride:
         text += f"🚗 Поездка: {clock.fmt(ride.departure_at, '%d.%m.%Y %H:%M')}\n"
         text += (

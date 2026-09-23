@@ -27,6 +27,7 @@ from seatbot.presentation.admin_dialogs import \
     admin_panel_dialog as admin_panel_dialog_mod
 from seatbot.presentation.admin_dialogs import broadcast_dialog as broadcast_dialog_mod
 from seatbot.presentation.admin_dialogs import deposit_dialog as deposit_dialog_mod
+from seatbot.presentation.admin_dialogs import pending_dialog as pending_dialog_mod
 from seatbot.presentation.admin_dialogs import \
     requisites_dialog as admin_requisites_dialog_mod
 from seatbot.presentation.admin_dialogs import \
@@ -105,6 +106,7 @@ async def main() -> None:
         rides_management_dialog_mod.rides_management_dialog,
         ride_create_dialog_mod.ride_create_dialog,
         ride_detail_dialog_mod.ride_detail_dialog,
+        pending_dialog_mod.pending_dialog,
         users_dialog_mod.users_dialog,
         deposit_dialog_mod.deposit_dialog,
         admin_requisites_dialog_mod.requisites_dialog,

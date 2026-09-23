@@ -56,13 +56,15 @@ class RideService:
         destination_lat: float | None = None,
         destination_lon: float | None = None,
         template_ride_id: int | None = None,
+        weekdays: set[int] | None = None,
     ) -> list[Ride]:
-        if departure_at <= self._clock.now():
-            raise RideInPastError(departure_at)
-        local_departure = self._clock.to_local(departure_at)
+        departures = self.plan_departures(departure_at, repeat_days, weekdays)
+        if not departures:
+            return []
+        if departures[0] <= self._clock.now():
+            raise RideInPastError(departures[0])
         rides = []
-        for i in range(repeat_days):
-            dep = self._clock.to_utc(local_departure + timedelta(days=i))
+        for dep in departures:
             ride = await self._rides_dao.create(
                 departure_at=dep,
                 price=price,
@@ -84,6 +86,13 @@ class RideService:
             await self._copy_vips_from_template(template_ride_id, rides)
         await self._notify_new_rides(rides)
         return rides
+
+    def plan_departures(
+        self, departure_at: datetime, repeat_days: int, weekdays: set[int] | None = None
+    ) -> list[datetime]:
+        local_departure = self._clock.to_local(departure_at)
+        planned = (local_departure + timedelta(days=i) for i in range(repeat_days))
+        return [self._clock.to_utc(dep) for dep in planned if weekdays is None or dep.weekday() in weekdays]
 
     async def create_ride_from_template(
         self,
@@ -381,8 +390,11 @@ class RideService:
             )
             await self._reject_overflow(ride)
 
+        counts = await self._bookings_dao.status_counts_for_user(user.user_id)
+        rws = await self._rides_dao.get_with_stats(ride_id)
+        seats = (rws.approved_seats, rws.pending_seats) if rws else None
         await self._bot_service.send_log_to_admin(
-            self._messages.new_booking_admin_log(booking, user, ride),
+            self._messages.new_booking_admin_log(booking, user, ride, counts, seats),
             reply_markup=(
                 self._messages.booking_approve_keyboard(booking.booking_id)
                 if booking.status == BookingStatus.PENDING

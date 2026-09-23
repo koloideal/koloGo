@@ -3,13 +3,14 @@ from datetime import date, datetime, time, timezone
 from html import escape
 from typing import Any
 
+from aiogram.fsm.state import State
 from aiogram.types import CallbackQuery, Message
 from aiogram_dialog import Dialog, DialogManager, Window
 from aiogram_dialog.api.entities import ChatEvent
 from aiogram_dialog.widgets.input import MessageInput
 from aiogram_dialog.widgets.kbd import (Button, Calendar, CalendarUserConfig, Cancel,
-                                        Column, ManagedCalendar, ManagedTimeSelect, Row,
-                                        ScrollingGroup, Select, SwitchTo, TimeSelect)
+                                        Column, Group, ManagedCalendar, ManagedTimeSelect,
+                                        Row, ScrollingGroup, Select, SwitchTo, TimeSelect)
 from aiogram_dialog.widgets.kbd.time import OnValueChanged
 from aiogram_dialog.widgets.text import Const, Format
 from dishka import FromDishka
@@ -18,7 +19,7 @@ from dishka.integrations.aiogram_dialog import inject
 from seatbot.application.services.ride import RideService
 from seatbot.domain.exceptions import RideInPastError
 from seatbot.infrastructure.database.dao import LocationsDAO, RidesDAO
-from seatbot.infrastructure.notifications import fmt_amount, route_str
+from seatbot.infrastructure.notifications import MessageBuilder, fmt_amount, route_str
 from seatbot.infrastructure.time import LocalClock
 
 from ..user_dialogs.states import RideCreateSG
@@ -60,8 +61,62 @@ class FutureCalendar(Calendar):
         return CalendarUserConfig(min_date=data.get("min_date"), timezone=data.get("calendar_tz"))
 
 
+MAX_REPEAT_DAYS = 28
+_WEEKDAYS = ("пн", "вт", "ср", "чт", "пт", "сб", "вс")
+_ALL_WEEKDAYS = list(range(7))
+_WORKDAYS = list(range(5))
+
+_EDITABLE_STEPS: dict[str, tuple[str, State]] = {
+    "edit_date": ("📅 Дата", RideCreateSG.calendar),
+    "edit_time": ("🕒 Время", RideCreateSG.time),
+    "edit_route": ("📍 Маршрут", RideCreateSG.origin),
+    "edit_price": ("💰 Цена", RideCreateSG.price),
+    "edit_seats": ("🪑 Места", RideCreateSG.seats),
+    "edit_repeat": ("🔁 Повтор", RideCreateSG.repeat_days),
+    "edit_remind": ("⏰ Напоминание", RideCreateSG.remind),
+    "edit_vip": ("⭐ VIP-холд", RideCreateSG.vip_hold),
+    "edit_auto": ("⚡ Авто-апрув", RideCreateSG.auto_approve),
+    "edit_vis": ("👁️ Видимость", RideCreateSG.visibility),
+    "edit_note": ("📝 Заметка", RideCreateSG.note),
+}
+
+
 def _local_today(clock: LocalClock) -> date:
     return clock.to_local(clock.now()).date()
+
+
+async def _advance(manager: DialogManager, next_state: State | None = None) -> None:
+    edit_mode = manager.dialog_data.get("edit_mode")
+    if edit_mode == "edit_route" and next_state == RideCreateSG.destination:
+        await manager.switch_to(next_state)
+    elif manager.dialog_data.pop("edit_mode", None):
+        await manager.switch_to(RideCreateSG.confirm)
+    elif next_state is not None:
+        await manager.switch_to(next_state)
+    else:
+        await manager.next()
+
+
+def _selected_departure(data: dict[str, Any], clock: LocalClock) -> datetime | None:
+    date_obj = data.get("selected_date_obj")
+    if not date_obj:
+        return None
+    d = date.fromisoformat(date_obj)
+    return clock.local_dt(
+        d.year, d.month, d.day, data.get("selected_hour", 18), data.get("selected_minute", 0)
+    )
+
+
+def _weekdays(data: dict[str, Any]) -> list[int]:
+    return list(data.get("weekdays", _ALL_WEEKDAYS))
+
+
+def _weekdays_label(weekdays: list[int]) -> str:
+    if sorted(weekdays) == _ALL_WEEKDAYS:
+        return "все дни"
+    if sorted(weekdays) == _WORKDAYS:
+        return "будни (пн–пт)"
+    return ", ".join(_WEEKDAYS[i] for i in sorted(weekdays))
 
 
 @inject
@@ -78,32 +133,57 @@ async def get_calendar_data(
     }
 
 
+@inject
 async def get_time_data(
     dialog_manager: DialogManager,
+    rides_dao: FromDishka[RidesDAO],
+    clock: FromDishka[LocalClock],
     **_kwargs: Any,
 ) -> dict[str, Any]:
     selected_date = dialog_manager.dialog_data.get("selected_date", "—")
     selected_time = dialog_manager.dialog_data.get("selected_time", "—")
+    presets = sorted({clock.fmt(r.departure_at, "%H:%M") for r in await rides_dao.list_templates(limit=8)})
     return {
         "selected_date": selected_date,
         "selected_time": selected_time,
+        "time_presets": [{"id": t.replace(":", ""), "label": f"⚡ {t}"} for t in presets[:6]],
+        "has_presets": bool(presets),
         "next_btn": "➡️ Дальше",
         "back_btn": "⬅️ К календарю",
     }
 
 
+@inject
 async def get_repeat_data(
     dialog_manager: DialogManager,
+    ride_service: FromDishka[RideService],
+    messages: FromDishka[MessageBuilder],
+    clock: FromDishka[LocalClock],
     **_kwargs: Any,
 ) -> dict[str, Any]:
+    data = dialog_manager.dialog_data
+    repeat_days: int = data.get("repeat_days", 1)
+    weekdays = _weekdays(data)
+    departure = _selected_departure(data, clock)
+    planned = ride_service.plan_departures(departure, repeat_days, set(weekdays)) if departure else []
+    preview = "\n".join(f"• {messages.short_date(d)}" for d in planned[:10])
+    if len(planned) > 10:
+        preview += f"\n… и ещё {len(planned) - 10}"
+    text = (
+        "🔁 <b>Повтор поездки</b>\n\n"
+        f"Период: <b>{repeat_days} дн.</b> с {data.get('selected_date', '—')}\n"
+        f"Дни недели: <b>{_weekdays_label(weekdays)}</b>\n\n"
+        f"Будет создано поездок: <b>{len(planned)}</b>\n{preview or '—'}\n\n"
+        f"Отметьте дни недели, введите длину периода в днях (1–{MAX_REPEAT_DAYS}) "
+        "или выберите готовый вариант."
+    )
     return {
-        "repeat_info": (
-            "🔁 <b>Повтор поездки</b>\n\n"
-            "На сколько дней вперёд создать эту поездку?\n"
-            "1 — только на выбранный день.\n"
-            "3 — на 3 дня подряд (каждый день в то же время).\n\n"
-            "Введите число от 1 до 14:"
-        ),
+        "repeat_info": text,
+        "weekday_items": [
+            {"id": i, "label": f"{'✅' if i in weekdays else '▫️'}{label}"}
+            for i, label in enumerate(_WEEKDAYS)
+        ],
+        "can_continue": bool(planned),
         "back_btn": "⬅️ Назад",
     }
 
@@ -221,6 +301,7 @@ async def get_destination_data(
 async def get_confirm_data(
     dialog_manager: DialogManager,
     clock: FromDishka[LocalClock],
+    ride_service: FromDishka[RideService],
     **_kwargs: Any,
 ) -> dict[str, Any]:
     selected_date = dialog_manager.dialog_data.get("selected_date", "—")
@@ -235,9 +316,18 @@ async def get_confirm_data(
     seats_total = dialog_manager.dialog_data.get("seats_total", 4)
     origin = dialog_manager.dialog_data.get("origin")
     destination = dialog_manager.dialog_data.get("destination")
-    route = f"{origin} → {destination}" if origin and destination else (origin or destination or "—")
+    route = escape(f"{origin} → {destination}" if origin and destination else (origin or destination or "—"))
     price_str = "Бесплатно" if price <= 0 else f"{fmt_amount(price)} BYN"
-    repeat_str = f"{repeat_days} дн." if repeat_days > 1 else "1 день"
+    weekdays = _weekdays(dialog_manager.dialog_data)
+    departure_at = _selected_departure(dialog_manager.dialog_data, clock)
+    rides_count = (
+        len(ride_service.plan_departures(departure_at, repeat_days, set(weekdays))) if departure_at else 0
+    )
+    repeat_str = (
+        f"{repeat_days} дн., {_weekdays_label(weekdays)} → {rides_count} поездок"
+        if repeat_days > 1
+        else "только этот день"
+    )
     remind_str = f"{remind_minutes} мин." if remind_minutes > 0 else "выключено"
     vip_hold_str = f"{vip_hold_minutes} мин" if vip_hold_minutes > 0 else "нет"
     text = (
@@ -252,24 +342,23 @@ async def get_confirm_data(
         f"⭐ VIP-холд: <b>{vip_hold_str}</b>\n"
         f"⚡ Авто-апрув: {'ВКЛ' if auto_approve else 'ВЫКЛ'}\n"
         f"👁️ Видимость: {'видна всем' if is_visible else 'скрытая'}\n"
-        f"📝 Заметка: {note or '—'}"
+        f"📝 Заметка: {escape(note) if note else '—'}"
     )
-    date_obj = dialog_manager.dialog_data.get("selected_date_obj")
-    if date_obj:
-        d = date.fromisoformat(date_obj)
-        departure_at = clock.local_dt(
-            d.year,
-            d.month,
-            d.day,
-            dialog_manager.dialog_data.get("selected_hour", 18),
-            dialog_manager.dialog_data.get("selected_minute", 0),
-        )
+    if departure_at:
         minutes_left = (departure_at - clock.now()).total_seconds() / 60
         if minutes_left <= 0:
             text += "\n\n⛔ <b>Время отправления уже прошло — выберите новое время.</b>"
         elif vip_hold_minutes >= minutes_left:
             text += "\n\n⚠️ VIP-холд длиннее, чем осталось до отправления — обычные пассажиры не успеют записаться."
-    return {"confirm_text": text, "create_btn": "✅ Создать", "back_btn": "⬅️ Назад"}
+    if rides_count == 0:
+        text += "\n\n⛔ <b>По выбранным дням недели не получается ни одной даты.</b>"
+    text += "\n\n<i>Нажмите ✏️-кнопку, чтобы изменить поле.</i>"
+    return {
+        "confirm_text": text,
+        "create_btn": "✅ Создать",
+        "back_btn": "⬅️ Назад",
+        "edit_items": [{"id": key, "label": f"✏️ {label}"} for key, (label, _) in _EDITABLE_STEPS.items()],
+    }
 
 
 # ── обработчики ──────────────────────────────────────────────────────────────
@@ -317,7 +406,7 @@ async def on_date_selected(
         return
     if isinstance(event, CallbackQuery):
         await event.answer(f"Выбрана дата: {selected_date.strftime('%d.%m.%Y')}")
-    await manager.next()
+    await _advance(manager)
 
 
 class TimeChangedHandler(OnValueChanged):
@@ -343,10 +432,101 @@ class TimeChangedHandler(OnValueChanged):
         manager.dialog_data["selected_minute"] = value.minute
         if isinstance(event, CallbackQuery):
             await event.answer(f"Время: {time_str}")
-        await manager.next()
+        await _advance(manager)
 
 
 on_time_changed = TimeChangedHandler()
+
+
+@inject
+async def on_time_preset(
+    callback: CallbackQuery,
+    select: Select,
+    manager: DialogManager,
+    item_id: str,
+    clock: FromDishka[LocalClock],
+) -> None:
+    hour, minute = int(item_id[:2]), int(item_id[2:])
+    d = date.fromisoformat(manager.dialog_data["selected_date_obj"])
+    if clock.local_dt(d.year, d.month, d.day, hour, minute) <= clock.now():
+        await callback.answer(_PAST_TIME_TEXT, show_alert=True)
+        return
+    manager.dialog_data["selected_time"] = f"{hour:02d}:{minute:02d}"
+    manager.dialog_data["selected_hour"] = hour
+    manager.dialog_data["selected_minute"] = minute
+    await callback.answer(f"Время: {hour:02d}:{minute:02d}")
+    await _advance(manager)
+
+
+async def on_weekday_toggle(
+    callback: CallbackQuery, select: Select, manager: DialogManager, item_id: str
+) -> None:
+    weekdays = _weekdays(manager.dialog_data)
+    day = int(item_id)
+    if day in weekdays:
+        if len(weekdays) == 1:
+            await callback.answer("Нужен хотя бы один день недели", show_alert=True)
+            return
+        weekdays.remove(day)
+    else:
+        weekdays.append(day)
+    manager.dialog_data["weekdays"] = sorted(weekdays)
+
+
+async def on_repeat_single(callback: CallbackQuery, button: Button, manager: DialogManager) -> None:
+    manager.dialog_data["repeat_days"] = 1
+    manager.dialog_data["weekdays"] = _ALL_WEEKDAYS
+    await _advance(manager)
+
+
+async def _repeat_workdays(manager: DialogManager, weeks: int) -> None:
+    manager.dialog_data["repeat_days"] = 7 * weeks
+    manager.dialog_data["weekdays"] = _WORKDAYS
+    await _advance(manager)
+
+
+async def on_repeat_workdays_1(callback: CallbackQuery, button: Button, manager: DialogManager) -> None:
+    await _repeat_workdays(manager, 1)
+
+
+async def on_repeat_workdays_2(callback: CallbackQuery, button: Button, manager: DialogManager) -> None:
+    await _repeat_workdays(manager, 2)
+
+
+async def on_repeat_next(callback: CallbackQuery, button: Button, manager: DialogManager) -> None:
+    await _advance(manager)
+
+
+async def on_skip_to_confirm(callback: CallbackQuery, button: Button, manager: DialogManager) -> None:
+    manager.dialog_data.pop("edit_mode", None)
+    await manager.switch_to(RideCreateSG.confirm)
+
+
+async def on_quick_defaults(callback: CallbackQuery, button: Button, manager: DialogManager) -> None:
+    manager.dialog_data["seats_total"] = 4
+    await manager.switch_to(RideCreateSG.confirm)
+
+
+def _editing(data: dict[str, Any], widget: Any, manager: DialogManager) -> bool:
+    return bool(manager.dialog_data.get("edit_mode"))
+
+
+def _not_editing(data: dict[str, Any], widget: Any, manager: DialogManager) -> bool:
+    return not _editing(data, widget, manager)
+
+
+def _back_to_confirm() -> Button:
+    return Button(
+        Const("↩️ К подтверждению"), id="back_to_confirm", on_click=on_skip_to_confirm, when=_editing
+    )
+
+
+async def on_edit_field(
+    callback: CallbackQuery, select: Select, manager: DialogManager, item_id: str
+) -> None:
+    _, state = _EDITABLE_STEPS[item_id]
+    manager.dialog_data["edit_mode"] = item_id
+    await manager.switch_to(state)
 
 
 async def on_origin_input(message: Message, widget: MessageInput, manager: DialogManager) -> None:
@@ -362,15 +542,15 @@ async def on_origin_input(message: Message, widget: MessageInput, manager: Dialo
     manager.dialog_data["origin"] = origin
     manager.dialog_data["origin_lat"] = None
     manager.dialog_data["origin_lon"] = None
-    await manager.switch_to(RideCreateSG.destination)
+    await _advance(manager, RideCreateSG.destination)
 
 
 async def on_keep_origin(callback: CallbackQuery, button: Button, manager: DialogManager) -> None:
-    await manager.switch_to(RideCreateSG.destination)
+    await _advance(manager, RideCreateSG.destination)
 
 
 async def on_keep_destination(callback: CallbackQuery, button: Button, manager: DialogManager) -> None:
-    await manager.switch_to(RideCreateSG.price)
+    await _advance(manager, RideCreateSG.price)
 
 
 async def on_origin_name_input(message: Message, widget: MessageInput, manager: DialogManager) -> None:
@@ -379,7 +559,7 @@ async def on_origin_name_input(message: Message, widget: MessageInput, manager: 
         await message.answer("❌ Введите название точки отправления.")
         return
     manager.dialog_data["origin"] = name
-    await manager.switch_to(RideCreateSG.destination)
+    await _advance(manager, RideCreateSG.destination)
 
 
 @inject
@@ -397,7 +577,7 @@ async def on_origin_location_selected(
     manager.dialog_data["origin"] = loc.name
     manager.dialog_data["origin_lat"] = loc.lat
     manager.dialog_data["origin_lon"] = loc.lon
-    await manager.switch_to(RideCreateSG.destination)
+    await _advance(manager, RideCreateSG.destination)
 
 
 async def on_destination_input(message: Message, widget: MessageInput, manager: DialogManager) -> None:
@@ -413,7 +593,7 @@ async def on_destination_input(message: Message, widget: MessageInput, manager: 
     manager.dialog_data["destination"] = destination
     manager.dialog_data["destination_lat"] = None
     manager.dialog_data["destination_lon"] = None
-    await manager.switch_to(RideCreateSG.price)
+    await _advance(manager, RideCreateSG.price)
 
 
 async def on_destination_name_input(message: Message, widget: MessageInput, manager: DialogManager) -> None:
@@ -422,7 +602,7 @@ async def on_destination_name_input(message: Message, widget: MessageInput, mana
         await message.answer("❌ Введите название точки прибытия.")
         return
     manager.dialog_data["destination"] = name
-    await manager.switch_to(RideCreateSG.price)
+    await _advance(manager, RideCreateSG.price)
 
 
 @inject
@@ -440,7 +620,7 @@ async def on_destination_location_selected(
     manager.dialog_data["destination"] = loc.name
     manager.dialog_data["destination_lat"] = loc.lat
     manager.dialog_data["destination_lon"] = loc.lon
-    await manager.switch_to(RideCreateSG.price)
+    await _advance(manager, RideCreateSG.price)
 
 
 async def on_price_input(message: Message, widget: MessageInput, manager: DialogManager) -> None:
@@ -455,7 +635,7 @@ async def on_price_input(message: Message, widget: MessageInput, manager: Dialog
         )
         return
     manager.dialog_data["price"] = round(price, 2)
-    await manager.next()
+    await _advance(manager)
 
 
 async def on_seats_input(message: Message, widget: MessageInput, manager: DialogManager) -> None:
@@ -468,20 +648,19 @@ async def on_seats_input(message: Message, widget: MessageInput, manager: Dialog
         await message.answer("❌ Введите число от 1 до 8.")
         return
     manager.dialog_data["seats_total"] = seats
-    await manager.next()
+    await _advance(manager)
 
 
 async def on_repeat_input(message: Message, widget: MessageInput, manager: DialogManager) -> None:
     text = (message.text or "").strip()
     try:
         repeat_days = int(text)
-        if not 1 <= repeat_days <= 14:
+        if not 1 <= repeat_days <= MAX_REPEAT_DAYS:
             raise ValueError
     except ValueError:
-        await message.answer("❌ Введите число от 1 до 14.")
+        await message.answer(f"❌ Введите число от 1 до {MAX_REPEAT_DAYS}.")
         return
     manager.dialog_data["repeat_days"] = repeat_days
-    await manager.next()
 
 
 async def on_remind_input(message: Message, widget: MessageInput, manager: DialogManager) -> None:
@@ -494,7 +673,7 @@ async def on_remind_input(message: Message, widget: MessageInput, manager: Dialo
         await message.answer("❌ Введите число от 0 до 1440.")
         return
     manager.dialog_data["remind_minutes"] = remind_minutes
-    await manager.next()
+    await _advance(manager)
 
 
 async def on_vip_hold_input(message: Message, widget: MessageInput, manager: DialogManager) -> None:
@@ -507,42 +686,42 @@ async def on_vip_hold_input(message: Message, widget: MessageInput, manager: Dia
         await message.answer("❌ Введите число от 0 до 120.")
         return
     manager.dialog_data["vip_hold_minutes"] = vip_hold_minutes
-    await manager.next()
+    await _advance(manager)
 
 
 async def on_vip_hold_skip(callback: CallbackQuery, button: Button, manager: DialogManager) -> None:
     manager.dialog_data["vip_hold_minutes"] = 0
-    await manager.next()
+    await _advance(manager)
 
 
 async def on_note_input(message: Message, widget: MessageInput, manager: DialogManager) -> None:
     manager.dialog_data["note"] = (message.text or "").strip()[:512] or None
-    await manager.next()
+    await _advance(manager)
 
 
 async def on_note_skip(callback: CallbackQuery, button: Button, manager: DialogManager) -> None:
     manager.dialog_data["note"] = None
-    await manager.next()
+    await _advance(manager)
 
 
 async def on_auto_yes(callback: CallbackQuery, button: Button, manager: DialogManager) -> None:
     manager.dialog_data["auto_approve"] = True
-    await manager.next()
+    await _advance(manager)
 
 
 async def on_auto_no(callback: CallbackQuery, button: Button, manager: DialogManager) -> None:
     manager.dialog_data["auto_approve"] = False
-    await manager.next()
+    await _advance(manager)
 
 
 async def on_vis_yes(callback: CallbackQuery, button: Button, manager: DialogManager) -> None:
     manager.dialog_data["is_visible"] = True
-    await manager.next()
+    await _advance(manager)
 
 
 async def on_vis_no(callback: CallbackQuery, button: Button, manager: DialogManager) -> None:
     manager.dialog_data["is_visible"] = False
-    await manager.next()
+    await _advance(manager)
 
 
 @inject
@@ -592,10 +771,15 @@ async def on_create(
             remind_minutes=remind_minutes,
             vip_hold_minutes=vip_hold_minutes,
             template_ride_id=manager.dialog_data.get("template_ride_id"),
+            weekdays=set(_weekdays(manager.dialog_data)),
         )
     except RideInPastError:
         await callback.answer(_PAST_TIME_TEXT, show_alert=True)
         await manager.switch_to(RideCreateSG.time)
+        return
+    if not rides:
+        await callback.answer("⛔ По выбранным дням недели нет ни одной даты", show_alert=True)
+        await manager.switch_to(RideCreateSG.repeat_days)
         return
     count = len(rides)
     await manager.done()
@@ -734,6 +918,7 @@ ride_create_dialog = Dialog(
     Window(
         Const("📅 <b>Выберите дату отправления</b>"),
         FutureCalendar(id="date_cal", on_click=on_date_selected),
+        _back_to_confirm(),
         Cancel(Const("⬅️ Отмена")),
         state=RideCreateSG.calendar,
         getter=get_calendar_data,
@@ -741,12 +926,24 @@ ride_create_dialog = Dialog(
     # 3. Выбор времени
     Window(
         Format("📅 Дата: <b>{selected_date}</b>\n\n🕒 <b>Выберите время отправления:</b>"),
+        Group(
+            Select(
+                Format("{item[label]}"),
+                id="time_presets",
+                item_id_getter=lambda item: item["id"],
+                items="time_presets",
+                on_click=on_time_preset,
+            ),
+            width=3,
+            when="has_presets",
+        ),
         TimeSelect(
             id="time_sel",
             hour_header=Const("Час"),
             minute_header=Const("Минута"),
             on_value_changed=on_time_changed,
         ),
+        _back_to_confirm(),
         SwitchTo(Format("{back_btn}"), id="back", state=RideCreateSG.calendar),
         state=RideCreateSG.time,
         getter=get_time_data,
@@ -774,6 +971,7 @@ ride_create_dialog = Dialog(
             on_click=on_keep_origin,
             when="has_current",
         ),
+        _back_to_confirm(),
         SwitchTo(Format("{back_btn}"), id="back", state=RideCreateSG.time),
         state=RideCreateSG.origin,
         getter=get_origin_data,
@@ -825,6 +1023,7 @@ ride_create_dialog = Dialog(
     Window(
         Format("{price_info}"),
         MessageInput(on_price_input),
+        _back_to_confirm(),
         SwitchTo(Format("{back_btn}"), id="back", state=RideCreateSG.destination),
         state=RideCreateSG.price,
         getter=get_price_data,
@@ -833,6 +1032,13 @@ ride_create_dialog = Dialog(
     Window(
         Format("{seats_info}"),
         MessageInput(on_seats_input),
+        Button(
+            Const("⚡ 4 места, остальное по умолчанию"),
+            id="quick_defaults",
+            on_click=on_quick_defaults,
+            when=_not_editing,
+        ),
+        _back_to_confirm(),
         SwitchTo(Format("{back_btn}"), id="back", state=RideCreateSG.price),
         state=RideCreateSG.seats,
         getter=get_seats_data,
@@ -841,6 +1047,23 @@ ride_create_dialog = Dialog(
     Window(
         Format("{repeat_info}"),
         MessageInput(on_repeat_input),
+        Group(
+            Select(
+                Format("{item[label]}"),
+                id="weekday_sel",
+                item_id_getter=lambda item: str(item["id"]),
+                items="weekday_items",
+                on_click=on_weekday_toggle,
+            ),
+            width=7,
+        ),
+        Button(Const("1️⃣ Только этот день"), id="repeat_single", on_click=on_repeat_single),
+        Row(
+            Button(Const("📅 Будни, 1 нед."), id="repeat_wd1", on_click=on_repeat_workdays_1),
+            Button(Const("📅 Будни, 2 нед."), id="repeat_wd2", on_click=on_repeat_workdays_2),
+        ),
+        Button(Const("➡️ Дальше"), id="repeat_next", on_click=on_repeat_next, when="can_continue"),
+        _back_to_confirm(),
         SwitchTo(Format("{back_btn}"), id="back", state=RideCreateSG.seats),
         state=RideCreateSG.repeat_days,
         getter=get_repeat_data,
@@ -849,6 +1072,7 @@ ride_create_dialog = Dialog(
     Window(
         Format("{remind_info}"),
         MessageInput(on_remind_input),
+        _back_to_confirm(),
         SwitchTo(Format("{back_btn}"), id="back", state=RideCreateSG.repeat_days),
         state=RideCreateSG.remind,
         getter=get_remind_data,
@@ -858,6 +1082,7 @@ ride_create_dialog = Dialog(
         Format("{vip_hold_info}"),
         MessageInput(on_vip_hold_input),
         Button(Const("⏭️ Без холда"), id="vip_hold_skip", on_click=on_vip_hold_skip),
+        _back_to_confirm(),
         SwitchTo(Format("{back_btn}"), id="back", state=RideCreateSG.remind),
         state=RideCreateSG.vip_hold,
         getter=get_vip_hold_data,
@@ -869,6 +1094,7 @@ ride_create_dialog = Dialog(
             Button(Const("✅ Да"), id="auto_yes", on_click=on_auto_yes),
             Button(Const("❌ Нет"), id="auto_no", on_click=on_auto_no),
         ),
+        _back_to_confirm(),
         SwitchTo(Const("⬅️ Назад"), id="back", state=RideCreateSG.vip_hold),
         state=RideCreateSG.auto_approve,
     ),
@@ -881,6 +1107,7 @@ ride_create_dialog = Dialog(
             Button(Const("👁️ Видна всем"), id="vis_yes", on_click=on_vis_yes),
             Button(Const("🔒 Скрытая"), id="vis_no", on_click=on_vis_no),
         ),
+        _back_to_confirm(),
         SwitchTo(Const("⬅️ Назад"), id="back", state=RideCreateSG.auto_approve),
         state=RideCreateSG.visibility,
     ),
@@ -889,6 +1116,7 @@ ride_create_dialog = Dialog(
         Const("📝 <b>Заметка</b> (необязательно)\n\nВведите текст или нажмите «Пропустить»."),
         MessageInput(on_note_input),
         Button(Const("⏭️ Пропустить"), id="note_skip", on_click=on_note_skip),
+        _back_to_confirm(),
         SwitchTo(Const("⬅️ Назад"), id="back", state=RideCreateSG.visibility),
         state=RideCreateSG.note,
     ),
@@ -896,6 +1124,16 @@ ride_create_dialog = Dialog(
     Window(
         Format("{confirm_text}"),
         Button(Format("{create_btn}"), id="create", on_click=on_create),
+        Group(
+            Select(
+                Format("{item[label]}"),
+                id="edit_sel",
+                item_id_getter=lambda item: item["id"],
+                items="edit_items",
+                on_click=on_edit_field,
+            ),
+            width=2,
+        ),
         SwitchTo(Format("{back_btn}"), id="back", state=RideCreateSG.note),
         state=RideCreateSG.confirm,
         getter=get_confirm_data,
