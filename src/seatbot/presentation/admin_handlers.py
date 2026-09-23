@@ -8,6 +8,7 @@ from dishka import FromDishka
 
 from seatbot.application.services.ride import RideService
 from seatbot.application.services.tracking import TrackingService
+from seatbot.infrastructure.notifications import fmt_amount
 
 from .user_dialogs.states import AdminPanelSG, RidesMgmtSG
 
@@ -53,8 +54,12 @@ async def cb_reject_booking(
     booking_id = int((callback.data or "").split(":", 1)[1])
     booking = await ride_service.reject_booking(booking_id)
     if booking:
-        await _edit_log_message(callback, "❌ Отклонена, возврат выполнен", booking.ride_id)
-        await callback.answer("Бронь отклонена, возврат выполнен", show_alert=True)
+        if booking.paid_amount > 0:
+            suffix = f"❌ Отклонена, возврат {fmt_amount(booking.paid_amount)} BYN выполнен"
+        else:
+            suffix = "❌ Отклонена, списаний не было"
+        await _edit_log_message(callback, suffix, booking.ride_id)
+        await callback.answer(f"Бронь {suffix.lower()}", show_alert=True)
     else:
         await callback.answer("Бронь уже обработана или не найдена", show_alert=True)
 

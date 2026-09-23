@@ -181,8 +181,13 @@ async def on_reject(
     ride_service: FromDishka[RideService],
 ) -> None:
     booking_id: int = manager.dialog_data["booking_id"]
-    await ride_service.reject_booking(booking_id)
-    await callback.answer("Отклонено, возврат выполнен", show_alert=True)
+    booking = await ride_service.reject_booking(booking_id)
+    if booking and booking.paid_amount > 0:
+        await callback.answer(
+            f"Отклонено, возврат {fmt_amount(booking.paid_amount)} BYN выполнен", show_alert=True
+        )
+    else:
+        await callback.answer("Отклонено, списаний не было", show_alert=True)
     await manager.switch_to(RideBookingsSG.bookings_list)
 
 

@@ -54,7 +54,7 @@ async def get_rides_list(
             {
                 "ride_id": rws.ride.ride_id,
                 "title": (
-                    f"{emoji} {clock.fmt(rws.ride.departure_at, '%d.%m %H:%M')} • "
+                    f"{emoji} {clock.fmt(rws.ride.started_at or rws.ride.departure_at, '%d.%m %H:%M')} • "
                     f"{price_str} • {seats_str}{route_part}"
                 ),
             }
@@ -132,7 +132,7 @@ async def on_cancel_ride(
     container = manager.middleware_data["dishka_container"]
     ride_service: RideService = await container.get(RideService)
     await ride_service.cancel_ride(ride_id)
-    await callback.answer("Поездка отменена, возврат выполнен", show_alert=True)
+    await callback.answer("Поездка отменена, пассажиры уведомлены", show_alert=True)
     await manager.switch_to(RidesMgmtSG.rides_list)
 
 

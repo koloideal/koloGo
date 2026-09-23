@@ -58,6 +58,14 @@ class MessageBuilder:
     def __init__(self, clock: LocalClock) -> None:
         self._clock = clock
 
+    def departure_lines(self, r: Ride) -> list[str]:
+        if r.started_at:
+            return [
+                f"🕒 Отправление (план): <b>{self._clock.fmt(r.departure_at)}</b>",
+                f"🛣 Выехали: <b>{self._clock.fmt(r.started_at)}</b>",
+            ]
+        return [f"🕒 Отправление: <b>{self._clock.fmt(r.departure_at)}</b>"]
+
     def ride_card(self, ride: Ride | RideWithStats, free_seats: int | None = None) -> str:
         if isinstance(ride, RideWithStats):
             r = ride.ride
@@ -77,10 +85,8 @@ class MessageBuilder:
             "completed": "✅",
             "cancelled": "❌",
         }.get(r.status.value, "•")
-        lines = [
-            f"{status_emoji} <b>Поездка</b>",
-            f"🕒 Отправление: <b>{self._clock.fmt(r.departure_at)}</b>",
-        ]
+        lines = [f"{status_emoji} <b>Поездка</b>"]
+        lines.extend(self.departure_lines(r))
         route = route_str(r)
         if route:
             lines.append(f"📍 Маршрут: <b>{route}</b>")
@@ -146,10 +152,8 @@ class MessageBuilder:
             BookingStatus.NO_SHOW: "🙅 Неявка",
         }
         payment = self.payment_full(booking.paid_amount, float(ride.price), ride.is_free or is_vip)
-        lines = [
-            f"<b>Бронь #{booking.booking_id}</b>",
-            f"🕒 {self._clock.fmt(ride.departure_at)}",
-        ]
+        lines = [f"<b>Бронь #{booking.booking_id}</b>"]
+        lines.extend(self.departure_lines(ride))
         route = route_str(ride)
         if route:
             lines.append(f"📍 {route}")
@@ -205,11 +209,10 @@ class MessageBuilder:
     def ride_completed_notification(
         self, ride: Ride, paid_amount: float = 0.0, price: float = 0.0, is_free: bool = False
     ) -> str:
-        text = (
-            f"🏁 <b>Поездка завершена.</b>\n\n"
-            f"🕒 Отправление: {self._clock.fmt(ride.departure_at)}\n"
-            f"{route_line(ride)}"
-        )
+        lines = ["🏁 <b>Поездка завершена.</b>\n"]
+        lines.extend(self.departure_lines(ride))
+        lines.append(route_line(ride).rstrip("\n"))
+        text = "\n".join(lines)
         if is_free:
             text += "💰 Поездка бесплатная."
         elif paid_amount > 0:
@@ -414,8 +417,8 @@ class MessageBuilder:
         lines = [
             "🏁 <b>Приехали!</b>\n",
             f"📍 Маршрут: {route_str(ride) or '—'}",
-            f"🕒 Отправление: {self._clock.fmt(ride.departure_at)}",
         ]
+        lines.extend(self.departure_lines(ride))
         lines.extend(self.track_stats_lines(ride))
         return "\n".join(lines)
 
@@ -430,20 +433,23 @@ class MessageBuilder:
         lines = [
             f"🏁 <b>Поездка #{ride.ride_id} завершена</b>\n",
             f"📍 Маршрут: {route_str(ride) or '—'}",
-            f"🕒 Отправление: {self._clock.fmt(ride.departure_at)}",
             f"🧍 Ехало: <b>{passengers_count}</b>",
         ]
+        lines.extend(self.departure_lines(ride))
         lines.extend(self.track_stats_lines(ride))
         return "\n".join(lines)
 
     def tracking_started_admin_log(self, ride: Ride) -> str:
-        return (
-            f"🚙 <b>Трекинг поездки запущен</b>\n\n"
-            f"Поездка {self._clock.fmt(ride.departure_at)}\n"
-            f"{route_line(ride)}"
+        lines = [
+            "🚙 <b>Трекинг поездки запущен</b>\n",
+        ]
+        lines.extend(self.departure_lines(ride))
+        lines.append(route_line(ride).rstrip("\n"))
+        lines.append(
             "Бот следит за live-гео и завершит поездку автоматически "
             "по прибытии в точку назначения."
         )
+        return "\n".join(lines)
 
     def tracking_stopped_admin_log(self, ride_id: int) -> str:
         return (

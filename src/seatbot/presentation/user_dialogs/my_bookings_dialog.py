@@ -58,7 +58,7 @@ async def get_my_bookings(
         items.append(
             {
                 "booking_id": b.booking_id,
-                "title": (f"{emoji} {clock.fmt(ride.departure_at, '%d.%m %H:%M')} • {pay}"),
+                "title": (f"{emoji} {clock.fmt(ride.started_at or ride.departure_at, '%d.%m %H:%M')} • {pay}"),
             }
         )
     return {
