@@ -2,14 +2,17 @@ from typing import Any
 
 from aiogram.types import CallbackQuery
 from aiogram_dialog import Dialog, DialogManager, Window
-from aiogram_dialog.widgets.kbd import Button, Cancel, ScrollingGroup, Select, SwitchTo
+from aiogram_dialog.widgets.kbd import (Button, Cancel, ScrollingGroup, Select, SwitchTo,
+                                        Url)
 from aiogram_dialog.widgets.text import Const, Format
 from dishka import FromDishka
 from dishka.integrations.aiogram_dialog import inject
 
 from seatbot.application.services.ride import RideService
 from seatbot.domain.schemas import BookingStatus
-from seatbot.infrastructure.database.dao import BookingsDAO, RidesDAO, UsersDAO
+from seatbot.infrastructure.database.dao import (BookingsDAO, RidesDAO, TrackPointsDAO,
+                                                 UsersDAO)
+from seatbot.infrastructure.geo import GeoService
 from seatbot.infrastructure.notifications import MessageBuilder
 from seatbot.infrastructure.time import LocalClock
 
@@ -71,6 +74,8 @@ async def get_booking_detail(
     bookings_dao: FromDishka[BookingsDAO],
     rides_dao: FromDishka[RidesDAO],
     users_dao: FromDishka[UsersDAO],
+    track_dao: FromDishka[TrackPointsDAO],
+    geo: FromDishka[GeoService],
     messages: FromDishka[MessageBuilder],
     **_kwargs: Any,
 ) -> dict[str, Any]:
@@ -88,12 +93,19 @@ async def get_booking_detail(
         and ride.origin_lat is not None
         and ride.origin_lon is not None
     )
+    route_url = None
+    if booking.status == BookingStatus.COMPLETED:
+        points = await track_dao.list_for_ride(ride.ride_id)
+        if len(points) >= 2:
+            route_url = geo.yandex_route_url(points)
     return {
         "booking_text": messages.booking_card(booking, ride, is_vip=bool(user and user.is_vip)),
         "can_cancel": can_cancel,
         "has_origin_geo": has_origin_geo,
+        "route_url": route_url,
         "cancel_btn": "🚫 Отменить бронь",
         "origin_btn": "📍 Место отправления",
+        "route_btn": "🗺 Маршрут на карте",
         "back_btn": "⬅️ К броням",
     }
 
@@ -175,6 +187,7 @@ my_bookings_dialog = Dialog(
         Format("{booking_text}"),
         Button(Format("{cancel_btn}"), id="cancel_booking", on_click=on_cancel_booking, when="can_cancel"),
         Button(Format("{origin_btn}"), id="show_origin", on_click=on_show_origin, when="has_origin_geo"),
+        Url(Format("{route_btn}"), Format("{route_url}"), when="route_url"),
         SwitchTo(Format("{back_btn}"), id="back", state=MyBookingsSG.list),
         state=MyBookingsSG.detail,
         getter=get_booking_detail,

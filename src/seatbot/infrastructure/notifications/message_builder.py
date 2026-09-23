@@ -419,7 +419,14 @@ class MessageBuilder:
         lines.extend(self.track_stats_lines(ride))
         return "\n".join(lines)
 
-    def ride_completed_admin_log(self, ride: Ride, passengers_count: int, map_url: str | None = None) -> str:
+    def ride_map_keyboard(self, map_url: str) -> InlineKeyboardMarkup:
+        return InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="🗺 Маршрут на карте", url=map_url)]
+            ]
+        )
+
+    def ride_completed_admin_log(self, ride: Ride, passengers_count: int) -> str:
         lines = [
             f"🏁 <b>Поездка #{ride.ride_id} завершена</b>\n",
             f"📍 Маршрут: {route_str(ride) or '—'}",
@@ -427,8 +434,6 @@ class MessageBuilder:
             f"🧍 Ехало: <b>{passengers_count}</b>",
         ]
         lines.extend(self.track_stats_lines(ride))
-        if map_url:
-            lines.append(f"🗺 {map_url}")
         return "\n".join(lines)
 
     def tracking_started_admin_log(self, ride: Ride) -> str:

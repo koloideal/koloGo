@@ -24,6 +24,16 @@ class LocationsDAO:
         result = await self.session.execute(select(OrmLocation).order_by(OrmLocation.name.asc()).limit(limit))
         return [self._map_to_domain(r) for r in result.scalars().all()]
 
+    async def update_geo(self, location_id: int, lat: float, lon: float) -> Location | None:
+        result = await self.session.execute(select(OrmLocation).where(OrmLocation.id == location_id))
+        orm = result.scalar_one_or_none()
+        if not orm:
+            return None
+        orm.lat = lat
+        orm.lon = lon
+        await self.session.flush()
+        return self._map_to_domain(orm)
+
     async def delete(self, location_id: int) -> None:
         await self.session.execute(delete(OrmLocation).where(OrmLocation.id == location_id))
 

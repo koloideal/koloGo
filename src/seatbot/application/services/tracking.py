@@ -108,8 +108,7 @@ class TrackingService:
         points = await self._track_dao.list_for_ride(ride_id)
         stats_text = self._messages.ride_arrived_notification(ride)
         map_url = self._geo.yandex_route_url(points) if len(points) >= 2 else None
+        map_markup = self._messages.ride_map_keyboard(map_url) if map_url else None
         approved = await self._bookings_dao.list_for_ride_with_status(ride_id, {BookingStatus.COMPLETED})
         for booking in approved:
-            await self._bot_service.notify_user(
-                booking.user_id, stats_text + (f"\n🗺 {map_url}" if map_url else "")
-            )
+            await self._bot_service.notify_user(booking.user_id, stats_text, reply_markup=map_markup)

@@ -211,6 +211,9 @@ class RideService:
             await self._rides_dao.set_finished_at(ride_id, self._clock.now())
         await self._rides_dao.set_status(ride_id, RideStatus.COMPLETED)
         ride = (await self._rides_dao.get_by_id(ride_id)) or ride
+        points = await self._track_dao.list_for_ride(ride_id)
+        map_url = self._geo.yandex_route_url(points) if len(points) >= 2 else None
+        map_markup = self._messages.ride_map_keyboard(map_url) if map_url else None
         approved = await self._bookings_dao.list_for_ride_with_status(ride_id, {BookingStatus.APPROVED})
         for booking in approved:
             user = await self._users_dao.get_by_id(booking.user_id)
@@ -229,17 +232,18 @@ class RideService:
             updated = await self._bookings_dao.get_by_id(booking.booking_id)
             paid = updated.paid_amount if updated else 0.0
             await self._bot_service.notify_user(
-                booking.user_id, self._messages.ride_completed_notification(ride, paid, price, is_free)
+                booking.user_id,
+                self._messages.ride_completed_notification(ride, paid, price, is_free),
+                reply_markup=map_markup,
             )
         pending = await self._bookings_dao.list_for_ride_with_status(ride_id, {BookingStatus.PENDING})
         for booking in pending:
             await self._bookings_dao.set_status(booking.booking_id, BookingStatus.CANCELLED)
         final = await self._rides_dao.get_by_id(ride_id)
         if final:
-            points = await self._track_dao.list_for_ride(ride_id)
-            map_url = self._geo.yandex_route_url(points) if len(points) >= 2 else None
             await self._bot_service.send_log_to_admin(
-                self._messages.ride_completed_admin_log(final, len(approved), map_url)
+                self._messages.ride_completed_admin_log(final, len(approved)),
+                reply_markup=map_markup,
             )
         return final
 

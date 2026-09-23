@@ -44,7 +44,74 @@ async def on_location_selected(
     item_id: str,
 ) -> None:
     manager.dialog_data["location_id"] = int(item_id)
+    await manager.switch_to(AdminSettingsSG.location_detail)
+
+
+@inject
+async def get_location_detail(
+    dialog_manager: DialogManager,
+    locations_dao: FromDishka[LocationsDAO],
+    **_kwargs: Any,
+) -> dict[str, Any]:
+    location_id = dialog_manager.dialog_data.get("location_id")
+    loc = await locations_dao.get_by_id(location_id) if location_id is not None else None
+    if not loc:
+        return {"location_text": "🚫 Точка не найдена.", "back_btn": "⬅️ К точкам"}
+    return {
+        "location_text": (
+            f"📍 <b>Точка «{escape(loc.name)}»</b>\n\n"
+            f"Широта: <code>{loc.lat:.6f}</code>\n"
+            f"Долгота: <code>{loc.lon:.6f}</code>"
+        ),
+        "back_btn": "⬅️ К точкам",
+    }
+
+
+@inject
+async def on_show_location_geo(
+    callback: CallbackQuery,
+    button: Button,
+    manager: DialogManager,
+    locations_dao: FromDishka[LocationsDAO],
+) -> None:
+    location_id = manager.dialog_data.get("location_id")
+    loc = await locations_dao.get_by_id(location_id) if location_id is not None else None
+    if not loc:
+        await callback.answer("Точка не найдена", show_alert=True)
+        return
+    if callback.message:
+        await callback.message.answer_location(latitude=loc.lat, longitude=loc.lon)
+    await callback.answer()
+
+
+async def on_edit_location_geo(callback: CallbackQuery, button: Button, manager: DialogManager) -> None:
+    await manager.switch_to(AdminSettingsSG.location_edit_geo)
+
+
+async def on_delete_location(callback: CallbackQuery, button: Button, manager: DialogManager) -> None:
     await manager.switch_to(AdminSettingsSG.location_delete)
+
+
+@inject
+async def on_location_edit_geo_input(message: Message, widget: MessageInput, manager: DialogManager) -> None:
+    if not message.location:
+        await message.answer("❌ Отправьте геолокацию точки (📎 → Геопозиция).")
+        return
+    container = manager.middleware_data["dishka_container"]
+    locations_dao: LocationsDAO = await container.get(LocationsDAO)
+    location_id = manager.dialog_data.get("location_id")
+    updated = (
+        await locations_dao.update_geo(
+            int(location_id), message.location.latitude, message.location.longitude
+        )
+        if location_id is not None
+        else None
+    )
+    if not updated:
+        await message.answer("🚫 Точка не найдена.")
+    else:
+        await message.answer(f"✅ Геопозиция точки «{updated.name}» обновлена.")
+    await manager.switch_to(AdminSettingsSG.location_detail)
 
 
 @inject
@@ -59,7 +126,7 @@ async def get_location_delete(
         return {"location_text": "🚫 Точка не найдена.", "back_btn": "⬅️ К точкам"}
     return {
         "location_text": f"🗑 <b>Удалить точку «{escape(loc.name)}»?</b>",
-        "back_btn": "⬅️ К точкам",
+        "back_btn": "⬅️ К точке",
     }
 
 
@@ -223,7 +290,7 @@ settings_dialog = Dialog(
         state=AdminSettingsSG.stars_rate,
     ),
     Window(
-        Const("📍 <b>Точки маршрута</b>\n\nНажмите на точку, чтобы удалить её."),
+        Const("📍 <b>Точки маршрута</b>\n\nНажмите на точку, чтобы открыть её."),
         ScrollingGroup(
             Select(
                 Format("{item[title]}"),
@@ -245,12 +312,31 @@ settings_dialog = Dialog(
     ),
     Window(
         Format("{location_text}"),
+        Button(Const("🗺 Показать на карте"), id="show_loc_geo", on_click=on_show_location_geo),
+        Button(Const("📍 Изменить гео"), id="edit_loc_geo", on_click=on_edit_location_geo),
+        Button(Const("🗑 Удалить"), id="del_loc", on_click=on_delete_location),
+        SwitchTo(Format("{back_btn}"), id="back", state=AdminSettingsSG.locations),
+        state=AdminSettingsSG.location_detail,
+        getter=get_location_detail,
+    ),
+    Window(
+        Const(
+            "📍 <b>Новая геопозиция точки</b>\n\n"
+            "Отправьте геолокацию этой точки (📎 → Геопозиция)."
+        ),
+        MessageInput(on_location_edit_geo_input, content_types=["location"]),
+        MessageInput(on_location_wrong_input, content_types=["text"]),
+        SwitchTo(Const("⬅️ Назад"), id="back", state=AdminSettingsSG.location_detail),
+        state=AdminSettingsSG.location_edit_geo,
+    ),
+    Window(
+        Format("{location_text}"),
         Button(
             Const("🗑 Да, удалить"),
             id="confirm_del_loc",
             on_click=on_confirm_delete_location,
         ),
-        SwitchTo(Format("{back_btn}"), id="back", state=AdminSettingsSG.locations),
+        SwitchTo(Format("{back_btn}"), id="back", state=AdminSettingsSG.location_detail),
         state=AdminSettingsSG.location_delete,
         getter=get_location_delete,
     ),

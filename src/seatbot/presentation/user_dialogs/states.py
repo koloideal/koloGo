@@ -108,6 +108,8 @@ class AdminSettingsSG(StatesGroup):
     byn_rate = State()
     stars_rate = State()
     locations = State()
+    location_detail = State()
+    location_edit_geo = State()
     location_delete = State()
     location_name = State()
     location_geo = State()
