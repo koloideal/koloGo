@@ -40,8 +40,9 @@ def load_config(config_path: str) -> Config:
             max_speed_mps=float(tracking_raw.get("max_speed_mps", 60.0)),
             max_accuracy_m=float(tracking_raw.get("max_accuracy_m", 100.0)),
             arrival_radius_m=float(
-                tracking_raw.get("arrival_radius_m", bot_raw.get("arrival_radius_m", 20.0))
+                tracking_raw.get("arrival_radius_m", bot_raw.get("arrival_radius_m", 150.0))
             ),
             arrival_debounce=int(tracking_raw.get("arrival_debounce", bot_raw.get("arrival_debounce", 2))),
+            arrival_dwell_s=int(tracking_raw.get("arrival_dwell_s", 60)),
         ),
     )

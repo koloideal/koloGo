@@ -18,6 +18,22 @@ class GeoService:
         a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlam / 2) ** 2
         return 2 * EARTH_RADIUS_M * math.asin(math.sqrt(a))
 
+    @staticmethod
+    def segment_distance_m(a: tuple[float, float], b: tuple[float, float], p: tuple[float, float]) -> float:
+        k = math.cos(math.radians(p[0]))
+
+        def project(pt: tuple[float, float]) -> tuple[float, float]:
+            return (
+                math.radians(pt[1] - p[1]) * k * EARTH_RADIUS_M,
+                math.radians(pt[0] - p[0]) * EARTH_RADIUS_M,
+            )
+
+        (ax, ay), (bx, by) = project(a), project(b)
+        dx, dy = bx - ax, by - ay
+        length_sq = dx * dx + dy * dy
+        t = 0.0 if length_sq == 0 else max(0.0, min(1.0, -(ax * dx + ay * dy) / length_sq))
+        return math.hypot(ax + t * dx, ay + t * dy)
+
     def downsample_track(
         self, points: Sequence[tuple[float, float]], max_points: int | None = None
     ) -> list[tuple[float, float]]:

@@ -30,6 +30,7 @@ from seatbot.infrastructure.notifications import MessageBuilder
 from seatbot.infrastructure.payments import CryptoBotPaymentService
 from seatbot.infrastructure.scheduling.payment_poller import PaymentStatusPoller
 from seatbot.infrastructure.scheduling.tasks import (auto_close_past_rides,
+                                                     finish_stale_arrivals,
                                                      send_ride_reminders)
 from seatbot.infrastructure.time import LocalClock
 
@@ -128,6 +129,12 @@ class SchedulerProvider(Provider):
             trigger=IntervalTrigger(minutes=1),
             kwargs={"container": async_container},
             name="send_ride_reminders",
+        )
+        scheduler.add_job(
+            func=finish_stale_arrivals,
+            trigger=IntervalTrigger(seconds=30),
+            kwargs={"container": async_container},
+            name="finish_stale_arrivals",
         )
         return scheduler
 

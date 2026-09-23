@@ -17,6 +17,9 @@ BOOKING_STATUS_RU = {
 }
 
 
+WEEKDAYS_RU = ("пн", "вт", "ср", "чт", "пт", "сб", "вс")
+
+
 def fmt_amount(value: float) -> str:
     if value == int(value):
         return str(int(value))
@@ -112,13 +115,13 @@ class MessageBuilder:
             lines.append(f"📝 {escape(r.note)}")
         return "\n".join(lines)
 
-    @staticmethod
-    def track_stats_lines(r: Ride) -> list[str]:
+    def track_stats_lines(self, r: Ride) -> list[str]:
         if not r.started_at or not r.finished_at:
             return []
         duration = (r.finished_at - r.started_at).total_seconds()
         km = r.track_distance_m / 1000
         lines = [
+            f"🏁 Прибыли: <b>{self._clock.fmt(r.finished_at)}</b>",
             f"⏱ В пути: <b>{fmt_duration(duration)}</b>",
             f"🛣 Дистанция: <b>{km:.1f} км</b>",
         ]
@@ -192,6 +195,14 @@ class MessageBuilder:
             text += "С вас ничего не списывалось — оплата была по факту."
         return text
 
+    def booking_rejected_no_seats_notification(self, ride: Ride) -> str:
+        return (
+            f"❌ <b>Ваша заявка отклонена — все места заняты.</b>\n\n"
+            f"Поездка в {self._clock.fmt(ride.departure_at)}.\n"
+            f"{route_line(ride)}"
+            "С вас ничего не списывалось. Если место освободится, можно подать заявку снова."
+        )
+
     def booking_cancelled_by_admin_notification(self, ride: Ride, paid_amount: float = 0.0) -> str:
         text = (
             f"🚫 <b>Поездка отменена водителем.</b>\n\n"
@@ -209,21 +220,20 @@ class MessageBuilder:
     def ride_completed_notification(
         self, ride: Ride, paid_amount: float = 0.0, price: float = 0.0, is_free: bool = False
     ) -> str:
-        lines = ["🏁 <b>Поездка завершена.</b>\n"]
+        lines = ["🏁 <b>Приехали! Поездка завершена.</b>\n"]
+        route = route_str(ride)
+        if route:
+            lines.append(f"📍 Маршрут: <b>{route}</b>")
         lines.extend(self.departure_lines(ride))
-        lines.append(route_line(ride).rstrip("\n"))
-        text = "\n".join(lines)
+        lines.extend(self.track_stats_lines(ride))
         if is_free:
-            text += "💰 Поездка бесплатная."
+            lines.append("💰 Поездка бесплатная.")
         elif paid_amount > 0:
-            text += f"💰 Списано с депозита: <b>{fmt_amount(paid_amount)} BYN</b>."
+            lines.append(f"💰 Списано с депозита: <b>{fmt_amount(paid_amount)} BYN</b>")
         else:
-            text += f"💰 Оплата по факту: <b>{fmt_amount(price)} BYN</b>."
-        stats_lines = self.track_stats_lines(ride)
-        if stats_lines:
-            text += "\n" + "\n".join(stats_lines)
-        text += "\nСпасибо за поездку!"
-        return text
+            lines.append(f"💰 Оплата по факту: <b>{fmt_amount(price)} BYN</b>")
+        lines.append("\nСпасибо за поездку!")
+        return "\n".join(lines)
 
     def no_show_notification(self, ride: Ride) -> str:
         return (
@@ -328,6 +338,29 @@ class MessageBuilder:
             "Откройте раздел «Поездки», чтобы забронировать место."
         )
 
+    def new_rides_notification(self, rides: list[Ride]) -> str:
+        first = rides[0]
+        price = "Бесплатно" if first.is_free else f"{fmt_amount(first.price)} BYN"
+        dates = "\n".join(
+            f"• {self._clock.fmt(r.departure_at, '%d.%m')} "
+            f"({WEEKDAYS_RU[self._clock.to_local(r.departure_at).weekday()]}) "
+            f"{self._clock.fmt(r.departure_at, '%H:%M')}"
+            for r in rides
+        )
+        note = f"\n📝 {escape(first.note)}" if first.note else ""
+        hold = (
+            f"\n⭐ <b>VIP-холд {first.vip_hold_minutes} мин</b> — сначала бронируют VIP, потом все остальные."
+            if first.vip_hold_minutes > 0
+            else ""
+        )
+        return (
+            f"🚗 <b>Новые поездки: {len(rides)}</b>\n\n"
+            f"{route_line(first)}"
+            f"💰 Цена: <b>{price}</b>{note}{hold}\n\n"
+            f"🕒 Даты:\n{dates}\n\n"
+            "Откройте раздел «Поездки», чтобы забронировать место."
+        )
+
     def added_by_admin_notification(self, ride: Ride, due_amount: float = 0.0) -> str:
         text = (
             f"✅ <b>Вас добавили в поездку!</b>\n\n"
@@ -416,15 +449,6 @@ class MessageBuilder:
             f"Списано: <b>{fmt_amount(price)} BYN</b>"
         )
 
-    def ride_arrived_notification(self, ride: Ride) -> str:
-        lines = [
-            "🏁 <b>Приехали!</b>\n",
-            f"📍 Маршрут: {route_str(ride) or '—'}",
-        ]
-        lines.extend(self.departure_lines(ride))
-        lines.extend(self.track_stats_lines(ride))
-        return "\n".join(lines)
-
     def ride_map_keyboard(self, map_url: str) -> InlineKeyboardMarkup:
         return InlineKeyboardMarkup(
             inline_keyboard=[[InlineKeyboardButton(text="🗺 Маршрут на карте", url=map_url)]]
@@ -451,9 +475,13 @@ class MessageBuilder:
         )
         return "\n".join(lines)
 
-    def tracking_stopped_admin_log(self, ride_id: int) -> str:
+    def tracking_stopped_admin_log(self, ride_id: int, distance_m: float | None = None) -> str:
+        where = (
+            f"До точки прибытия оставалось ~{distance_m / 1000:.1f} км.\n" if distance_m is not None else ""
+        )
         return (
             f"⚠️ <b>Live-гео поездки #{ride_id} остановлено.</b>\n\n"
+            f"{where}"
             "Трекинг прекращён. Завершите поездку вручную в меню поездок."
         )
 

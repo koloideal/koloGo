@@ -54,6 +54,7 @@ class StatisticsService:
             deposit_revenue=deposit_revenue,
             fact_revenue=fact_revenue,
             total_revenue=deposit_revenue + fact_revenue,
+            geo=await self._rides_dao.geo_stats(),
         )
 
     async def all_users_stats(self, limit: int = 100, exclude_user_id: int | None = None) -> list[UserStats]:

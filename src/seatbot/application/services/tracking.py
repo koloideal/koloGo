@@ -1,8 +1,11 @@
+from datetime import datetime, timedelta
+
 from seatbot.application.services.bot import BotService
 from seatbot.application.services.ride import RideService
-from seatbot.domain.schemas import BookingStatus, Ride, RideStatus
+from seatbot.domain.schemas import Ride, RideStatus
 from seatbot.infrastructure.config.models import TrackingConfig
 from seatbot.infrastructure.database.dao import BookingsDAO, RidesDAO, TrackPointsDAO
+from seatbot.infrastructure.database.models import Ride as OrmRide
 from seatbot.infrastructure.geo import GeoService
 from seatbot.infrastructure.notifications import MessageBuilder
 from seatbot.infrastructure.time import LocalClock
@@ -65,49 +68,72 @@ class TrackingService:
         if not orm:
             return
 
+        accurate = horizontal_accuracy is None or horizontal_accuracy <= self._tracking.max_accuracy_m
+        if accurate:
+            last = await self._track_dao.last_point(orm.id)
+            await self._record_point(orm, last, lat, lon)
+            self._update_arrival(orm, last, lat, lon)
+
         if live_period is None:
+            if orm.arrive_streak > 0:
+                await self.arrive(orm.id)
+                return
             orm.live_chat_id = None
             orm.live_message_id = None
-            await self._bot_service.send_log_to_admin(self._messages.tracking_stopped_admin_log(orm.id))
+            await self._bot_service.send_log_to_admin(
+                self._messages.tracking_stopped_admin_log(
+                    orm.id, self._distance_to_destination(orm, lat, lon)
+                )
+            )
             return
 
-        if horizontal_accuracy is not None and horizontal_accuracy > self._tracking.max_accuracy_m:
-            return
+        if orm.arrive_streak >= self._tracking.arrival_debounce:
+            await self.arrive(orm.id)
 
+    async def _record_point(
+        self, orm: OrmRide, last: tuple[float, float, datetime] | None, lat: float, lon: float
+    ) -> None:
         seq = await self._track_dao.count_for_ride(orm.id)
-        last = await self._track_dao.last_point(orm.id)
-        now = self._clock.now()
-        if last is not None:
-            gap = self._geo.haversine_m(last[0], last[1], lat, lon)
-            dt = (now - last[2]).total_seconds()
-            if gap >= self._tracking.min_point_gap_m and not (
-                0 < dt and gap / dt > self._tracking.max_speed_mps
-            ):
-                orm.track_distance_m += gap
-                if dt > 0:
-                    orm.track_max_speed_mps = max(orm.track_max_speed_mps, gap / dt)
-                await self._track_dao.add_point(orm.id, seq, lat, lon)
-        else:
+        if last is None:
             await self._track_dao.add_point(orm.id, seq, lat, lon)
+            return
+        gap = self._geo.haversine_m(last[0], last[1], lat, lon)
+        dt = (self._clock.now() - last[2]).total_seconds()
+        if gap < self._tracking.min_point_gap_m or (dt > 0 and gap / dt > self._tracking.max_speed_mps):
+            return
+        orm.track_distance_m += gap
+        if dt > 0:
+            orm.track_max_speed_mps = max(orm.track_max_speed_mps, gap / dt)
+        await self._track_dao.add_point(orm.id, seq, lat, lon)
 
+    def _distance_to_destination(self, orm: OrmRide, lat: float, lon: float) -> float | None:
+        if orm.destination_lat is None or orm.destination_lon is None:
+            return None
+        return self._geo.haversine_m(lat, lon, orm.destination_lat, orm.destination_lon)
+
+    def _update_arrival(
+        self, orm: OrmRide, last: tuple[float, float, datetime] | None, lat: float, lon: float
+    ) -> None:
         if orm.destination_lat is None or orm.destination_lon is None:
             return
-        dist = self._geo.haversine_m(lat, lon, orm.destination_lat, orm.destination_lon)
+        destination = (orm.destination_lat, orm.destination_lon)
+        if last is None:
+            dist = self._geo.haversine_m(lat, lon, *destination)
+        else:
+            dist = self._geo.segment_distance_m((last[0], last[1]), (lat, lon), destination)
         if dist <= self._tracking.arrival_radius_m:
             orm.arrive_streak += 1
         else:
             orm.arrive_streak = 0
-        if orm.arrive_streak >= self._tracking.arrival_debounce:
-            await self._arrive(orm.id)
 
-    async def _arrive(self, ride_id: int) -> None:
-        ride = await self._ride_service.complete_ride(ride_id)
-        if not ride:
-            return
-        points = await self._track_dao.list_for_ride(ride_id)
-        stats_text = self._messages.ride_arrived_notification(ride)
-        map_url = self._geo.yandex_route_url(points) if len(points) >= 2 else None
-        map_markup = self._messages.ride_map_keyboard(map_url) if map_url else None
-        approved = await self._bookings_dao.list_for_ride_with_status(ride_id, {BookingStatus.COMPLETED})
-        for booking in approved:
-            await self._bot_service.notify_user(booking.user_id, stats_text, reply_markup=map_markup)
+    async def finish_stale_arrivals(self) -> int:
+        finished = 0
+        threshold = self._clock.now() - timedelta(seconds=self._tracking.arrival_dwell_s)
+        for ride_id in await self._rides_dao.list_arriving_ids():
+            last = await self._track_dao.last_point(ride_id)
+            if (last is None or last[2] <= threshold) and await self.arrive(ride_id):
+                finished += 1
+        return finished
+
+    async def arrive(self, ride_id: int) -> Ride | None:
+        return await self._ride_service.complete_ride(ride_id)

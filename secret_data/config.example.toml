@@ -25,5 +25,6 @@ yandex_max_route_points = 20
 min_point_gap_m = 2.0
 max_speed_mps = 60.0
 max_accuracy_m = 100.0
-arrival_radius_m = 20.0
+arrival_radius_m = 150.0
 arrival_debounce = 2
+arrival_dwell_s = 60

@@ -46,7 +46,7 @@ class User:
     is_banned: bool
     is_vip: bool
     first_name: str | None = None
-    notify_new_rides: bool = False
+    notify_new_rides: bool = True
 
 
 @dataclass
@@ -138,7 +138,7 @@ class RideWithStats:
 
     @property
     def free_seats(self) -> int:
-        return self.ride.seats_total - self.approved_seats - self.pending_seats
+        return max(0, self.ride.seats_total - self.approved_seats)
 
 
 @dataclass
@@ -157,6 +157,35 @@ class UserStats:
 
 
 @dataclass
+class RideGeoStats:
+    tracked_rides: int = 0
+    total_distance_m: float = 0.0
+    total_duration_s: float = 0.0
+    max_speed_mps: float = 0.0
+    longest_ride_m: float = 0.0
+    avg_departure_delay_s: float | None = None
+    passenger_distance_m: float = 0.0
+    avg_passengers: float = 0.0
+    avg_fill_ratio: float = 0.0
+    top_origin: tuple[str, int] | None = None
+    top_destination: tuple[str, int] | None = None
+    top_route: tuple[str, str, int] | None = None
+
+    @property
+    def avg_speed_kmh(self) -> float:
+        hours = self.total_duration_s / 3600
+        return self.total_distance_m / 1000 / hours if hours > 0 else 0.0
+
+    @property
+    def avg_distance_m(self) -> float:
+        return self.total_distance_m / self.tracked_rides if self.tracked_rides else 0.0
+
+    @property
+    def avg_duration_s(self) -> float:
+        return self.total_duration_s / self.tracked_rides if self.tracked_rides else 0.0
+
+
+@dataclass
 class OverallStats:
     total_users: int
     total_rides_created: int
@@ -165,3 +194,4 @@ class OverallStats:
     deposit_revenue: float = 0.0
     fact_revenue: float = 0.0
     total_revenue: float = 0.0
+    geo: RideGeoStats | None = None

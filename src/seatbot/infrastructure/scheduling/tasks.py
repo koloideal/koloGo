@@ -6,6 +6,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from dishka import AsyncContainer
 
 from seatbot.application.services.bot import BotService
+from seatbot.application.services.tracking import TrackingService
 from seatbot.domain.schemas import BookingStatus, RideStatus, TransactionStatus
 from seatbot.infrastructure.database.dao import (BookingsDAO, RidesDAO, TransactionsDAO,
                                                  UsersDAO)
@@ -26,6 +27,14 @@ async def auto_close_past_rides(container: AsyncContainer) -> None:
         for ride in active_rides:
             if ride.departure_at < now - timedelta(minutes=30):
                 await rides_dao.set_status(ride.ride_id, RideStatus.CLOSED)
+
+
+async def finish_stale_arrivals(container: AsyncContainer) -> None:
+    async with container() as scope:
+        tracking_service: TrackingService = await scope.get(TrackingService)
+        finished = await tracking_service.finish_stale_arrivals()
+        if finished:
+            logger.info("Auto-finished %s ride(s) stuck at destination", finished)
 
 
 async def send_ride_reminders(container: AsyncContainer) -> None:

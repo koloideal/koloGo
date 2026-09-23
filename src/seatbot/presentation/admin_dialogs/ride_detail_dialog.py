@@ -136,6 +136,12 @@ async def get_booking_detail(
     status_ru = BOOKING_STATUS_RU.get(booking.status, booking.status.value)
     text += f"📋 Статус: {_STATUS_EMOJI.get(booking.status, '•')} {status_ru.capitalize()}"
     is_pending = booking.status == BookingStatus.PENDING
+    seats_left = ride.seats_total - await bookings_dao.count_approved_for_ride(ride.ride_id) if ride else 0
+    can_approve = is_pending and seats_left > 0
+    if is_pending and ride:
+        text += f"\n🪑 Свободно мест: {max(0, seats_left)}/{ride.seats_total}"
+        if seats_left <= 0:
+            text += "\n⛔ Мест нет — одобрить нельзя"
     can_noshow = (
         booking.status == BookingStatus.APPROVED and ride is not None and ride_service.can_mark_no_show(ride)
     )
@@ -143,6 +149,7 @@ async def get_booking_detail(
     return {
         "booking_text": text,
         "is_pending": is_pending,
+        "can_approve": can_approve,
         "can_noshow": can_noshow,
         "is_active": is_active,
         "approve_btn": "✅ Одобрить",
@@ -171,7 +178,12 @@ async def on_approve(
     ride_service: FromDishka[RideService],
 ) -> None:
     booking_id: int = manager.dialog_data["booking_id"]
-    booking = await ride_service.approve_booking(booking_id)
+    try:
+        booking = await ride_service.approve_booking(booking_id)
+    except NoFreeSeatsError:
+        await callback.answer("Все места уже заняты — одобрить нельзя", show_alert=True)
+        await manager.switch_to(RideBookingsSG.bookings_list)
+        return
     await callback.answer("Одобрено" if booking else "Бронь уже обработана", show_alert=True)
     await manager.switch_to(RideBookingsSG.bookings_list)
 
@@ -378,7 +390,7 @@ ride_detail_dialog = Dialog(
     Window(
         Format("{booking_text}"),
         Group(
-            Button(Format("{approve_btn}"), id="approve", on_click=on_approve, when="is_pending"),
+            Button(Format("{approve_btn}"), id="approve", on_click=on_approve, when="can_approve"),
             Button(Format("{reject_btn}"), id="reject", on_click=on_reject, when="is_pending"),
             Button(Format("{noshow_btn}"), id="noshow", on_click=on_noshow, when="can_noshow"),
             Button(Format("{kick_btn}"), id="kick", on_click=on_kick, when="is_active"),

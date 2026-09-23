@@ -43,8 +43,9 @@ class TrackingConfig:
     min_point_gap_m: float = 2.0
     max_speed_mps: float = 60.0
     max_accuracy_m: float = 100.0
-    arrival_radius_m: float = 20.0
+    arrival_radius_m: float = 150.0
     arrival_debounce: int = 2
+    arrival_dwell_s: int = 60
 
 
 @dataclass

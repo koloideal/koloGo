@@ -100,6 +100,7 @@ class BookingsDAO:
         if not orm:
             return None
         orm.status = status.value
+        await self.session.flush()
         return self._map_to_domain(orm)
 
     async def set_paid_amount(self, booking_id: int, paid_amount: float) -> Booking | None:
@@ -184,11 +185,11 @@ class BookingsDAO:
         )
         return result.scalar_one_or_none() is not None
 
-    async def count_active_for_ride(self, ride_id: int) -> int:
+    async def count_approved_for_ride(self, ride_id: int) -> int:
         result = await self.session.execute(
             select(func.count(OrmBooking.id)).where(
                 OrmBooking.ride_id == ride_id,
-                OrmBooking.status.in_([BookingStatus.PENDING.value, BookingStatus.APPROVED.value]),
+                OrmBooking.status == BookingStatus.APPROVED.value,
             )
         )
         return int(result.scalar_one() or 0)

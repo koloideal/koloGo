@@ -8,6 +8,7 @@ from dishka import FromDishka
 
 from seatbot.application.services.ride import RideService
 from seatbot.application.services.tracking import TrackingService
+from seatbot.domain.exceptions import NoFreeSeatsError
 from seatbot.infrastructure.notifications import fmt_amount
 
 from .user_dialogs.states import AdminPanelSG, RidesMgmtSG
@@ -38,7 +39,12 @@ async def cb_approve_booking(
     ride_service: FromDishka[RideService],
 ) -> None:
     booking_id = int((callback.data or "").split(":", 1)[1])
-    booking = await ride_service.approve_booking(booking_id)
+    try:
+        booking = await ride_service.approve_booking(booking_id)
+    except NoFreeSeatsError as e:
+        await _edit_log_message(callback, "⛔ Мест нет — одобрить нельзя", e.ride_id)
+        await callback.answer("Все места уже заняты — одобрить нельзя", show_alert=True)
+        return
     if booking:
         await _edit_log_message(callback, "✅ Одобрена", booking.ride_id)
         await callback.answer("Бронь одобрена", show_alert=True)

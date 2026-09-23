@@ -140,13 +140,16 @@ class RideService:
                     break
 
     async def _notify_new_rides(self, rides: list[Ride]) -> None:
-        subscribers = await self._users_dao.list_new_ride_subscribers()
-        for ride in rides:
-            if not ride.is_visible:
-                continue
-            message = self._messages.new_ride_notification(ride)
-            for user in subscribers:
-                await self._bot_service.notify_user(user.user_id, message)
+        visible = [ride for ride in rides if ride.is_visible]
+        if not visible:
+            return
+        message = (
+            self._messages.new_ride_notification(visible[0])
+            if len(visible) == 1
+            else self._messages.new_rides_notification(visible)
+        )
+        for user in await self._users_dao.list_new_ride_subscribers():
+            await self._bot_service.notify_user(user.user_id, message)
 
     async def cancel_ride(self, ride_id: int) -> Ride | None:
         ride = await self._rides_dao.get_by_id_for_update(ride_id)
@@ -328,9 +331,20 @@ class RideService:
             return RideNotBookableError(ride.ride_id, "водитель уже отклонил вашу бронь на эту поездку")
         if ride.is_vip_hold_active(now) and not user.is_vip:
             return VipHoldActiveError(ride.ride_id, ride.vip_hold_remaining_seconds(now))
-        if await self._bookings_dao.count_active_for_ride(ride.ride_id) >= ride.seats_total:
+        if await self._bookings_dao.count_approved_for_ride(ride.ride_id) >= ride.seats_total:
             return NoFreeSeatsError(ride.ride_id)
         return None
+
+    async def _reject_overflow(self, ride: Ride) -> int:
+        if await self._bookings_dao.count_approved_for_ride(ride.ride_id) < ride.seats_total:
+            return 0
+        pending = await self._bookings_dao.list_for_ride_with_status(ride.ride_id, {BookingStatus.PENDING})
+        for booking in pending:
+            await self._bookings_dao.set_status(booking.booking_id, BookingStatus.CANCELLED)
+            await self._bot_service.notify_user(
+                booking.user_id, self._messages.booking_rejected_no_seats_notification(ride)
+            )
+        return len(pending)
 
     async def book_ride(self, ride_id: int, user: User) -> Booking:
         ride = await self._rides_dao.get_by_id_for_update(ride_id)
@@ -359,6 +373,7 @@ class RideService:
             await self._bot_service.notify_user(
                 user.user_id, self._messages.booking_approved_notification(ride, due_amount)
             )
+            await self._reject_overflow(ride)
 
         await self._bot_service.send_log_to_admin(
             self._messages.new_booking_admin_log(booking, user, ride),
@@ -380,8 +395,7 @@ class RideService:
         existing = await self._bookings_dao.get_by_ride_and_user(ride_id, user_id)
         if existing:
             return existing
-        active_count = await self._bookings_dao.count_active_for_ride(ride_id)
-        if active_count >= ride.seats_total:
+        if await self._bookings_dao.count_approved_for_ride(ride_id) >= ride.seats_total:
             raise NoFreeSeatsError(ride_id)
 
         is_free = ride.is_free or user.is_vip
@@ -398,6 +412,7 @@ class RideService:
             await self._bot_service.notify_user(
                 user_id, self._messages.added_by_admin_notification(ride, due_amount)
             )
+        await self._reject_overflow(ride)
         return await self._bookings_dao.get_by_id(booking.booking_id)
 
     async def set_visibility(self, ride_id: int, is_visible: bool) -> Ride | None:
@@ -417,24 +432,34 @@ class RideService:
         if not auto_approve:
             return 0
         pending = await self._bookings_dao.list_for_ride_with_status(ride_id, {BookingStatus.PENDING})
+        approved = 0
         for booking in pending:
-            await self.approve_booking(booking.booking_id)
-        return len(pending)
+            try:
+                if await self.approve_booking(booking.booking_id):
+                    approved += 1
+            except NoFreeSeatsError:
+                break
+        return approved
 
     async def approve_booking(self, booking_id: int) -> Booking | None:
-        booking = await self._bookings_dao.get_by_id_for_update(booking_id)
-        if not booking or booking.status != BookingStatus.PENDING:
+        current = await self._bookings_dao.get_by_id(booking_id)
+        if not current:
             return None
+        ride = await self._rides_dao.get_by_id_for_update(current.ride_id)
+        booking = await self._bookings_dao.get_by_id_for_update(booking_id)
+        if not ride or not booking or booking.status != BookingStatus.PENDING:
+            return None
+        if await self._bookings_dao.count_approved_for_ride(ride.ride_id) >= ride.seats_total:
+            raise NoFreeSeatsError(ride.ride_id)
         await self._bookings_dao.set_status(booking_id, BookingStatus.APPROVED)
-        ride = await self._rides_dao.get_by_id(booking.ride_id)
-        if ride:
-            user = await self._users_dao.get_by_id(booking.user_id)
-            due_amount = (
-                0.0 if ride.is_free or (user and user.is_vip) else float(ride.price) - booking.paid_amount
-            )
-            await self._bot_service.notify_user(
-                booking.user_id, self._messages.booking_approved_notification(ride, due_amount)
-            )
+        user = await self._users_dao.get_by_id(booking.user_id)
+        due_amount = (
+            0.0 if ride.is_free or (user and user.is_vip) else float(ride.price) - booking.paid_amount
+        )
+        await self._bot_service.notify_user(
+            booking.user_id, self._messages.booking_approved_notification(ride, due_amount)
+        )
+        await self._reject_overflow(ride)
         return await self._bookings_dao.get_by_id(booking_id)
 
     async def reject_booking(self, booking_id: int) -> Booking | None:
