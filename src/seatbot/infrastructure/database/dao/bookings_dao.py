@@ -174,6 +174,21 @@ class BookingsDAO:
         )
         return float(result.scalar_one() or 0)
 
+    async def next_active_for_user(self, user_id: int) -> Booking | None:
+        result = await self.session.execute(
+            select(OrmBooking)
+            .join(OrmRide, OrmBooking.ride_id == OrmRide.id)
+            .where(
+                OrmBooking.user_id == user_id,
+                OrmBooking.status.in_([BookingStatus.PENDING.value, BookingStatus.APPROVED.value]),
+                OrmRide.status.in_(["open", "closed", "in_progress"]),
+            )
+            .order_by(OrmRide.departure_at.asc())
+            .limit(1)
+        )
+        orm = result.scalar_one_or_none()
+        return self._map_to_domain(orm) if orm else None
+
     async def has_approved_for_user(self, user_id: int) -> bool:
         result = await self.session.execute(
             select(OrmBooking.id)

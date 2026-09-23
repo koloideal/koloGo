@@ -1,17 +1,17 @@
-from aiogram import Router
+from aiogram import F, Router
 from aiogram.filters import Command
-from aiogram.types import Message
-from aiogram_dialog import DialogManager, StartMode
+from aiogram.types import CallbackQuery, Message
+from aiogram_dialog import DialogManager, ShowMode, StartMode
 from dishka import FromDishka
 
 from seatbot.application.interactors.user.create_or_get_user import (
     CreateOrGetUserCommand, CreateOrGetUserInteractor)
 from seatbot.application.services.bot import BotService
 from seatbot.application.services.payment import PaymentService
-from seatbot.infrastructure.database.dao import UsersDAO
+from seatbot.infrastructure.database.dao import BookingsDAO, RidesDAO, UsersDAO
 from seatbot.infrastructure.notifications import MessageBuilder
 
-from .user_dialogs.states import MainMenuSG
+from .user_dialogs.states import MainMenuSG, RidesSG
 
 user_router = Router()
 
@@ -29,6 +29,32 @@ async def cmd_start(
         )
     )
     await dialog_manager.start(MainMenuSG.main, mode=StartMode.RESET_STACK)
+
+
+@user_router.callback_query(F.data.startswith("open_ride:"))
+async def cb_open_ride(callback: CallbackQuery, dialog_manager: DialogManager) -> None:
+    ride_id = int((callback.data or "").split(":", 1)[1])
+    await callback.answer()
+    await dialog_manager.start(
+        RidesSG.detail, data={"ride_id": ride_id}, mode=StartMode.RESET_STACK, show_mode=ShowMode.SEND
+    )
+
+
+@user_router.callback_query(F.data.startswith("ride_origin:"))
+async def cb_ride_origin(
+    callback: CallbackQuery,
+    rides_dao: FromDishka[RidesDAO],
+    bookings_dao: FromDishka[BookingsDAO],
+) -> None:
+    ride_id = int((callback.data or "").split(":", 1)[1])
+    ride = await rides_dao.get_by_id(ride_id)
+    booking = await bookings_dao.get_by_ride_and_user(ride_id, callback.from_user.id)
+    if not ride or not booking or ride.origin_lat is None or ride.origin_lon is None:
+        await callback.answer("Место отправления недоступно", show_alert=True)
+        return
+    await callback.answer()
+    if isinstance(callback.message, Message):
+        await callback.message.answer_location(latitude=ride.origin_lat, longitude=ride.origin_lon)
 
 
 @user_router.message(lambda m: m.successful_payment is not None)

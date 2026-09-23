@@ -2,7 +2,7 @@ from typing import Any
 
 from aiogram.types import CallbackQuery
 from aiogram_dialog import Dialog, DialogManager, StartMode, Window
-from aiogram_dialog.widgets.kbd import Button, Cancel, ScrollingGroup, Select, SwitchTo
+from aiogram_dialog.widgets.kbd import Button, ScrollingGroup, Select, Start, SwitchTo
 from aiogram_dialog.widgets.text import Const, Format
 from dishka import FromDishka
 from dishka.integrations.aiogram_dialog import inject
@@ -11,7 +11,7 @@ from seatbot.application.services.ride import RideService
 from seatbot.domain.exceptions import (AlreadyBookedError, NoFreeSeatsError,
                                        RideNotBookableError, SeatBotError,
                                        UserBannedError, VipHoldActiveError)
-from seatbot.domain.schemas import BookingStatus
+from seatbot.domain.schemas import BookingStatus, Ride, RideWithStats, User
 from seatbot.infrastructure.database.dao import BookingsDAO, RidesDAO, UsersDAO
 from seatbot.infrastructure.notifications import MessageBuilder, fmt_amount, route_str
 from seatbot.infrastructure.time import LocalClock
@@ -35,14 +35,55 @@ def booking_error_text(error: SeatBotError) -> str:
     return "🚫 Бронь недоступна"
 
 
+def payment_line(ride: Ride, user: User | None) -> str:
+    if ride.is_free:
+        return ""
+    price = float(ride.price)
+    if user and user.is_vip:
+        return "⭐ Для вас поездка бесплатна (VIP)"
+    if user and user.balance >= price:
+        return f"💳 После поездки спишется с депозита: <b>{fmt_amount(price)} BYN</b>"
+    return f"💵 Оплата по факту поездки: <b>{fmt_amount(price)} BYN</b>"
+
+
+def seats_word(n: int) -> str:
+    if n % 10 == 1 and n % 100 != 11:
+        return "место"
+    if 2 <= n % 10 <= 4 and not 12 <= n % 100 <= 14:
+        return "места"
+    return "мест"
+
+
+def auto_approved_for(ride: Ride, user: User | None) -> bool:
+    return ride.auto_approve or bool(user and user.is_vip)
+
+
+def queue_line(rws: RideWithStats, user: User | None) -> str:
+    if auto_approved_for(rws.ride, user) or rws.free_seats <= 0:
+        return ""
+    if rws.pending_seats:
+        return (
+            f"⏳ Заявок в очереди: <b>{rws.pending_seats}</b> на <b>{rws.free_seats}</b> "
+            f"{seats_word(rws.free_seats)} — решение за водителем."
+        )
+    return "⏳ Брони подтверждает водитель."
+
+
 @inject
 async def get_rides_list(
     dialog_manager: DialogManager,
     rides_dao: FromDishka[RidesDAO],
+    bookings_dao: FromDishka[BookingsDAO],
     clock: FromDishka[LocalClock],
     **_kwargs: Any,
 ) -> dict[str, Any]:
     rides = await rides_dao.list_upcoming_visible()
+    user_id = dialog_manager.middleware_data["event_from_user"].id
+    my_status = {
+        b.ride_id: b.status
+        for b in await bookings_dao.list_for_user(user_id, limit=100)
+        if b.status in (BookingStatus.PENDING, BookingStatus.APPROVED)
+    }
     if not rides:
         return {
             "has_rides": False,
@@ -53,11 +94,15 @@ async def get_rides_list(
     for rws in rides:
         route = route_str(rws.ride)
         route_part = f" • {route}" if route else ""
+        price = "бесплатно" if rws.ride.is_free else f"{fmt_amount(rws.ride.price)} BYN"
+        status = my_status.get(rws.ride.ride_id)
+        mark = "✅ " if status == BookingStatus.APPROVED else "⏳ " if status == BookingStatus.PENDING else ""
         items.append(
             {
                 "ride_id": rws.ride.ride_id,
                 "title": (
-                    f"{clock.fmt(rws.ride.departure_at, '%d.%m %H:%M')} • {rws.free_seats} мест{route_part}"
+                    f"{mark}{clock.fmt(rws.ride.departure_at, '%d.%m %H:%M')} • {price} • "
+                    f"{rws.free_seats}/{rws.ride.seats_total} мест{route_part}"
                 ),
             }
         )
@@ -101,14 +146,12 @@ async def get_ride_detail(
             f"<b>{mins}:{secs:02d}</b>\n"
             f"<i>Станьте VIP, чтобы бронировать сразу — кнопка в главном меню.</i>"
         )
-    if not rws.ride.is_free:
-        price = float(rws.ride.price)
-        if user and user.is_vip:
-            ride_text += "\n⭐ Для вас поездка бесплатна (VIP)"
-        elif user and user.balance >= price:
-            ride_text += f"\n💳 После поездки спишется с депозита: <b>{fmt_amount(price)} BYN</b>"
-        else:
-            ride_text += f"\n💵 Оплата по факту поездки: <b>{fmt_amount(price)} BYN</b>"
+    payment = payment_line(rws.ride, user)
+    if payment:
+        ride_text += f"\n{payment}"
+    queue = queue_line(rws, user)
+    if queue and not existing:
+        ride_text += f"\n\n{queue}"
     error = await ride_service.booking_error(rws.ride, user) if user else None
     can_book = user is not None and error is None
     if user is None:
@@ -136,6 +179,11 @@ async def get_ride_detail(
     }
 
 
+async def on_rides_start(start_data: Any, manager: DialogManager) -> None:
+    if isinstance(start_data, dict) and "ride_id" in start_data:
+        manager.dialog_data["ride_id"] = start_data["ride_id"]
+
+
 async def on_ride_selected(
     callback: CallbackQuery,
     select: Select,
@@ -144,6 +192,42 @@ async def on_ride_selected(
 ) -> None:
     manager.dialog_data["ride_id"] = int(item_id)
     await manager.next()
+
+
+@inject
+async def get_book_confirm(
+    dialog_manager: DialogManager,
+    rides_dao: FromDishka[RidesDAO],
+    users_dao: FromDishka[UsersDAO],
+    messages: FromDishka[MessageBuilder],
+    ride_service: FromDishka[RideService],
+    **_kwargs: Any,
+) -> dict[str, Any]:
+    ride_id: int = dialog_manager.dialog_data["ride_id"]
+    rws = await rides_dao.get_with_stats(ride_id)
+    user = await users_dao.get_by_id(dialog_manager.middleware_data["event_from_user"].id)
+    if not rws or not user:
+        return {"confirm_text": "🚫 Поездка не найдена", "can_confirm": False}
+    ride = rws.ride
+    error = await ride_service.booking_error(ride, user)
+    lines = ["📝 <b>Подтвердите бронь</b>\n", *messages.departure_lines(ride)]
+    route = route_str(ride)
+    if route:
+        lines.append(f"📍 Маршрут: <b>{route}</b>")
+    lines.append(payment_line(ride, user) or "💰 Поездка бесплатная")
+    lines.append("")
+    if error:
+        lines.append(booking_error_text(error))
+    elif auto_approved_for(ride, user):
+        lines.append("⚡ Место закрепится за вами сразу после подтверждения.")
+    else:
+        lines.append(
+            "⏳ Заявку рассмотрит водитель. "
+            f"Сейчас заявок: <b>{rws.pending_seats}</b>, свободных мест: <b>{rws.free_seats}</b>.\n"
+            "Если места займут раньше — заявка отклонится автоматически, ничего не спишется."
+        )
+    lines.append("\n<i>Отменить бронь можно в «Мои брони» до отправления.</i>")
+    return {"confirm_text": "\n".join(lines), "can_confirm": error is None}
 
 
 @inject
@@ -165,22 +249,15 @@ async def on_book_click(
         booking = await ride_service.book_ride(ride_id, user)
     except SeatBotError as e:
         await callback.answer(booking_error_text(e), show_alert=True)
-        await manager.update({})
+        await manager.switch_to(RidesSG.detail)
         return
 
-    status_text = (
-        "✅ Одобрено автоматически!"
+    await callback.answer(
+        "✅ Место закреплено!"
         if booking.status == BookingStatus.APPROVED
-        else "⏳ Ожидает подтверждения водителем."
+        else "⏳ Заявка отправлена водителю — ответ придёт сообщением.",
+        show_alert=True,
     )
-    msg = f"Бронь #{booking.booking_id} создана. {status_text}"
-    ride = await rides_dao.get_by_id(ride_id)
-    if ride:
-        if ride.is_free or user.is_vip:
-            msg += "\n💰 Поездка бесплатная."
-        else:
-            msg += f"\n💵 Оплата по факту поездки: {fmt_amount(float(ride.price))} BYN."
-    await callback.answer(msg, show_alert=True)
     await manager.start(MainMenuSG.main, mode=StartMode.RESET_STACK)
 
 
@@ -221,17 +298,25 @@ rides_dialog = Dialog(
             id="rides_scroll",
         ),
         Format("{empty_text}", when="not has_rides"),
-        Cancel(Format("{back_btn}")),
+        Start(Format("{back_btn}"), id="to_menu", state=MainMenuSG.main, mode=StartMode.RESET_STACK),
         state=RidesSG.list,
         getter=get_rides_list,
     ),
     Window(
         Format("{ride_text}"),
-        Button(Format("{book_btn}"), id="book", on_click=on_book_click, when="can_book"),
+        SwitchTo(Format("{book_btn}"), id="book", state=RidesSG.book_confirm, when="can_book"),
         Format("{blocked_text}", when="blocked_text"),
         Button(Format("{origin_btn}"), id="show_origin", on_click=on_show_origin, when="has_origin_geo"),
         SwitchTo(Format("{back_btn}"), id="back", state=RidesSG.list),
         state=RidesSG.detail,
         getter=get_ride_detail,
     ),
+    Window(
+        Format("{confirm_text}"),
+        Button(Const("✅ Подтвердить"), id="confirm_book", on_click=on_book_click, when="can_confirm"),
+        SwitchTo(Const("⬅️ Назад"), id="back", state=RidesSG.detail),
+        state=RidesSG.book_confirm,
+        getter=get_book_confirm,
+    ),
+    on_start=on_rides_start,
 )

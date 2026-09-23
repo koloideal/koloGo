@@ -1,17 +1,23 @@
 from typing import Any
 
-from aiogram.types import CallbackQuery
+from aiogram.types import CallbackQuery, Message
 from aiogram_dialog import Dialog, DialogManager, Window
 from aiogram_dialog.widgets.kbd import Button, Row, Start
 from aiogram_dialog.widgets.text import Const, Format
 from dishka import FromDishka
 from dishka.integrations.aiogram_dialog import inject
 
-from seatbot.infrastructure.database.dao import BookingsDAO, UsersDAO
-from seatbot.infrastructure.notifications import fmt_amount
+from seatbot.domain.schemas import BookingStatus, RideStatus
+from seatbot.infrastructure.database.dao import BookingsDAO, RidesDAO, UsersDAO
+from seatbot.infrastructure.notifications import MessageBuilder, fmt_amount, route_str
 
 from .states import (BalanceSG, MainMenuSG, MyBookingsSG, RequisitesSG, RidesSG, StatsSG,
                      VipSG)
+
+_NEXT_STATUS = {
+    BookingStatus.APPROVED: "✅ Место закреплено",
+    BookingStatus.PENDING: "⏳ Заявка на рассмотрении у водителя",
+}
 
 
 @inject
@@ -19,25 +25,73 @@ async def get_main_menu(
     dialog_manager: DialogManager,
     users_dao: FromDishka[UsersDAO],
     bookings_dao: FromDishka[BookingsDAO],
+    rides_dao: FromDishka[RidesDAO],
+    messages: FromDishka[MessageBuilder],
     **_kwargs: Any,
 ) -> dict[str, Any]:
     user_id = dialog_manager.middleware_data["event_from_user"].id
     user = await users_dao.get_by_id(user_id)
     has_approved_booking = await bookings_dao.has_approved_for_user(user_id)
-    has_extra = bool(user and (user.is_vip or user.balance > 0))
-    lines = [
-        "🚗 <b>SeatBot — поездки в Минск</b>" + ("\n" if has_extra else ""),
-    ]
+    lines = ["🚗 <b>SeatBot — поездки в Минск</b>\n"]
     if user and user.is_vip:
         lines.append("⭐ <b>VIP:</b> поездки бесплатно, апрув автоматически.")
     if user and user.balance > 0:
         lines.append(f"💰 На депозите: <b>{fmt_amount(user.balance)} BYN</b>")
+
+    next_booking = await bookings_dao.next_active_for_user(user_id)
+    next_ride = await rides_dao.get_by_id(next_booking.ride_id) if next_booking else None
+    has_next_origin = False
+    if next_booking and next_ride:
+        dialog_manager.dialog_data["next_booking_id"] = next_booking.booking_id
+        dialog_manager.dialog_data["next_ride_id"] = next_ride.ride_id
+        status = (
+            "🚙 Водитель в пути"
+            if next_ride.status == RideStatus.IN_PROGRESS
+            else _NEXT_STATUS.get(next_booking.status, "")
+        )
+        route = route_str(next_ride)
+        lines += [
+            "\n🗓 <b>Ваша ближайшая поездка</b>",
+            f"🕒 {messages.short_date(next_ride.departure_at)}" + (f" · {route}" if route else ""),
+            status,
+        ]
+        has_next_origin = (
+            next_booking.status == BookingStatus.APPROVED
+            and next_ride.origin_lat is not None
+            and next_ride.origin_lon is not None
+        )
+    else:
+        lines.append("\nБлижайших поездок нет — загляните в «🚗 Поездки».")
     lines.append("\n<i><b>made by kolo</b></i>")
     return {
         "menu_text": "\n".join(lines),
         "notifications_btn": ("🔔 Уведомления ✅" if user and user.notify_new_rides else "🔔 Уведомления ❌"),
         "has_requisites_access": has_approved_booking,
+        "has_next": next_booking is not None and next_ride is not None,
+        "has_next_origin": has_next_origin,
     }
+
+
+async def on_open_next_booking(callback: CallbackQuery, button: Button, manager: DialogManager) -> None:
+    booking_id = manager.dialog_data.get("next_booking_id")
+    if booking_id:
+        await manager.start(MyBookingsSG.detail, data={"booking_id": booking_id})
+
+
+@inject
+async def on_next_origin(
+    callback: CallbackQuery,
+    button: Button,
+    manager: DialogManager,
+    rides_dao: FromDishka[RidesDAO],
+) -> None:
+    ride = await rides_dao.get_by_id(manager.dialog_data.get("next_ride_id", 0))
+    if not ride or ride.origin_lat is None or ride.origin_lon is None:
+        await callback.answer("Место отправления не задано", show_alert=True)
+        return
+    await callback.answer()
+    if isinstance(callback.message, Message):
+        await callback.message.answer_location(latitude=ride.origin_lat, longitude=ride.origin_lon)
 
 
 @inject
@@ -62,6 +116,13 @@ async def on_toggle_notifications(
 main_menu_dialog = Dialog(
     Window(
         Format("{menu_text}"),
+        Row(
+            Button(Const("📋 Открыть бронь"), id="next_booking", on_click=on_open_next_booking),
+            Button(
+                Const("📍 Где садиться"), id="next_origin", on_click=on_next_origin, when="has_next_origin"
+            ),
+            when="has_next",
+        ),
         Row(
             Start(Const("🚗 Поездки"), id="rides", state=RidesSG.list),
             Start(Const("📋 Мои брони"), id="mybookings", state=MyBookingsSG.list),

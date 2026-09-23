@@ -101,8 +101,17 @@ async def get_booking_detail(
         points = await track_dao.list_for_ride(ride.ride_id)
         if len(points) >= 2:
             route_url = geo.yandex_route_url(points)
+    text = messages.booking_card(booking, ride, is_vip=bool(user and user.is_vip))
+    if booking.status == BookingStatus.PENDING:
+        rws = await rides_dao.get_with_stats(ride.ride_id)
+        if rws:
+            text += (
+                f"\n\n⏳ Заявок в очереди: <b>{rws.pending_seats}</b>, свободных мест: <b>{rws.free_seats}</b>.\n"
+                "Решение за водителем — ответ придёт сообщением. "
+                "Если места займут раньше, заявка отклонится автоматически."
+            )
     return {
-        "booking_text": messages.booking_card(booking, ride, is_vip=bool(user and user.is_vip)),
+        "booking_text": text,
         "can_cancel": can_cancel,
         "has_origin_geo": has_origin_geo,
         "route_url": route_url,
@@ -161,6 +170,11 @@ async def on_cancel_booking(
     await manager.switch_to(MyBookingsSG.list)
 
 
+async def on_my_bookings_start(start_data: Any, manager: DialogManager) -> None:
+    if isinstance(start_data, dict) and "booking_id" in start_data:
+        manager.dialog_data["booking_id"] = start_data["booking_id"]
+
+
 async def on_booking_selected(
     callback: CallbackQuery,
     select: Select,
@@ -201,4 +215,5 @@ my_bookings_dialog = Dialog(
         state=MyBookingsSG.detail,
         getter=get_booking_detail,
     ),
+    on_start=on_my_bookings_start,
 )

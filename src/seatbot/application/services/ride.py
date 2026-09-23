@@ -148,8 +148,9 @@ class RideService:
             if len(visible) == 1
             else self._messages.new_rides_notification(visible)
         )
+        markup = self._messages.book_rides_keyboard(visible)
         for user in await self._users_dao.list_new_ride_subscribers():
-            await self._bot_service.notify_user(user.user_id, message)
+            await self._bot_service.notify_user(user.user_id, message, reply_markup=markup)
 
     async def cancel_ride(self, ride_id: int) -> Ride | None:
         ride = await self._rides_dao.get_by_id_for_update(ride_id)
@@ -203,6 +204,7 @@ class RideService:
             await self._bot_service.notify_user(
                 booking.user_id,
                 self._messages.ride_time_changed_notification(updated, old_departure),
+                reply_markup=self._messages.origin_keyboard(updated),
             )
         approved = [b for b in affected if b.status == BookingStatus.APPROVED]
         await self._bot_service.send_log_to_admin(
@@ -214,7 +216,9 @@ class RideService:
             if now >= remind_at and now <= new_departure + timedelta(minutes=30):
                 for booking in approved:
                     await self._bot_service.notify_user(
-                        booking.user_id, self._messages.ride_reminder_notification(updated)
+                        booking.user_id,
+                        self._messages.ride_reminder_notification(updated),
+                        reply_markup=self._messages.origin_keyboard(updated),
                     )
                 await self._bot_service.send_log_to_admin(
                     self._messages.ride_reminder_admin_notification(updated, len(approved))
@@ -371,7 +375,9 @@ class RideService:
                 booking = updated
             due_amount = 0.0 if is_free else ride_price
             await self._bot_service.notify_user(
-                user.user_id, self._messages.booking_approved_notification(ride, due_amount)
+                user.user_id,
+                self._messages.booking_approved_notification(ride, due_amount),
+                reply_markup=self._messages.origin_keyboard(ride),
             )
             await self._reject_overflow(ride)
 
@@ -410,7 +416,9 @@ class RideService:
         due_amount = 0.0 if is_free else ride_price
         if notify:
             await self._bot_service.notify_user(
-                user_id, self._messages.added_by_admin_notification(ride, due_amount)
+                user_id,
+                self._messages.added_by_admin_notification(ride, due_amount),
+                reply_markup=self._messages.origin_keyboard(ride),
             )
         await self._reject_overflow(ride)
         return await self._bookings_dao.get_by_id(booking.booking_id)
@@ -457,7 +465,9 @@ class RideService:
             0.0 if ride.is_free or (user and user.is_vip) else float(ride.price) - booking.paid_amount
         )
         await self._bot_service.notify_user(
-            booking.user_id, self._messages.booking_approved_notification(ride, due_amount)
+            booking.user_id,
+            self._messages.booking_approved_notification(ride, due_amount),
+            reply_markup=self._messages.origin_keyboard(ride),
         )
         await self._reject_overflow(ride)
         return await self._bookings_dao.get_by_id(booking_id)

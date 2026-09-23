@@ -114,8 +114,30 @@ class RidesDAO:
         result = await self.session.execute(query)
         return [self._map_to_domain(r) for r in result.scalars().all()]
 
+    async def hide_template(self, ride_id: int) -> bool:
+        template = await self.get_by_id(ride_id)
+        if not template:
+            return False
+        await self.session.execute(
+            update(OrmRide)
+            .where(
+                OrmRide.price == template.price,
+                OrmRide.note.is_not_distinct_from(template.note),
+                OrmRide.origin == template.origin,
+                OrmRide.destination == template.destination,
+            )
+            .values(template_hidden=True)
+        )
+        await self.session.flush()
+        return True
+
     async def list_templates(self, limit: int = 10) -> list[Ride]:
-        query = select(OrmRide).order_by(OrmRide.departure_at.desc()).limit(limit * 3)
+        query = (
+            select(OrmRide)
+            .where(OrmRide.template_hidden.is_(False))
+            .order_by(OrmRide.departure_at.desc())
+            .limit(limit * 3)
+        )
         result = await self.session.execute(query)
         rides = [self._map_to_domain(r) for r in result.scalars().all()]
         seen: set[tuple[float, str | None, str, str]] = set()

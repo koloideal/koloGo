@@ -334,19 +334,13 @@ class MessageBuilder:
             "🚗 <b>Новая поездка!</b>\n\n"
             f"🕒 Отправление: <b>{self._clock.fmt(ride.departure_at)}</b>\n"
             f"{route_line(ride)}"
-            f"💰 Цена: <b>{price}</b>{note}{hold}\n\n"
-            "Откройте раздел «Поездки», чтобы забронировать место."
+            f"💰 Цена: <b>{price}</b>{note}{hold}"
         )
 
     def new_rides_notification(self, rides: list[Ride]) -> str:
         first = rides[0]
         price = "Бесплатно" if first.is_free else f"{fmt_amount(first.price)} BYN"
-        dates = "\n".join(
-            f"• {self._clock.fmt(r.departure_at, '%d.%m')} "
-            f"({WEEKDAYS_RU[self._clock.to_local(r.departure_at).weekday()]}) "
-            f"{self._clock.fmt(r.departure_at, '%H:%M')}"
-            for r in rides
-        )
+        dates = "\n".join(f"• {self.short_date(r.departure_at)}" for r in rides)
         note = f"\n📝 {escape(first.note)}" if first.note else ""
         hold = (
             f"\n⭐ <b>VIP-холд {first.vip_hold_minutes} мин</b> — сначала бронируют VIP, потом все остальные."
@@ -358,7 +352,7 @@ class MessageBuilder:
             f"{route_line(first)}"
             f"💰 Цена: <b>{price}</b>{note}{hold}\n\n"
             f"🕒 Даты:\n{dates}\n\n"
-            "Откройте раздел «Поездки», чтобы забронировать место."
+            "Выберите дату ниже, чтобы забронировать место."
         )
 
     def added_by_admin_notification(self, ride: Ride, due_amount: float = 0.0) -> str:
@@ -383,6 +377,14 @@ class MessageBuilder:
             f"🕒 Время: {self._clock.fmt(ride.departure_at)}\n"
             f"{route_line(ride)}"
             f"Не опаздывайте!"
+        )
+
+    def driver_departed_notification(self, ride: Ride) -> str:
+        return (
+            "🚙 <b>Водитель выехал!</b>\n\n"
+            f"🕒 Поездка: {self._clock.fmt(ride.departure_at)}\n"
+            f"{route_line(ride)}"
+            "Подходите к месту отправления."
         )
 
     def ride_time_changed_notification(self, ride: Ride, old_departure: datetime) -> str:
@@ -448,6 +450,39 @@ class MessageBuilder:
             f"Пользователь: {name} (<code>{user.user_id}</code>)\n"
             f"Списано: <b>{fmt_amount(price)} BYN</b>"
         )
+
+    def book_rides_keyboard(self, rides: list[Ride]) -> InlineKeyboardMarkup:
+        if len(rides) == 1:
+            rows = [
+                [InlineKeyboardButton(text="🪑 Забронировать", callback_data=f"open_ride:{rides[0].ride_id}")]
+            ]
+        else:
+            rows = [
+                [
+                    InlineKeyboardButton(
+                        text=f"🪑 {self.short_date(r.departure_at)}", callback_data=f"open_ride:{r.ride_id}"
+                    )
+                ]
+                for r in rides
+            ]
+        return InlineKeyboardMarkup(inline_keyboard=rows)
+
+    def origin_keyboard(self, ride: Ride) -> InlineKeyboardMarkup | None:
+        if ride.origin_lat is None or ride.origin_lon is None:
+            return None
+        return InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="📍 Место отправления", callback_data=f"ride_origin:{ride.ride_id}"
+                    )
+                ]
+            ]
+        )
+
+    def short_date(self, dt: datetime) -> str:
+        local = self._clock.to_local(dt)
+        return f"{local:%d.%m} ({WEEKDAYS_RU[local.weekday()]}) {local:%H:%M}"
 
     def ride_map_keyboard(self, map_url: str) -> InlineKeyboardMarkup:
         return InlineKeyboardMarkup(

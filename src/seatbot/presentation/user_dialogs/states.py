@@ -49,6 +49,8 @@ class RidesMgmtSG(StatesGroup):
 
 class RideCreateSG(StatesGroup):
     select_template = State()
+    template_delete = State()
+    template_delete_confirm = State()
     calendar = State()
     time = State()
     origin = State()

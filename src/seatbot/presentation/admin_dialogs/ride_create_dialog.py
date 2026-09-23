@@ -1,5 +1,6 @@
 import math
 from datetime import date, datetime, time, timezone
+from html import escape
 from typing import Any
 
 from aiogram.types import CallbackQuery, Message
@@ -37,7 +38,7 @@ async def get_templates(
     for t in templates:
         price_str = "бесплатно" if t.is_free else f"{fmt_amount(t.price)} BYN"
         time_str = clock.fmt(t.departure_at, "%H:%M")
-        note_str = f" • {t.note}" if t.note else ""
+        note_str = f" • {escape(t.note)}" if t.note else ""
         route = route_str(t)
         route_str_ = f" • {route}" if route else ""
         items.append(
@@ -601,6 +602,50 @@ async def on_create(
     await callback.answer(f"✅ Создано поездок: {count}!")
 
 
+async def on_template_delete_selected(
+    callback: CallbackQuery,
+    select: Select,
+    manager: DialogManager,
+    item_id: str,
+) -> None:
+    manager.dialog_data["delete_template_id"] = int(item_id)
+    await manager.switch_to(RideCreateSG.template_delete_confirm)
+
+
+@inject
+async def get_template_delete_confirm(
+    dialog_manager: DialogManager,
+    rides_dao: FromDishka[RidesDAO],
+    clock: FromDishka[LocalClock],
+    **_kwargs: Any,
+) -> dict[str, Any]:
+    template = await rides_dao.get_by_id(dialog_manager.dialog_data.get("delete_template_id", 0))
+    if not template:
+        return {"confirm_text": "🚫 Шаблон не найден"}
+    price = "бесплатно" if template.is_free else f"{fmt_amount(template.price)} BYN"
+    note = f"\n📝 {escape(template.note)}" if template.note else ""
+    return {
+        "confirm_text": (
+            "🗑 <b>Удалить шаблон?</b>\n\n"
+            f"📍 {route_str(template) or '—'}\n"
+            f"🕒 {clock.fmt(template.departure_at, '%H:%M')} • {price} • {template.seats_total} мест{note}\n\n"
+            "Поездки и их история не удаляются — шаблон просто пропадёт из списка."
+        )
+    }
+
+
+@inject
+async def on_template_delete_confirm(
+    callback: CallbackQuery,
+    button: Button,
+    manager: DialogManager,
+    rides_dao: FromDishka[RidesDAO],
+) -> None:
+    ok = await rides_dao.hide_template(manager.dialog_data.pop("delete_template_id", 0))
+    await callback.answer("🗑 Шаблон удалён" if ok else "Шаблон не найден")
+    await manager.switch_to(RideCreateSG.template_delete)
+
+
 async def on_template_selected(
     callback: CallbackQuery,
     select: Select,
@@ -651,9 +696,39 @@ ride_create_dialog = Dialog(
         ),
         Format("{empty_text}", when="not has_templates"),
         SwitchTo(Const("🆕 Новая поездка"), id="new_ride", state=RideCreateSG.calendar),
+        SwitchTo(
+            Const("🗑 Удалить шаблоны"),
+            id="to_template_delete",
+            state=RideCreateSG.template_delete,
+            when="has_templates",
+        ),
         Cancel(Format("{back_btn}")),
         state=RideCreateSG.select_template,
         getter=get_templates,
+    ),
+    Window(
+        Const("🗑 <b>Удаление шаблонов</b>\n\nВыберите шаблон, который нужно убрать:"),
+        Column(
+            Select(
+                Format("🗑 {item[title]}"),
+                id="templates_del_sel",
+                item_id_getter=lambda item: str(item["ride_id"]),
+                items="templates",
+                on_click=on_template_delete_selected,
+                when="has_templates",
+            ),
+        ),
+        Format("{empty_text}", when="not has_templates"),
+        SwitchTo(Const("⬅️ Назад"), id="back", state=RideCreateSG.select_template),
+        state=RideCreateSG.template_delete,
+        getter=get_templates,
+    ),
+    Window(
+        Format("{confirm_text}"),
+        Button(Const("🗑 Да, удалить"), id="confirm_template_delete", on_click=on_template_delete_confirm),
+        SwitchTo(Const("⬅️ Отмена"), id="back", state=RideCreateSG.template_delete),
+        state=RideCreateSG.template_delete_confirm,
+        getter=get_template_delete_confirm,
     ),
     # 2. Календарь — выбор даты
     Window(

@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 
 from seatbot.application.services.bot import BotService
 from seatbot.application.services.ride import RideService
-from seatbot.domain.schemas import Ride, RideStatus
+from seatbot.domain.schemas import BookingStatus, Ride, RideStatus
 from seatbot.infrastructure.config.models import TrackingConfig
 from seatbot.infrastructure.database.dao import BookingsDAO, RidesDAO, TrackPointsDAO
 from seatbot.infrastructure.database.models import Ride as OrmRide
@@ -53,7 +53,18 @@ class TrackingService:
         orm.live_message_id = message_id
         orm.arrive_streak = 0
         await self._track_dao.add_point(orm.id, 0, lat, lon)
-        return await self._rides_dao.get_by_id(orm.id)
+        ride = await self._rides_dao.get_by_id(orm.id)
+        if ride:
+            approved = await self._bookings_dao.list_for_ride_with_status(
+                ride.ride_id, {BookingStatus.APPROVED}
+            )
+            for booking in approved:
+                await self._bot_service.notify_user(
+                    booking.user_id,
+                    self._messages.driver_departed_notification(ride),
+                    reply_markup=self._messages.origin_keyboard(ride),
+                )
+        return ride
 
     async def handle_update(
         self,
