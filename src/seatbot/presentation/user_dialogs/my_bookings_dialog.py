@@ -45,7 +45,7 @@ async def get_my_bookings(
     if not bookings:
         return {
             "has_bookings": False,
-            "empty_text": "🚫 У вас пока нет броней.",
+            "empty_text": "🚫 У вас пока нет броней.\n\nСвободные места — в разделе «🚗 Поездки».",
             "back_btn": "⬅️ В меню",
         }
     items = []
@@ -103,7 +103,7 @@ async def get_booking_detail(
             route_url = geo.yandex_route_url(points)
     text = messages.booking_card(booking, ride, is_vip=bool(user and user.is_vip))
     if booking.status == BookingStatus.PENDING:
-        rws = await rides_dao.get_with_stats(ride.ride_id)
+        rws = await ride_service.get_ride_stats(ride.ride_id)
         if rws:
             text += (
                 f"\n\n⏳ Заявок в очереди: <b>{rws.pending_seats}</b>, свободных мест: <b>{rws.free_seats}</b>.\n"

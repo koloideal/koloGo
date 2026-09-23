@@ -11,7 +11,7 @@ from dishka.integrations.aiogram_dialog import inject
 from seatbot.application.services.ride import RideService
 from seatbot.domain.exceptions import NoFreeSeatsError
 from seatbot.domain.schemas import BookingStatus
-from seatbot.infrastructure.database.dao import BookingsDAO, RidesDAO, UsersDAO
+from seatbot.infrastructure.database.dao import BookingsDAO, UsersDAO
 from seatbot.infrastructure.notifications import MessageBuilder, route_str, user_display
 from seatbot.infrastructure.time import LocalClock
 
@@ -21,22 +21,22 @@ from ..user_dialogs.states import PendingSG, RidesMgmtSG
 @inject
 async def get_pending_list(
     dialog_manager: DialogManager,
-    bookings_dao: FromDishka[BookingsDAO],
-    rides_dao: FromDishka[RidesDAO],
+    ride_service: FromDishka[RideService],
     users_dao: FromDishka[UsersDAO],
     clock: FromDishka[LocalClock],
     **_kwargs: Any,
 ) -> dict[str, Any]:
-    pending = await bookings_dao.list_pending_upcoming()
+    pending = await ride_service.list_pending_bookings()
     if not pending:
         return {"has_pending": False, "header": "⏳ <b>Заявки</b>\n\n✨ Заявок нет — всё разобрано."}
     items = []
     for b in pending:
-        ride = await rides_dao.get_by_id(b.ride_id)
+        rws = await ride_service.get_ride_stats(b.ride_id)
         user = await users_dao.get_by_id(b.user_id)
-        if not ride:
+        if not rws:
             continue
-        counts = await bookings_dao.status_counts_for_user(b.user_id)
+        ride = rws.ride
+        counts = await ride_service.user_booking_counts(b.user_id)
         no_show = counts.get(BookingStatus.NO_SHOW, 0)
         uname = user_display(user.username, user.first_name, b.user_id) if user else f"id{b.user_id}"
         vip = "⭐" if user and user.is_vip else ""
@@ -60,7 +60,7 @@ async def get_pending_list(
 async def get_pending_detail(
     dialog_manager: DialogManager,
     bookings_dao: FromDishka[BookingsDAO],
-    rides_dao: FromDishka[RidesDAO],
+    ride_service: FromDishka[RideService],
     users_dao: FromDishka[UsersDAO],
     messages: FromDishka[MessageBuilder],
     clock: FromDishka[LocalClock],
@@ -69,7 +69,7 @@ async def get_pending_detail(
     booking = await bookings_dao.get_by_id(dialog_manager.dialog_data.get("booking_id", 0))
     if not booking or booking.status != BookingStatus.PENDING:
         return {"detail_text": "Заявка уже обработана.", "is_pending": False, "can_approve": False}
-    rws = await rides_dao.get_with_stats(booking.ride_id)
+    rws = await ride_service.get_ride_stats(booking.ride_id)
     user = await users_dao.get_by_id(booking.user_id)
     if not rws or not user:
         return {"detail_text": "🚫 Заявка не найдена", "is_pending": False, "can_approve": False}
@@ -82,7 +82,7 @@ async def get_pending_detail(
         messages.seats_line(ride, rws.approved_seats, rws.pending_seats),
         "",
         f"👤 {user_display(user.username, user.first_name, user.user_id)}{vip} ({user.user_id})",
-        messages.user_brief(user, await bookings_dao.status_counts_for_user(user.user_id)),
+        messages.user_brief(user, await ride_service.user_booking_counts(user.user_id)),
     ]
     if rws.free_seats <= 0:
         lines.append("\n⛔ Мест нет — одобрить нельзя")

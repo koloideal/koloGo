@@ -66,7 +66,7 @@ async def get_rides_list(
 @inject
 async def get_ride_detail(
     dialog_manager: DialogManager,
-    rides_dao: FromDishka[RidesDAO],
+    ride_service: FromDishka[RideService],
     track_dao: FromDishka[TrackPointsDAO],
     messages: FromDishka[MessageBuilder],
     geo: FromDishka[GeoService],
@@ -77,7 +77,7 @@ async def get_ride_detail(
         if isinstance(start_data, dict):
             dialog_manager.dialog_data["ride_id"] = start_data["ride_id"]
     ride_id: int = dialog_manager.dialog_data["ride_id"]
-    rws = await rides_dao.get_with_stats(ride_id)
+    rws = await ride_service.get_ride_stats(ride_id)
     if not rws:
         return {"ride_text": "🚫 Поездка не найдена", "back_btn": "⬅️ Назад"}
     is_open = rws.ride.status == RideStatus.OPEN

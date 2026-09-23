@@ -29,10 +29,16 @@ class VipService:
         self._cache_keys = cache_keys
 
     async def get_vip_price(self) -> float:
-        return await self._settings_dao.get_float(VIP_PRICE_KEY, VIP_PRICE_DEFAULT)
+        cached = await self._cache.get(self._cache_keys.vip_price)
+        if cached is not None:
+            return cached
+        price = await self._settings_dao.get_float(VIP_PRICE_KEY, VIP_PRICE_DEFAULT)
+        await self._cache.set(self._cache_keys.vip_price, price)
+        return price
 
     async def set_vip_price(self, price: float) -> None:
         await self._settings_dao.set_float(VIP_PRICE_KEY, price)
+        await self._cache.delete(self._cache_keys.vip_price)
 
     async def purchase_vip(self, user: User) -> User:
         if user.is_vip:

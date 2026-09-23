@@ -24,6 +24,7 @@ Telegram-бот на aiogram для менеджмента платных пое
 - Все строки UI — на русском, встроены в диалоги напрямую (bot только русский).
 - Числа денег — `Decimal` в БД (`Numeric(10,2)`), `float` в domain-схемах.
 - Кэш-ключи — типобезопасные `CacheKey[CacheValue]` в `infrastructure/cache/keys.py`.
+- Кэш — cache-aside в сервисах (`get` → DAO → `set`), сериализация домена в `cache/serializers.py`; при любой мутации, затрагивающей закэшированные данные, сервис обязан вызвать инвалидацию (`delete`). Чтение кэшированных списков/статов — только через методы сервисов (`RideService.get_upcoming_rides`, `get_ride_stats`, `list_pending_bookings`, `next_active_booking`, `user_booking_counts`, `list_templates`, `list_active_rides`, `get_in_progress_ride`, `LocationService.list_all`), а не напрямую из DAO — иначе кэш обходится.
 
 ## Команды
 - `just install-dev` — установить зависимости

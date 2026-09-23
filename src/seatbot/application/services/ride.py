@@ -5,7 +5,10 @@ from seatbot.domain.exceptions import (AlreadyBookedError, NoFreeSeatsError,
                                        RideInPastError, RideNotBookableError,
                                        SeatBotError, UserBannedError, VipHoldActiveError)
 from seatbot.domain.schemas import (Booking, BookingStatus, Ride, RideStatus,
-                                    TransactionType, User)
+                                    RideWithStats, TransactionType, User)
+from seatbot.infrastructure.cache import (CacheKeys, RedisService, dump_booking,
+                                          dump_ride, dump_ride_stats, load_booking,
+                                          load_ride, load_ride_stats)
 from seatbot.infrastructure.database.dao import (BookingsDAO, RidesDAO, TrackPointsDAO,
                                                  TransactionsDAO, UsersDAO)
 from seatbot.infrastructure.geo import GeoService
@@ -27,6 +30,8 @@ class RideService:
         message_builder: MessageBuilder,
         clock: LocalClock,
         geo: GeoService,
+        cache: RedisService,
+        cache_keys: CacheKeys,
     ) -> None:
         self._rides_dao = rides_dao
         self._bookings_dao = bookings_dao
@@ -37,6 +42,118 @@ class RideService:
         self._messages = message_builder
         self._clock = clock
         self._geo = geo
+        self._cache = cache
+        self._cache_keys = cache_keys
+
+    # ── кэшированные чтения ─────────────────────────────────────────────────
+
+    async def get_upcoming_rides(self) -> list[RideWithStats]:
+        cached = await self._cache.get(self._cache_keys.rides_upcoming)
+        if cached is not None:
+            return [load_ride_stats(d) for d in cached["items"]]
+        rides = await self._rides_dao.list_upcoming_visible(self._clock.now())
+        await self._cache.set(self._cache_keys.rides_upcoming, {"items": [dump_ride_stats(r) for r in rides]})
+        return rides
+
+    async def list_active_rides(self) -> list[Ride]:
+        cached = await self._cache.get(self._cache_keys.rides_active)
+        if cached is not None:
+            return [load_ride(d) for d in cached["items"]]
+        rides = await self._rides_dao.list_active()
+        await self._cache.set(self._cache_keys.rides_active, {"items": [dump_ride(r) for r in rides]})
+        return rides
+
+    async def get_in_progress_ride(self) -> Ride | None:
+        cached = await self._cache.get(self._cache_keys.ride_in_progress)
+        if cached is not None:
+            return load_ride(cached["ride"]) if cached["ride"] else None
+        ride = await self._rides_dao.get_in_progress()
+        await self._cache.set(self._cache_keys.ride_in_progress, {"ride": dump_ride(ride) if ride else None})
+        return ride
+
+    async def get_ride_stats(self, ride_id: int) -> RideWithStats | None:
+        cached = await self._cache.get(self._cache_keys.ride_stats, ride_id=ride_id)
+        if cached is not None:
+            return load_ride_stats(cached["rws"]) if cached["rws"] else None
+        rws = await self._rides_dao.get_with_stats(ride_id)
+        await self._cache.set(
+            self._cache_keys.ride_stats,
+            {"rws": dump_ride_stats(rws) if rws else None},
+            ride_id=ride_id,
+        )
+        return rws
+
+    async def list_pending_bookings(self) -> list[Booking]:
+        cached = await self._cache.get(self._cache_keys.bookings_pending)
+        if cached is not None:
+            return [load_booking(d) for d in cached["items"]]
+        bookings = await self._bookings_dao.list_pending_upcoming()
+        await self._cache.set(
+            self._cache_keys.bookings_pending, {"items": [dump_booking(b) for b in bookings]}
+        )
+        return bookings
+
+    async def list_templates(self, limit: int = 10) -> list[Ride]:
+        cached = await self._cache.get(self._cache_keys.ride_templates)
+        if cached is not None:
+            return [load_ride(d) for d in cached["items"]][:limit]
+        templates = await self._rides_dao.list_templates(limit=10)
+        await self._cache.set(self._cache_keys.ride_templates, {"items": [dump_ride(t) for t in templates]})
+        return templates[:limit]
+
+    async def hide_template(self, ride_id: int) -> bool:
+        ok = await self._rides_dao.hide_template(ride_id)
+        if ok:
+            await self._cache.delete(self._cache_keys.ride_templates)
+        return ok
+
+    async def next_active_booking(self, user_id: int) -> Booking | None:
+        cached = await self._cache.get(self._cache_keys.user_next_booking, user_id=user_id)
+        if cached is not None:
+            return load_booking(cached["booking"]) if cached["booking"] else None
+        booking = await self._bookings_dao.next_active_for_user(user_id)
+        await self._cache.set(
+            self._cache_keys.user_next_booking,
+            {"booking": dump_booking(booking) if booking else None},
+            user_id=user_id,
+        )
+        return booking
+
+    async def user_booking_counts(self, user_id: int) -> dict[BookingStatus, int]:
+        cached = await self._cache.get(self._cache_keys.user_booking_counts, user_id=user_id)
+        if cached is not None:
+            return {BookingStatus(k): int(v) for k, v in cached.items()}
+        counts = await self._bookings_dao.status_counts_for_user(user_id)
+        await self._cache.set(
+            self._cache_keys.user_booking_counts,
+            {status.value: count for status, count in counts.items()},
+            user_id=user_id,
+        )
+        return counts
+
+    # ── инвалидация ──────────────────────────────────────────────────────────
+
+    async def invalidate_ride(self, ride_id: int | None = None) -> None:
+        await self._invalidate_ride_caches(ride_id)
+
+    async def _invalidate_ride_caches(self, ride_id: int | None = None) -> None:
+        keys = self._cache_keys
+        await self._cache.delete(keys.rides_upcoming)
+        await self._cache.delete(keys.rides_active)
+        await self._cache.delete(keys.ride_in_progress)
+        await self._cache.delete(keys.bookings_pending)
+        if ride_id is not None:
+            await self._cache.delete(keys.ride_stats, ride_id=ride_id)
+
+    async def _invalidate_user_caches(self, user_id: int) -> None:
+        keys = self._cache_keys
+        await self._cache.delete(keys.user_next_booking, user_id=user_id)
+        await self._cache.delete(keys.user_booking_counts, user_id=user_id)
+
+    async def _invalidate_booking_caches(self, ride_id: int, user_ids: set[int]) -> None:
+        await self._invalidate_ride_caches(ride_id)
+        for uid in user_ids:
+            await self._invalidate_user_caches(uid)
 
     async def create_ride(
         self,
@@ -84,6 +201,8 @@ class RideService:
             rides.append(ride)
         if template_ride_id is not None:
             await self._copy_vips_from_template(template_ride_id, rides)
+        await self._invalidate_ride_caches()
+        await self._cache.delete(self._cache_keys.ride_templates)
         await self._notify_new_rides(rides)
         return rides
 
@@ -185,6 +304,7 @@ class RideService:
                 booking.user_id,
                 self._messages.booking_cancelled_by_admin_notification(ride, booking.paid_amount),
             )
+        await self._invalidate_booking_caches(ride_id, {b.user_id for b in active_bookings})
         return await self._rides_dao.get_by_id(ride_id)
 
     async def change_ride_time(self, ride_id: int, hour: int, minute: int) -> Ride | None:
@@ -233,6 +353,7 @@ class RideService:
                     self._messages.ride_reminder_admin_notification(updated, len(approved))
                 )
                 await self._rides_dao.mark_remind_sent(ride_id)
+        await self._invalidate_booking_caches(ride_id, {b.user_id for b in affected})
         return updated
 
     async def complete_ride(self, ride_id: int) -> Ride | None:
@@ -272,6 +393,9 @@ class RideService:
         pending = await self._bookings_dao.list_for_ride_with_status(ride_id, {BookingStatus.PENDING})
         for booking in pending:
             await self._bookings_dao.set_status(booking.booking_id, BookingStatus.CANCELLED)
+        await self._invalidate_booking_caches(
+            ride_id, {b.user_id for b in approved} | {b.user_id for b in pending}
+        )
         final = await self._rides_dao.get_by_id(ride_id)
         if final:
             await self._bot_service.send_log_to_admin(
@@ -293,6 +417,7 @@ class RideService:
         if not ride or not self.can_mark_no_show(ride):
             return None
         await self._bookings_dao.set_status(booking_id, BookingStatus.NO_SHOW)
+        await self._invalidate_booking_caches(booking.ride_id, {booking.user_id})
         await self._bot_service.notify_user(booking.user_id, self._messages.no_show_notification(ride))
         return await self._bookings_dao.get_by_id(booking_id)
 
@@ -310,6 +435,7 @@ class RideService:
                 ride_id=booking.ride_id,
             )
         ride = await self._rides_dao.get_by_id(booking.ride_id)
+        await self._invalidate_booking_caches(booking.ride_id, {booking.user_id})
         if ride:
             await self._bot_service.notify_user(
                 booking.user_id, self._messages.booking_kicked_notification(ride, reason)
@@ -354,6 +480,7 @@ class RideService:
         pending = await self._bookings_dao.list_for_ride_with_status(ride.ride_id, {BookingStatus.PENDING})
         for booking in pending:
             await self._bookings_dao.set_status(booking.booking_id, BookingStatus.CANCELLED)
+            await self._invalidate_user_caches(booking.user_id)
             await self._bot_service.notify_user(
                 booking.user_id, self._messages.booking_rejected_no_seats_notification(ride)
             )
@@ -390,8 +517,9 @@ class RideService:
             )
             await self._reject_overflow(ride)
 
-        counts = await self._bookings_dao.status_counts_for_user(user.user_id)
-        rws = await self._rides_dao.get_with_stats(ride_id)
+        await self._invalidate_booking_caches(ride_id, {user.user_id})
+        counts = await self.user_booking_counts(user.user_id)
+        rws = await self.get_ride_stats(ride_id)
         seats = (rws.approved_seats, rws.pending_seats) if rws else None
         await self._bot_service.send_log_to_admin(
             self._messages.new_booking_admin_log(booking, user, ride, counts, seats),
@@ -433,6 +561,7 @@ class RideService:
                 reply_markup=self._messages.origin_keyboard(ride),
             )
         await self._reject_overflow(ride)
+        await self._invalidate_booking_caches(ride_id, {user_id})
         return await self._bookings_dao.get_by_id(booking.booking_id)
 
     async def set_visibility(self, ride_id: int, is_visible: bool) -> Ride | None:
@@ -442,6 +571,7 @@ class RideService:
         updated = await self._rides_dao.set_visibility(ride_id, is_visible)
         if updated and is_visible and updated.departure_at > self._clock.now():
             await self._notify_new_rides([updated])
+        await self._invalidate_ride_caches(ride_id)
         return updated
 
     async def set_auto_approve(self, ride_id: int, auto_approve: bool) -> int:
@@ -449,6 +579,7 @@ class RideService:
         if not ride or ride.status != RideStatus.OPEN:
             return 0
         await self._rides_dao.set_auto_approve(ride_id, auto_approve)
+        await self._invalidate_ride_caches(ride_id)
         if not auto_approve:
             return 0
         pending = await self._bookings_dao.list_for_ride_with_status(ride_id, {BookingStatus.PENDING})
@@ -482,6 +613,7 @@ class RideService:
             reply_markup=self._messages.origin_keyboard(ride),
         )
         await self._reject_overflow(ride)
+        await self._invalidate_booking_caches(ride.ride_id, {booking.user_id})
         return await self._bookings_dao.get_by_id(booking_id)
 
     async def reject_booking(self, booking_id: int) -> Booking | None:
@@ -489,6 +621,7 @@ class RideService:
         if not booking or booking.status != BookingStatus.PENDING:
             return None
         await self._bookings_dao.set_status(booking_id, BookingStatus.REJECTED)
+        await self._invalidate_booking_caches(booking.ride_id, {booking.user_id})
         ride = await self._rides_dao.get_by_id(booking.ride_id)
         if ride:
             await self._bot_service.notify_user(
@@ -511,6 +644,7 @@ class RideService:
         if not ride or not self.can_user_cancel(booking, ride):
             return None
         await self._bookings_dao.set_status(booking_id, BookingStatus.CANCELLED)
+        await self._invalidate_booking_caches(booking.ride_id, {user_id})
         if booking.paid_amount > 0:
             await self._users_dao.increase_balance(user_id, booking.paid_amount)
             await self._transactions_dao.create(

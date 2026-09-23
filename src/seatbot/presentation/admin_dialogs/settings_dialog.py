@@ -10,9 +10,9 @@ from aiogram_dialog.widgets.text import Const, Format
 from dishka import FromDishka
 from dishka.integrations.aiogram_dialog import inject
 
+from seatbot.application.services.location import LocationService
 from seatbot.application.services.payment import PaymentService
 from seatbot.application.services.vip import VipService
-from seatbot.infrastructure.database.dao import LocationsDAO
 from seatbot.infrastructure.notifications import fmt_amount
 
 from ..user_dialogs.states import AdminSettingsSG
@@ -21,11 +21,11 @@ from ..user_dialogs.states import AdminSettingsSG
 @inject
 async def get_locations_list(
     dialog_manager: DialogManager,
-    locations_dao: FromDishka[LocationsDAO],
+    location_service: FromDishka[LocationService],
     **_kwargs: Any,
 ) -> dict[str, Any]:
-    locations = await locations_dao.list_all()
-    items = [{"location_id": loc.location_id, "title": f"🗑 {loc.name}"} for loc in locations]
+    locations = await location_service.list_all()
+    items = [{"location_id": loc.location_id, "title": f"� {loc.name}"} for loc in locations]
     return {
         "has_locations": bool(items),
         "locations": items,
@@ -51,11 +51,11 @@ async def on_location_selected(
 @inject
 async def get_location_detail(
     dialog_manager: DialogManager,
-    locations_dao: FromDishka[LocationsDAO],
+    location_service: FromDishka[LocationService],
     **_kwargs: Any,
 ) -> dict[str, Any]:
     location_id = dialog_manager.dialog_data.get("location_id")
-    loc = await locations_dao.get_by_id(location_id) if location_id is not None else None
+    loc = await location_service.get_by_id(location_id) if location_id is not None else None
     if not loc:
         return {"location_text": "🚫 Точка не найдена.", "back_btn": "⬅️ К точкам"}
     return {
@@ -73,10 +73,10 @@ async def on_show_location_geo(
     callback: CallbackQuery,
     button: Button,
     manager: DialogManager,
-    locations_dao: FromDishka[LocationsDAO],
+    location_service: FromDishka[LocationService],
 ) -> None:
     location_id = manager.dialog_data.get("location_id")
-    loc = await locations_dao.get_by_id(location_id) if location_id is not None else None
+    loc = await location_service.get_by_id(location_id) if location_id is not None else None
     if not loc:
         await callback.answer("Точка не найдена", show_alert=True)
         return
@@ -99,10 +99,10 @@ async def on_location_edit_geo_input(message: Message, widget: MessageInput, man
         await message.answer("❌ Отправьте геолокацию точки (📎 → Геопозиция).")
         return
     container = manager.middleware_data["dishka_container"]
-    locations_dao: LocationsDAO = await container.get(LocationsDAO)
+    location_service: LocationService = await container.get(LocationService)
     location_id = manager.dialog_data.get("location_id")
     updated = (
-        await locations_dao.update_geo(
+        await location_service.update_geo(
             int(location_id), message.location.latitude, message.location.longitude
         )
         if location_id is not None
@@ -118,11 +118,11 @@ async def on_location_edit_geo_input(message: Message, widget: MessageInput, man
 @inject
 async def get_location_delete(
     dialog_manager: DialogManager,
-    locations_dao: FromDishka[LocationsDAO],
+    location_service: FromDishka[LocationService],
     **_kwargs: Any,
 ) -> dict[str, Any]:
     location_id = dialog_manager.dialog_data.get("location_id")
-    loc = await locations_dao.get_by_id(location_id) if location_id is not None else None
+    loc = await location_service.get_by_id(location_id) if location_id is not None else None
     if not loc:
         return {"location_text": "🚫 Точка не найдена.", "back_btn": "⬅️ К точкам"}
     return {
@@ -136,11 +136,11 @@ async def on_confirm_delete_location(
     callback: CallbackQuery,
     button: Button,
     manager: DialogManager,
-    locations_dao: FromDishka[LocationsDAO],
+    location_service: FromDishka[LocationService],
 ) -> None:
     location_id = manager.dialog_data.get("location_id")
     if location_id is not None:
-        await locations_dao.delete(int(location_id))
+        await location_service.delete(int(location_id))
     await callback.answer("🗑 Точка удалена", show_alert=True)
     await manager.switch_to(AdminSettingsSG.locations)
 
@@ -159,9 +159,9 @@ async def on_location_geo_input(message: Message, widget: MessageInput, manager:
         await message.answer("❌ Отправьте геолокацию точки (📎 → Геопозиция).")
         return
     container = manager.middleware_data["dishka_container"]
-    locations_dao: LocationsDAO = await container.get(LocationsDAO)
+    location_service: LocationService = await container.get(LocationService)
     name = manager.dialog_data["location_name"]
-    await locations_dao.create(name, message.location.latitude, message.location.longitude)
+    await location_service.create(name, message.location.latitude, message.location.longitude)
     await message.answer(f"✅ Точка «{name}» сохранена.")
     await manager.switch_to(AdminSettingsSG.locations)
 

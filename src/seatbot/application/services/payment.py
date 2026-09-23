@@ -1,4 +1,5 @@
 from seatbot.domain.schemas import TransactionStatus, TransactionType
+from seatbot.infrastructure.cache import CacheKeys, RedisService
 from seatbot.infrastructure.database.dao import SettingsDAO, TransactionsDAO, UsersDAO
 from seatbot.infrastructure.notifications import MessageBuilder
 from seatbot.infrastructure.payments import CryptoBotPayment, CryptoBotPaymentService
@@ -19,6 +20,8 @@ class PaymentService:
         poller: PaymentStatusPoller,
         users_dao: UsersDAO,
         message_builder: MessageBuilder,
+        cache: RedisService,
+        cache_keys: CacheKeys,
     ) -> None:
         self._transactions_dao = transactions_dao
         self._settings_dao = settings_dao
@@ -26,22 +29,36 @@ class PaymentService:
         self._poller = poller
         self._users_dao = users_dao
         self._messages = message_builder
+        self._cache = cache
+        self._cache_keys = cache_keys
 
     async def get_byn_to_usd_rate(self) -> float:
-        return await self._settings_dao.get_float(BYN_TO_USD_RATE_KEY, BYN_TO_USD_RATE_DEFAULT)
+        cached = await self._cache.get(self._cache_keys.rate_byn_usd)
+        if cached is not None:
+            return cached
+        rate = await self._settings_dao.get_float(BYN_TO_USD_RATE_KEY, BYN_TO_USD_RATE_DEFAULT)
+        await self._cache.set(self._cache_keys.rate_byn_usd, rate)
+        return rate
 
     async def set_byn_to_usd_rate(self, rate: float) -> None:
         await self._settings_dao.set_float(BYN_TO_USD_RATE_KEY, rate)
+        await self._cache.delete(self._cache_keys.rate_byn_usd)
 
     async def byn_to_usd(self, byn: float) -> float:
         rate = await self.get_byn_to_usd_rate()
         return round(byn / rate, 2)
 
     async def get_byn_to_stars_rate(self) -> float:
-        return await self._settings_dao.get_float(BYN_TO_STARS_RATE_KEY, BYN_TO_STARS_RATE_DEFAULT)
+        cached = await self._cache.get(self._cache_keys.rate_byn_stars)
+        if cached is not None:
+            return cached
+        rate = await self._settings_dao.get_float(BYN_TO_STARS_RATE_KEY, BYN_TO_STARS_RATE_DEFAULT)
+        await self._cache.set(self._cache_keys.rate_byn_stars, rate)
+        return rate
 
     async def set_byn_to_stars_rate(self, rate: float) -> None:
         await self._settings_dao.set_float(BYN_TO_STARS_RATE_KEY, rate)
+        await self._cache.delete(self._cache_keys.rate_byn_stars)
 
     async def byn_to_stars(self, byn: float) -> int:
         rate = await self.get_byn_to_stars_rate()

@@ -13,6 +13,7 @@ from seatbot.application.interactors.user.create_or_get_user import \
 from seatbot.application.services.bot import BotService
 from seatbot.application.services.broadcast import BroadcastService
 from seatbot.application.services.deposit import DepositService
+from seatbot.application.services.location import LocationService
 from seatbot.application.services.payment import PaymentService
 from seatbot.application.services.ride import RideService
 from seatbot.application.services.statistics import StatisticsService
@@ -182,6 +183,8 @@ class ServicesProvider(Provider):
         message_builder: MessageBuilder,
         clock: LocalClock,
         geo: GeoService,
+        cache: RedisService,
+        cache_keys: CacheKeys,
     ) -> RideService:
         return RideService(
             rides_dao,
@@ -193,7 +196,15 @@ class ServicesProvider(Provider):
             message_builder,
             clock,
             geo,
+            cache,
+            cache_keys,
         )
+
+    @provide
+    def get_location_service(
+        self, cache: RedisService, cache_keys: CacheKeys, locations_dao: LocationsDAO
+    ) -> LocationService:
+        return LocationService(cache, cache_keys, locations_dao)
 
     @provide
     def get_deposit_service(
@@ -257,9 +268,18 @@ class ServicesProvider(Provider):
         poller: PaymentStatusPoller,
         users_dao: UsersDAO,
         message_builder: MessageBuilder,
+        cache: RedisService,
+        cache_keys: CacheKeys,
     ) -> PaymentService:
         return PaymentService(
-            transactions_dao, settings_dao, cryptobot_service, poller, users_dao, message_builder
+            transactions_dao,
+            settings_dao,
+            cryptobot_service,
+            poller,
+            users_dao,
+            message_builder,
+            cache,
+            cache_keys,
         )
 
     @provide

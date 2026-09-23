@@ -53,6 +53,7 @@ class TrackingService:
         orm.live_message_id = message_id
         orm.arrive_streak = 0
         await self._track_dao.add_point(orm.id, 0, lat, lon)
+        await self._ride_service.invalidate_ride(orm.id)
         ride = await self._rides_dao.get_by_id(orm.id)
         if ride:
             approved = await self._bookings_dao.list_for_ride_with_status(

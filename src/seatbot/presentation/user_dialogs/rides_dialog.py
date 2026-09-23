@@ -72,12 +72,13 @@ def queue_line(rws: RideWithStats, user: User | None) -> str:
 @inject
 async def get_rides_list(
     dialog_manager: DialogManager,
-    rides_dao: FromDishka[RidesDAO],
+    ride_service: FromDishka[RideService],
     bookings_dao: FromDishka[BookingsDAO],
+    users_dao: FromDishka[UsersDAO],
     clock: FromDishka[LocalClock],
     **_kwargs: Any,
 ) -> dict[str, Any]:
-    rides = await rides_dao.list_upcoming_visible()
+    rides = await ride_service.get_upcoming_rides()
     user_id = dialog_manager.middleware_data["event_from_user"].id
     my_status = {
         b.ride_id: b.status
@@ -85,9 +86,15 @@ async def get_rides_list(
         if b.status in (BookingStatus.PENDING, BookingStatus.APPROVED)
     }
     if not rides:
+        user = await users_dao.get_by_id(user_id)
+        empty_text = "🚫 Сейчас нет запланированных поездок.\n" + (
+            "Сообщим, как только появятся 🔔."
+            if user and user.notify_new_rides
+            else "Включите 🔔 уведомления в меню, чтобы не пропустить новые."
+        )
         return {
             "has_rides": False,
-            "empty_text": "🚫 Сейчас нет запланированных поездок. Загляни позже!",
+            "empty_text": empty_text,
             "back_btn": "⬅️ В меню",
         }
     items = []
@@ -116,7 +123,6 @@ async def get_rides_list(
 @inject
 async def get_ride_detail(
     dialog_manager: DialogManager,
-    rides_dao: FromDishka[RidesDAO],
     bookings_dao: FromDishka[BookingsDAO],
     users_dao: FromDishka[UsersDAO],
     messages: FromDishka[MessageBuilder],
@@ -125,7 +131,7 @@ async def get_ride_detail(
     **_kwargs: Any,
 ) -> dict[str, Any]:
     ride_id: int = dialog_manager.dialog_data["ride_id"]
-    rws = await rides_dao.get_with_stats(ride_id)
+    rws = await ride_service.get_ride_stats(ride_id)
     if not rws:
         return {"ride_text": "🚫 Поездка не найдена", "back_btn": "⬅️ Назад"}
 
@@ -197,14 +203,13 @@ async def on_ride_selected(
 @inject
 async def get_book_confirm(
     dialog_manager: DialogManager,
-    rides_dao: FromDishka[RidesDAO],
     users_dao: FromDishka[UsersDAO],
     messages: FromDishka[MessageBuilder],
     ride_service: FromDishka[RideService],
     **_kwargs: Any,
 ) -> dict[str, Any]:
     ride_id: int = dialog_manager.dialog_data["ride_id"]
-    rws = await rides_dao.get_with_stats(ride_id)
+    rws = await ride_service.get_ride_stats(ride_id)
     user = await users_dao.get_by_id(dialog_manager.middleware_data["event_from_user"].id)
     if not rws or not user:
         return {"confirm_text": "🚫 Поездка не найдена", "can_confirm": False}

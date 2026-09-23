@@ -7,8 +7,8 @@ from aiogram_dialog.widgets.text import Const, Format
 from dishka import FromDishka
 from dishka.integrations.aiogram_dialog import inject
 
+from seatbot.application.services.ride import RideService
 from seatbot.domain.schemas import RideStatus, RideWithStats
-from seatbot.infrastructure.database.dao import BookingsDAO, RidesDAO
 from seatbot.infrastructure.notifications import MessageBuilder, route_str
 from seatbot.infrastructure.time import LocalClock
 
@@ -28,25 +28,24 @@ def _ride_line(messages: MessageBuilder, rws: RideWithStats) -> str:
 @inject
 async def get_panel(
     dialog_manager: DialogManager,
-    rides_dao: FromDishka[RidesDAO],
-    bookings_dao: FromDishka[BookingsDAO],
+    ride_service: FromDishka[RideService],
     messages: FromDishka[MessageBuilder],
     clock: FromDishka[LocalClock],
     **_kwargs: Any,
 ) -> dict[str, Any]:
     lines = ["🚗 Привет, <b>Создатель</b>, rewrite in Rust please\n"]
-    in_progress = await rides_dao.get_in_progress()
-    upcoming = next((r for r in await rides_dao.list_active() if r.departure_at > clock.now()), None)
-    pending_count = len(await bookings_dao.list_pending_upcoming())
+    in_progress = await ride_service.get_in_progress_ride()
+    upcoming = next((r for r in await ride_service.list_active_rides() if r.departure_at > clock.now()), None)
+    pending_count = len(await ride_service.list_pending_bookings())
 
-    if in_progress and (rws := await rides_dao.get_with_stats(in_progress.ride_id)):
+    if in_progress and (rws := await ride_service.get_ride_stats(in_progress.ride_id)):
         dialog_manager.dialog_data["in_progress_id"] = in_progress.ride_id
         lines += [
             "🚙 <b>Сейчас в пути</b>",
             _ride_line(messages, rws),
             f"🛣 Проехано: {in_progress.track_distance_m / 1000:.1f} км\n",
         ]
-    if upcoming and (rws := await rides_dao.get_with_stats(upcoming.ride_id)):
+    if upcoming and (rws := await ride_service.get_ride_stats(upcoming.ride_id)):
         dialog_manager.dialog_data["upcoming_id"] = upcoming.ride_id
         lines += ["🗓 <b>Ближайшая поездка</b>", _ride_line(messages, rws) + "\n"]
     elif not in_progress:
@@ -60,6 +59,7 @@ async def get_panel(
         "has_in_progress": in_progress is not None and in_progress.status == RideStatus.IN_PROGRESS,
         "has_upcoming": upcoming is not None,
         "pending_btn": f"⏳ Заявки ({pending_count})" if pending_count else "⏳ Заявки",
+        "has_templates": bool(await ride_service.list_templates(limit=1)),
     }
 
 
@@ -82,7 +82,18 @@ admin_panel_dialog = Dialog(
         ),
         Start(Format("{pending_btn}"), id="pending", state=PendingSG.list),
         Row(
-            Start(Const("➕ Создать поездку"), id="ride_create", state=RideCreateSG.select_template),
+            Start(
+                Const("➕ Создать поездку"),
+                id="ride_create",
+                state=RideCreateSG.select_template,
+                when="has_templates",
+            ),
+            Start(
+                Const("➕ Создать поездку"),
+                id="ride_create_direct",
+                state=RideCreateSG.calendar,
+                when="not has_templates",
+            ),
             Start(Const("🚗 Мои поездки"), id="rides_mgmt", state=RidesMgmtSG.rides_list),
         ),
         Row(

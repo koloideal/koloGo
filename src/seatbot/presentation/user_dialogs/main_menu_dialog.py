@@ -7,6 +7,7 @@ from aiogram_dialog.widgets.text import Const, Format
 from dishka import FromDishka
 from dishka.integrations.aiogram_dialog import inject
 
+from seatbot.application.services.ride import RideService
 from seatbot.domain.schemas import BookingStatus, RideStatus
 from seatbot.infrastructure.database.dao import BookingsDAO, RidesDAO, UsersDAO
 from seatbot.infrastructure.notifications import MessageBuilder, fmt_amount, route_str
@@ -25,7 +26,7 @@ async def get_main_menu(
     dialog_manager: DialogManager,
     users_dao: FromDishka[UsersDAO],
     bookings_dao: FromDishka[BookingsDAO],
-    rides_dao: FromDishka[RidesDAO],
+    ride_service: FromDishka[RideService],
     messages: FromDishka[MessageBuilder],
     **_kwargs: Any,
 ) -> dict[str, Any]:
@@ -38,8 +39,9 @@ async def get_main_menu(
     if user and user.balance > 0:
         lines.append(f"💰 На депозите: <b>{fmt_amount(user.balance)} BYN</b>")
 
-    next_booking = await bookings_dao.next_active_for_user(user_id)
-    next_ride = await rides_dao.get_by_id(next_booking.ride_id) if next_booking else None
+    next_booking = await ride_service.next_active_booking(user_id)
+    next_stats = await ride_service.get_ride_stats(next_booking.ride_id) if next_booking else None
+    next_ride = next_stats.ride if next_stats else None
     has_next_origin = False
     if next_booking and next_ride:
         dialog_manager.dialog_data["next_booking_id"] = next_booking.booking_id
@@ -60,8 +62,12 @@ async def get_main_menu(
             and next_ride.origin_lat is not None
             and next_ride.origin_lon is not None
         )
+    elif await ride_service.get_upcoming_rides():
+        lines.append("\nАктивных броней нет — свежие поездки в разделе «🚗 Поездки».")
+    elif user and user.notify_new_rides:
+        lines.append("\nПоездок пока нет — сообщим, как только появятся 🔔.")
     else:
-        lines.append("\nБлижайших поездок нет — загляните в «🚗 Поездки».")
+        lines.append("\nПоездок пока нет — включите 🔔 уведомления, чтобы не пропустить новые.")
     lines.append("\n<i><b>made by kolo</b></i>")
     return {
         "menu_text": "\n".join(lines),

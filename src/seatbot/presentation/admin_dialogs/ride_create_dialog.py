@@ -16,6 +16,7 @@ from aiogram_dialog.widgets.text import Const, Format
 from dishka import FromDishka
 from dishka.integrations.aiogram_dialog import inject
 
+from seatbot.application.services.location import LocationService
 from seatbot.application.services.ride import RideService
 from seatbot.domain.exceptions import RideInPastError
 from seatbot.infrastructure.database.dao import LocationsDAO, RidesDAO
@@ -28,11 +29,11 @@ from ..user_dialogs.states import RideCreateSG
 @inject
 async def get_templates(
     dialog_manager: DialogManager,
-    rides_dao: FromDishka[RidesDAO],
+    ride_service: FromDishka[RideService],
     clock: FromDishka[LocalClock],
     **_kwargs: Any,
 ) -> dict[str, Any]:
-    templates = await rides_dao.list_templates(limit=8)
+    templates = await ride_service.list_templates(limit=8)
     if not templates:
         return {"has_templates": False, "empty_text": "🚫 Шаблонов пока нет.", "back_btn": "⬅️ В панель"}
     items = []
@@ -136,13 +137,13 @@ async def get_calendar_data(
 @inject
 async def get_time_data(
     dialog_manager: DialogManager,
-    rides_dao: FromDishka[RidesDAO],
+    ride_service: FromDishka[RideService],
     clock: FromDishka[LocalClock],
     **_kwargs: Any,
 ) -> dict[str, Any]:
     selected_date = dialog_manager.dialog_data.get("selected_date", "—")
     selected_time = dialog_manager.dialog_data.get("selected_time", "—")
-    presets = sorted({clock.fmt(r.departure_at, "%H:%M") for r in await rides_dao.list_templates(limit=8)})
+    presets = sorted({clock.fmt(r.departure_at, "%H:%M") for r in await ride_service.list_templates(limit=8)})
     return {
         "selected_date": selected_date,
         "selected_time": selected_time,
@@ -256,10 +257,10 @@ async def get_seats_data(
 @inject
 async def get_origin_data(
     dialog_manager: DialogManager,
-    locations_dao: FromDishka[LocationsDAO],
+    location_service: FromDishka[LocationService],
     **_kwargs: Any,
 ) -> dict[str, Any]:
-    locations = await locations_dao.list_all()
+    locations = await location_service.list_all()
     current = dialog_manager.dialog_data.get("origin")
     return {
         "origin_info": (
@@ -278,10 +279,10 @@ async def get_origin_data(
 @inject
 async def get_destination_data(
     dialog_manager: DialogManager,
-    locations_dao: FromDishka[LocationsDAO],
+    location_service: FromDishka[LocationService],
     **_kwargs: Any,
 ) -> dict[str, Any]:
-    locations = await locations_dao.list_all()
+    locations = await location_service.list_all()
     current = dialog_manager.dialog_data.get("destination")
     return {
         "destination_info": (
@@ -823,9 +824,9 @@ async def on_template_delete_confirm(
     callback: CallbackQuery,
     button: Button,
     manager: DialogManager,
-    rides_dao: FromDishka[RidesDAO],
+    ride_service: FromDishka[RideService],
 ) -> None:
-    ok = await rides_dao.hide_template(manager.dialog_data.pop("delete_template_id", 0))
+    ok = await ride_service.hide_template(manager.dialog_data.pop("delete_template_id", 0))
     await callback.answer("🗑 Шаблон удалён" if ok else "Шаблон не найден")
     await manager.switch_to(RideCreateSG.template_delete)
 
