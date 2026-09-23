@@ -11,6 +11,7 @@ from dishka.integrations.aiogram_dialog import inject
 
 from seatbot.application.services.ride import RideService
 from seatbot.application.services.tracking import TrackingService
+from seatbot.domain.exceptions import RideInPastError
 from seatbot.domain.schemas import RideStatus
 from seatbot.infrastructure.database.dao import RidesDAO, TrackPointsDAO
 from seatbot.infrastructure.geo import GeoService
@@ -117,8 +118,11 @@ async def on_complete(
     ride_id: int = manager.dialog_data["ride_id"]
     container = manager.middleware_data["dishka_container"]
     ride_service: RideService = await container.get(RideService)
-    await ride_service.complete_ride(ride_id)
-    await callback.answer("Поездка завершена", show_alert=True)
+    ride = await ride_service.complete_ride(ride_id)
+    if ride:
+        await callback.answer("Поездка завершена", show_alert=True)
+    else:
+        await callback.answer("Поездка уже завершена или отменена", show_alert=True)
     await manager.switch_to(RidesMgmtSG.rides_list)
 
 
@@ -127,12 +131,14 @@ async def on_cancel_ride(
     callback: CallbackQuery,
     button: Button,
     manager: DialogManager,
+    ride_service: FromDishka[RideService],
 ) -> None:
     ride_id: int = manager.dialog_data["ride_id"]
-    container = manager.middleware_data["dishka_container"]
-    ride_service: RideService = await container.get(RideService)
-    await ride_service.cancel_ride(ride_id)
-    await callback.answer("Поездка отменена, пассажиры уведомлены", show_alert=True)
+    ride = await ride_service.cancel_ride(ride_id)
+    if ride:
+        await callback.answer("Поездка отменена, пассажиры уведомлены", show_alert=True)
+    else:
+        await callback.answer("Поездка уже завершена или отменена", show_alert=True)
     await manager.switch_to(RidesMgmtSG.rides_list)
 
 
@@ -142,11 +148,14 @@ async def on_toggle_visibility(
     button: Button,
     manager: DialogManager,
     rides_dao: FromDishka[RidesDAO],
+    ride_service: FromDishka[RideService],
 ) -> None:
     ride_id: int = manager.dialog_data["ride_id"]
     ride = await rides_dao.get_by_id(ride_id)
     if ride:
-        await rides_dao.set_visibility(ride_id, not ride.is_visible)
+        updated = await ride_service.set_visibility(ride_id, not ride.is_visible)
+        if updated and updated.is_visible and not ride.is_visible:
+            await callback.answer("Поездка опубликована, подписчики уведомлены")
     await manager.update({})
 
 
@@ -156,11 +165,16 @@ async def on_toggle_auto_approve(
     button: Button,
     manager: DialogManager,
     rides_dao: FromDishka[RidesDAO],
+    ride_service: FromDishka[RideService],
 ) -> None:
     ride_id: int = manager.dialog_data["ride_id"]
     ride = await rides_dao.get_by_id(ride_id)
     if ride:
-        await rides_dao.set_auto_approve(ride_id, not ride.auto_approve)
+        approved = await ride_service.set_auto_approve(ride_id, not ride.auto_approve)
+        if approved:
+            await callback.answer(
+                f"Авто-апрув включён, одобрено ожидающих броней: {approved}", show_alert=True
+            )
     await manager.update({})
 
 
@@ -239,7 +253,14 @@ async def on_time_input(
         return
     container = manager.middleware_data["dishka_container"]
     ride_service: RideService = await container.get(RideService)
-    updated = await ride_service.change_ride_time(ride_id, hour, minute)
+    try:
+        updated = await ride_service.change_ride_time(ride_id, hour, minute)
+    except RideInPastError:
+        await message.answer(
+            f"⛔ {clock.fmt(ride.departure_at, '%d.%m.%Y')} в {hour:02d}:{minute:02d} — уже прошло. "
+            "Введите время в будущем."
+        )
+        return
     if not updated:
         await message.answer("❌ Не удалось изменить время. Поездка уже завершена или отменена.")
         return
@@ -288,7 +309,9 @@ rides_management_dialog = Dialog(
             SwitchTo(
                 Format("{complete_btn}"), id="complete", state=RidesMgmtSG.complete_confirm, when="can_finish"
             ),
-            Button(Format("{cancel_btn}"), id="cancel_ride", on_click=on_cancel_ride, when="can_finish"),
+            SwitchTo(
+                Format("{cancel_btn}"), id="cancel_ride", state=RidesMgmtSG.cancel_confirm, when="can_finish"
+            ),
             width=2,
         ),
         Url(Format("{route_btn}"), url=Format("{route_url}"), when="has_track"),
@@ -302,6 +325,17 @@ rides_management_dialog = Dialog(
         Button(Const("✅ Да, завершить"), id="confirm_complete", on_click=on_complete),
         SwitchTo(Const("⬅️ Отмена"), id="back", state=RidesMgmtSG.ride_detail),
         state=RidesMgmtSG.complete_confirm,
+        getter=get_ride_detail,
+    ),
+    Window(
+        Format("{ride_text}"),
+        Const(
+            "\n❌ <b>Отменить эту поездку?</b>\n\n"
+            "Все брони будут отменены, списанное вернётся на депозит, пассажиры получат уведомление."
+        ),
+        Button(Const("✅ Да, отменить"), id="confirm_cancel", on_click=on_cancel_ride),
+        SwitchTo(Const("⬅️ Назад"), id="back", state=RidesMgmtSG.ride_detail),
+        state=RidesMgmtSG.cancel_confirm,
         getter=get_ride_detail,
     ),
     Window(

@@ -9,14 +9,30 @@ from dishka.integrations.aiogram_dialog import inject
 
 from seatbot.application.services.ride import RideService
 from seatbot.domain.exceptions import (AlreadyBookedError, NoFreeSeatsError,
-                                       RideNotBookableError, UserBannedError,
-                                       VipHoldActiveError)
+                                       RideNotBookableError, SeatBotError,
+                                       UserBannedError, VipHoldActiveError)
 from seatbot.domain.schemas import BookingStatus
 from seatbot.infrastructure.database.dao import BookingsDAO, RidesDAO, UsersDAO
 from seatbot.infrastructure.notifications import MessageBuilder, fmt_amount, route_str
 from seatbot.infrastructure.time import LocalClock
 
 from .states import MainMenuSG, RidesSG
+
+
+def booking_error_text(error: SeatBotError) -> str:
+    match error:
+        case NoFreeSeatsError():
+            return "🚫 Мест нет"
+        case AlreadyBookedError():
+            return "✅ Вы уже забронировали эту поездку"
+        case UserBannedError():
+            return "⛔ Вы в чёрном списке"
+        case VipHoldActiveError(remaining_seconds=remaining):
+            mins, secs = divmod(remaining, 60)
+            return f"⭐ Сейчас VIP-холд — только VIP могут бронировать. Подождите ещё {mins}:{secs:02d}."
+        case RideNotBookableError(reason=reason):
+            return f"🚫 Нельзя забронировать: {reason}"
+    return "🚫 Бронь недоступна"
 
 
 @inject
@@ -60,6 +76,7 @@ async def get_ride_detail(
     users_dao: FromDishka[UsersDAO],
     messages: FromDishka[MessageBuilder],
     clock: FromDishka[LocalClock],
+    ride_service: FromDishka[RideService],
     **_kwargs: Any,
 ) -> dict[str, Any]:
     ride_id: int = dialog_manager.dialog_data["ride_id"]
@@ -89,16 +106,17 @@ async def get_ride_detail(
         if user and user.is_vip:
             ride_text += "\n⭐ Для вас поездка бесплатна (VIP)"
         elif user and user.balance >= price:
-            ride_text += f"\n💳 При бронировании спишется с депозита: <b>{fmt_amount(price)} BYN</b>"
+            ride_text += f"\n💳 После поездки спишется с депозита: <b>{fmt_amount(price)} BYN</b>"
         else:
             ride_text += f"\n💵 Оплата по факту поездки: <b>{fmt_amount(price)} BYN</b>"
-    can_book = (
-        rws.free_seats > 0
-        and rws.ride.status.value == "open"
-        and not existing
-        and (user is None or not user.is_banned)
-        and not (hold_active and not is_vip)
-    )
+    error = await ride_service.booking_error(rws.ride, user) if user else None
+    can_book = user is not None and error is None
+    if user is None:
+        blocked_text = "Сначала нажмите /start"
+    elif isinstance(error, VipHoldActiveError):
+        blocked_text = "⭐ Бронь пока только для VIP"
+    else:
+        blocked_text = booking_error_text(error) if error else ""
 
     has_origin_geo = (
         existing is not None
@@ -110,11 +128,9 @@ async def get_ride_detail(
         "ride_text": ride_text,
         "ride_id": ride_id,
         "can_book": can_book,
-        "already_booked": existing is not None,
+        "blocked_text": blocked_text,
         "has_origin_geo": has_origin_geo,
         "book_btn": "🪑 Забронировать",
-        "already_booked_text": "✅ Вы уже забронировали эту поездку",
-        "no_seats_text": "🚫 Мест нет",
         "origin_btn": "📍 Место отправления",
         "back_btn": "⬅️ К поездкам",
     }
@@ -147,24 +163,9 @@ async def on_book_click(
         return
     try:
         booking = await ride_service.book_ride(ride_id, user)
-    except NoFreeSeatsError:
-        await callback.answer("Мест больше нет", show_alert=True)
-        return
-    except AlreadyBookedError:
-        await callback.answer("Вы уже забронировали эту поездку", show_alert=True)
-        return
-    except UserBannedError:
-        await callback.answer("Вы в чёрном списке", show_alert=True)
-        return
-    except RideNotBookableError as e:
-        await callback.answer(f"Нельзя забронировать: {e.reason}", show_alert=True)
-        return
-    except VipHoldActiveError as e:
-        mins, secs = divmod(e.remaining_seconds, 60)
-        await callback.answer(
-            f"⭐ Сейчас VIP-холд — только VIP могут бронировать. Подождите ещё {mins}:{secs:02d}.",
-            show_alert=True,
-        )
+    except SeatBotError as e:
+        await callback.answer(booking_error_text(e), show_alert=True)
+        await manager.update({})
         return
 
     status_text = (
@@ -178,7 +179,7 @@ async def on_book_click(
         if ride.is_free or user.is_vip:
             msg += "\n💰 Поездка бесплатная."
         else:
-            msg += f"\n� Оплата по факту поездки: {fmt_amount(float(ride.price))} BYN."
+            msg += f"\n💵 Оплата по факту поездки: {fmt_amount(float(ride.price))} BYN."
     await callback.answer(msg, show_alert=True)
     await manager.start(MainMenuSG.main, mode=StartMode.RESET_STACK)
 
@@ -227,8 +228,7 @@ rides_dialog = Dialog(
     Window(
         Format("{ride_text}"),
         Button(Format("{book_btn}"), id="book", on_click=on_book_click, when="can_book"),
-        Format("{already_booked_text}", when="already_booked"),
-        Format("{no_seats_text}", when="not can_book and not already_booked"),
+        Format("{blocked_text}", when="blocked_text"),
         Button(Format("{origin_btn}"), id="show_origin", on_click=on_show_origin, when="has_origin_geo"),
         SwitchTo(Format("{back_btn}"), id="back", state=RidesSG.list),
         state=RidesSG.detail,

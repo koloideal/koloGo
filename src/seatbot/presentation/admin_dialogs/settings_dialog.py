@@ -1,3 +1,4 @@
+import math
 from html import escape
 from typing import Any
 
@@ -190,8 +191,8 @@ async def get_settings_main(
 async def on_vip_price_input(message: Message, widget: MessageInput, manager: DialogManager) -> None:
     text = (message.text or "").strip().replace(",", ".")
     try:
-        price = float(text)
-        if price < 0:
+        price = round(float(text), 2)
+        if not math.isfinite(price) or not 0 <= price <= 100_000:
             raise ValueError
     except ValueError:
         await message.answer("❌ Введите неотрицательное число (например, <code>100</code>).")
@@ -207,7 +208,7 @@ async def on_exchange_rate_input(message: Message, widget: MessageInput, manager
     text = (message.text or "").strip().replace(",", ".")
     try:
         rate = float(text)
-        if rate <= 0:
+        if not math.isfinite(rate) or rate <= 0:
             raise ValueError
     except ValueError:
         await message.answer("❌ Введите положительное число (например, <code>3.2</code>).")
@@ -223,7 +224,7 @@ async def on_stars_rate_input(message: Message, widget: MessageInput, manager: D
     text = (message.text or "").strip().replace(",", ".")
     try:
         rate = float(text)
-        if rate <= 0:
+        if not math.isfinite(rate) or rate <= 0:
             raise ValueError
     except ValueError:
         await message.answer("❌ Введите положительное число (например, <code>1.0</code>).")
@@ -320,10 +321,7 @@ settings_dialog = Dialog(
         getter=get_location_detail,
     ),
     Window(
-        Const(
-            "📍 <b>Новая геопозиция точки</b>\n\n"
-            "Отправьте геолокацию этой точки (📎 → Геопозиция)."
-        ),
+        Const("📍 <b>Новая геопозиция точки</b>\n\nОтправьте геолокацию этой точки (📎 → Геопозиция)."),
         MessageInput(on_location_edit_geo_input, content_types=["location"]),
         MessageInput(on_location_wrong_input, content_types=["text"]),
         SwitchTo(Const("⬅️ Назад"), id="back", state=AdminSettingsSG.location_detail),

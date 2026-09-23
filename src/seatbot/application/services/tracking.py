@@ -35,6 +35,7 @@ class TrackingService:
         ride = await self._rides_dao.get_by_id_for_update(ride_id)
         if not ride or ride.status not in (RideStatus.OPEN, RideStatus.CLOSED):
             return None
+        await self._rides_dao.clear_awaiting_live()
         await self._rides_dao.set_awaiting_live(ride_id, True)
         return ride
 
@@ -100,9 +101,7 @@ class TrackingService:
             await self._arrive(orm.id)
 
     async def _arrive(self, ride_id: int) -> None:
-        await self._rides_dao.set_finished_at(ride_id, self._clock.now())
-        await self._ride_service.complete_ride(ride_id)
-        ride = await self._rides_dao.get_by_id(ride_id)
+        ride = await self._ride_service.complete_ride(ride_id)
         if not ride:
             return
         points = await self._track_dao.list_for_ride(ride_id)

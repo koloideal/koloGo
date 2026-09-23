@@ -1,3 +1,6 @@
+from datetime import datetime
+
+
 class SeatBotError(Exception):
     pass
 
@@ -33,6 +36,12 @@ class AlreadyBookedError(SeatBotError):
         super().__init__(f"User {user_id} already booked ride {ride_id}")
         self.ride_id = ride_id
         self.user_id = user_id
+
+
+class RideInPastError(SeatBotError):
+    def __init__(self, departure_at: datetime) -> None:
+        super().__init__(f"Ride departure {departure_at.isoformat()} is in the past")
+        self.departure_at = departure_at
 
 
 class VipHoldActiveError(SeatBotError):

@@ -13,7 +13,7 @@ from seatbot.domain.schemas import BookingStatus
 from seatbot.infrastructure.database.dao import (BookingsDAO, RidesDAO, TrackPointsDAO,
                                                  UsersDAO)
 from seatbot.infrastructure.geo import GeoService
-from seatbot.infrastructure.notifications import MessageBuilder
+from seatbot.infrastructure.notifications import MessageBuilder, fmt_amount
 from seatbot.infrastructure.time import LocalClock
 
 from .states import MyBookingsSG
@@ -58,7 +58,9 @@ async def get_my_bookings(
         items.append(
             {
                 "booking_id": b.booking_id,
-                "title": (f"{emoji} {clock.fmt(ride.started_at or ride.departure_at, '%d.%m %H:%M')} • {pay}"),
+                "title": (
+                    f"{emoji} {clock.fmt(ride.started_at or ride.departure_at, '%d.%m %H:%M')} • {pay}"
+                ),
             }
         )
     return {
@@ -77,6 +79,7 @@ async def get_booking_detail(
     track_dao: FromDishka[TrackPointsDAO],
     geo: FromDishka[GeoService],
     messages: FromDishka[MessageBuilder],
+    ride_service: FromDishka[RideService],
     **_kwargs: Any,
 ) -> dict[str, Any]:
     booking_id: int = dialog_manager.dialog_data["booking_id"]
@@ -87,7 +90,7 @@ async def get_booking_detail(
     if not ride:
         return {"booking_text": "🚫 Поездка не найдена", "back_btn": "⬅️ Назад"}
     user = await users_dao.get_by_id(booking.user_id)
-    can_cancel = booking.status in (BookingStatus.PENDING, BookingStatus.APPROVED)
+    can_cancel = ride_service.can_user_cancel(booking, ride)
     has_origin_geo = (
         booking.status == BookingStatus.APPROVED
         and ride.origin_lat is not None
@@ -145,10 +148,16 @@ async def on_cancel_booking(
     booking_id: int = manager.dialog_data["booking_id"]
     user_id = manager.middleware_data["event_from_user"].id
     booking = await ride_service.cancel_booking_by_user(booking_id, user_id)
-    if booking:
-        await callback.answer("Бронь отменена, депозит возвращён.", show_alert=True)
+    if not booking:
+        await callback.answer(
+            "Не удалось отменить бронь: поездка уже отправилась или бронь не активна.", show_alert=True
+        )
+    elif booking.paid_amount > 0:
+        await callback.answer(
+            f"Бронь отменена, {fmt_amount(booking.paid_amount)} BYN возвращено на депозит.", show_alert=True
+        )
     else:
-        await callback.answer("Не удалось отменить бронь.", show_alert=True)
+        await callback.answer("Бронь отменена.", show_alert=True)
     await manager.switch_to(MyBookingsSG.list)
 
 

@@ -1,19 +1,21 @@
-from datetime import date, datetime, time
+import math
+from datetime import date, datetime, time, timezone
 from typing import Any
 
 from aiogram.types import CallbackQuery, Message
 from aiogram_dialog import Dialog, DialogManager, Window
 from aiogram_dialog.api.entities import ChatEvent
 from aiogram_dialog.widgets.input import MessageInput
-from aiogram_dialog.widgets.kbd import (Button, Calendar, Cancel, Column, ManagedCalendar,
-                                        ManagedTimeSelect, Row, ScrollingGroup, Select,
-                                        SwitchTo, TimeSelect)
+from aiogram_dialog.widgets.kbd import (Button, Calendar, CalendarUserConfig, Cancel,
+                                        Column, ManagedCalendar, ManagedTimeSelect, Row,
+                                        ScrollingGroup, Select, SwitchTo, TimeSelect)
 from aiogram_dialog.widgets.kbd.time import OnValueChanged
 from aiogram_dialog.widgets.text import Const, Format
 from dishka import FromDishka
 from dishka.integrations.aiogram_dialog import inject
 
 from seatbot.application.services.ride import RideService
+from seatbot.domain.exceptions import RideInPastError
 from seatbot.infrastructure.database.dao import LocationsDAO, RidesDAO
 from seatbot.infrastructure.notifications import fmt_amount, route_str
 from seatbot.infrastructure.time import LocalClock
@@ -47,16 +49,31 @@ async def get_templates(
     return {"has_templates": True, "templates": items, "back_btn": "⬅️ В панель"}
 
 
+_PAST_TIME_TEXT = "⛔ Это время уже прошло. Выберите время в будущем."
+_PAST_DATE_TEXT = "⛔ Нельзя создать поездку на прошедшую дату."
+MAX_RIDE_PRICE = 10_000
+
+
+class FutureCalendar(Calendar):
+    async def _get_user_config(self, data: dict[str, Any], manager: DialogManager) -> CalendarUserConfig:
+        return CalendarUserConfig(min_date=data.get("min_date"), timezone=data.get("calendar_tz"))
+
+
+def _local_today(clock: LocalClock) -> date:
+    return clock.to_local(clock.now()).date()
+
+
+@inject
 async def get_calendar_data(
     dialog_manager: DialogManager,
+    clock: FromDishka[LocalClock],
     **_kwargs: Any,
 ) -> dict[str, Any]:
-    selected_date = dialog_manager.dialog_data.get("selected_date")
+    local_now = clock.to_local(clock.now())
+    offset = local_now.utcoffset()
     return {
-        "has_date": selected_date is not None,
-        "selected_date": selected_date or "—",
-        "next_btn": "➡️ Выбрать время",
-        "back_btn": "⬅️ Назад",
+        "min_date": local_now.date(),
+        "calendar_tz": timezone(offset) if offset is not None else None,
     }
 
 
@@ -199,8 +216,10 @@ async def get_destination_data(
     }
 
 
+@inject
 async def get_confirm_data(
     dialog_manager: DialogManager,
+    clock: FromDishka[LocalClock],
     **_kwargs: Any,
 ) -> dict[str, Any]:
     selected_date = dialog_manager.dialog_data.get("selected_date", "—")
@@ -234,6 +253,21 @@ async def get_confirm_data(
         f"👁️ Видимость: {'видна всем' if is_visible else 'скрытая'}\n"
         f"📝 Заметка: {note or '—'}"
     )
+    date_obj = dialog_manager.dialog_data.get("selected_date_obj")
+    if date_obj:
+        d = date.fromisoformat(date_obj)
+        departure_at = clock.local_dt(
+            d.year,
+            d.month,
+            d.day,
+            dialog_manager.dialog_data.get("selected_hour", 18),
+            dialog_manager.dialog_data.get("selected_minute", 0),
+        )
+        minutes_left = (departure_at - clock.now()).total_seconds() / 60
+        if minutes_left <= 0:
+            text += "\n\n⛔ <b>Время отправления уже прошло — выберите новое время.</b>"
+        elif vip_hold_minutes >= minutes_left:
+            text += "\n\n⚠️ VIP-холд длиннее, чем осталось до отправления — обычные пассажиры не успеют записаться."
     return {"confirm_text": text, "create_btn": "✅ Создать", "back_btn": "⬅️ Назад"}
 
 
@@ -246,17 +280,30 @@ async def on_date_selected(
     manager: DialogManager,
     selected_date: date,
 ) -> None:
+    container = manager.middleware_data["dishka_container"]
+    clock: LocalClock = await container.get(LocalClock)
+    if selected_date < _local_today(clock):
+        if isinstance(event, CallbackQuery):
+            await event.answer(_PAST_DATE_TEXT, show_alert=True)
+        return
     manager.dialog_data["selected_date"] = selected_date.strftime("%d.%m.%Y")
     manager.dialog_data["selected_date_obj"] = selected_date.isoformat()
     template_ride_id = manager.dialog_data.get("template_ride_id")
     if template_ride_id is not None:
-        container = manager.middleware_data["dishka_container"]
         ride_service: RideService = await container.get(RideService)
-        clock: LocalClock = await container.get(LocalClock)
-        rides = await ride_service.create_ride_from_template(
-            template_ride_id,
-            clock.to_utc(datetime.combine(selected_date, time.min, tzinfo=clock.tz)),
-        )
+        try:
+            rides = await ride_service.create_ride_from_template(
+                template_ride_id,
+                clock.to_utc(datetime.combine(selected_date, time.min, tzinfo=clock.tz)),
+            )
+        except RideInPastError as e:
+            if isinstance(event, CallbackQuery):
+                await event.answer(
+                    f"⛔ Время шаблона ({clock.fmt(e.departure_at, '%H:%M')}) на эту дату уже прошло. "
+                    "Выберите другую дату.",
+                    show_alert=True,
+                )
+            return
         if isinstance(event, CallbackQuery):
             if rides:
                 await manager.done()
@@ -281,6 +328,13 @@ class TimeChangedHandler(OnValueChanged):
         value: time | None,
     ) -> None:
         if value is None:
+            return
+        clock: LocalClock = await manager.middleware_data["dishka_container"].get(LocalClock)
+        d = date.fromisoformat(manager.dialog_data["selected_date_obj"])
+        if clock.local_dt(d.year, d.month, d.day, value.hour, value.minute) <= clock.now():
+            await widget.set_value(None)
+            if isinstance(event, CallbackQuery):
+                await event.answer(_PAST_TIME_TEXT, show_alert=True)
             return
         time_str = f"{value.hour:02d}:{value.minute:02d}"
         manager.dialog_data["selected_time"] = time_str
@@ -392,14 +446,14 @@ async def on_price_input(message: Message, widget: MessageInput, manager: Dialog
     text = (message.text or "").strip().replace(",", ".")
     try:
         price = float(text)
-        if price < 0:
+        if not math.isfinite(price) or not 0 <= price <= MAX_RIDE_PRICE:
             raise ValueError
     except ValueError:
         await message.answer(
-            "❌ Введите неотрицательное число (например, <code>15.50</code> или <code>0</code>)."
+            f"❌ Введите число от 0 до {MAX_RIDE_PRICE} (например, <code>15.50</code> или <code>0</code>)."
         )
         return
-    manager.dialog_data["price"] = price
+    manager.dialog_data["price"] = round(price, 2)
     await manager.next()
 
 
@@ -519,24 +573,29 @@ async def on_create(
     d = date.fromisoformat(date_str)
     departure_at = clock.local_dt(d.year, d.month, d.day, hour, minute)
 
-    rides = await ride_service.create_ride(
-        departure_at=departure_at,
-        price=price,
-        auto_approve=auto_approve,
-        seats_total=seats_total,
-        note=note,
-        origin=origin,
-        destination=destination,
-        origin_lat=origin_lat,
-        origin_lon=origin_lon,
-        destination_lat=destination_lat,
-        destination_lon=destination_lon,
-        is_visible=is_visible,
-        repeat_days=repeat_days,
-        remind_minutes=remind_minutes,
-        vip_hold_minutes=vip_hold_minutes,
-        template_ride_id=manager.dialog_data.get("template_ride_id"),
-    )
+    try:
+        rides = await ride_service.create_ride(
+            departure_at=departure_at,
+            price=price,
+            auto_approve=auto_approve,
+            seats_total=seats_total,
+            note=note,
+            origin=origin,
+            destination=destination,
+            origin_lat=origin_lat,
+            origin_lon=origin_lon,
+            destination_lat=destination_lat,
+            destination_lon=destination_lon,
+            is_visible=is_visible,
+            repeat_days=repeat_days,
+            remind_minutes=remind_minutes,
+            vip_hold_minutes=vip_hold_minutes,
+            template_ride_id=manager.dialog_data.get("template_ride_id"),
+        )
+    except RideInPastError:
+        await callback.answer(_PAST_TIME_TEXT, show_alert=True)
+        await manager.switch_to(RideCreateSG.time)
+        return
     count = len(rides)
     await manager.done()
     await callback.answer(f"✅ Создано поездок: {count}!")
@@ -599,9 +658,10 @@ ride_create_dialog = Dialog(
     # 2. Календарь — выбор даты
     Window(
         Const("📅 <b>Выберите дату отправления</b>"),
-        Calendar(id="date_cal", on_click=on_date_selected),
+        FutureCalendar(id="date_cal", on_click=on_date_selected),
         Cancel(Const("⬅️ Отмена")),
         state=RideCreateSG.calendar,
+        getter=get_calendar_data,
     ),
     # 3. Выбор времени
     Window(
@@ -734,7 +794,7 @@ ride_create_dialog = Dialog(
             Button(Const("✅ Да"), id="auto_yes", on_click=on_auto_yes),
             Button(Const("❌ Нет"), id="auto_no", on_click=on_auto_no),
         ),
-        SwitchTo(Const("⬅️ Назад"), id="back", state=RideCreateSG.remind),
+        SwitchTo(Const("⬅️ Назад"), id="back", state=RideCreateSG.vip_hold),
         state=RideCreateSG.auto_approve,
     ),
     # 7. Видимость

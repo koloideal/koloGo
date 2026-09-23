@@ -111,6 +111,7 @@ async def get_booking_detail(
     rides_dao: FromDishka[RidesDAO],
     messages: FromDishka[MessageBuilder],
     clock: FromDishka[LocalClock],
+    ride_service: FromDishka[RideService],
     **_kwargs: Any,
 ) -> dict[str, Any]:
     booking_id: int = dialog_manager.dialog_data["booking_id"]
@@ -135,12 +136,14 @@ async def get_booking_detail(
     status_ru = BOOKING_STATUS_RU.get(booking.status, booking.status.value)
     text += f"📋 Статус: {_STATUS_EMOJI.get(booking.status, '•')} {status_ru.capitalize()}"
     is_pending = booking.status == BookingStatus.PENDING
-    is_approved = booking.status == BookingStatus.APPROVED
+    can_noshow = (
+        booking.status == BookingStatus.APPROVED and ride is not None and ride_service.can_mark_no_show(ride)
+    )
     is_active = booking.status in (BookingStatus.PENDING, BookingStatus.APPROVED)
     return {
         "booking_text": text,
         "is_pending": is_pending,
-        "is_approved": is_approved,
+        "can_noshow": can_noshow,
         "is_active": is_active,
         "approve_btn": "✅ Одобрить",
         "reject_btn": "❌ Отклонить",
@@ -168,8 +171,8 @@ async def on_approve(
     ride_service: FromDishka[RideService],
 ) -> None:
     booking_id: int = manager.dialog_data["booking_id"]
-    await ride_service.approve_booking(booking_id)
-    await callback.answer("Одобрено", show_alert=True)
+    booking = await ride_service.approve_booking(booking_id)
+    await callback.answer("Одобрено" if booking else "Бронь уже обработана", show_alert=True)
     await manager.switch_to(RideBookingsSG.bookings_list)
 
 
@@ -182,7 +185,9 @@ async def on_reject(
 ) -> None:
     booking_id: int = manager.dialog_data["booking_id"]
     booking = await ride_service.reject_booking(booking_id)
-    if booking and booking.paid_amount > 0:
+    if not booking:
+        await callback.answer("Бронь уже обработана", show_alert=True)
+    elif booking.paid_amount > 0:
         await callback.answer(
             f"Отклонено, возврат {fmt_amount(booking.paid_amount)} BYN выполнен", show_alert=True
         )
@@ -199,8 +204,11 @@ async def on_noshow(
     ride_service: FromDishka[RideService],
 ) -> None:
     booking_id: int = manager.dialog_data["booking_id"]
-    await ride_service.mark_no_show(booking_id)
-    await callback.answer("Отмечена неявка", show_alert=True)
+    booking = await ride_service.mark_no_show(booking_id)
+    await callback.answer(
+        "Отмечена неявка" if booking else "Неявку можно отметить только после отправления",
+        show_alert=True,
+    )
     await manager.switch_to(RideBookingsSG.bookings_list)
 
 
@@ -372,7 +380,7 @@ ride_detail_dialog = Dialog(
         Group(
             Button(Format("{approve_btn}"), id="approve", on_click=on_approve, when="is_pending"),
             Button(Format("{reject_btn}"), id="reject", on_click=on_reject, when="is_pending"),
-            Button(Format("{noshow_btn}"), id="noshow", on_click=on_noshow, when="is_approved"),
+            Button(Format("{noshow_btn}"), id="noshow", on_click=on_noshow, when="can_noshow"),
             Button(Format("{kick_btn}"), id="kick", on_click=on_kick, when="is_active"),
             width=2,
         ),

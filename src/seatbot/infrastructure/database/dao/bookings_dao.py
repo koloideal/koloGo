@@ -51,6 +51,18 @@ class BookingsDAO:
         orm = result.scalar_one_or_none()
         return self._map_to_domain(orm) if orm else None
 
+    async def exists_with_status(self, ride_id: int, user_id: int, status: BookingStatus) -> bool:
+        result = await self.session.execute(
+            select(OrmBooking.id)
+            .where(
+                OrmBooking.ride_id == ride_id,
+                OrmBooking.user_id == user_id,
+                OrmBooking.status == status.value,
+            )
+            .limit(1)
+        )
+        return result.scalar_one_or_none() is not None
+
     async def list_for_ride(self, ride_id: int, only_active: bool = False) -> list[Booking]:
         query = select(OrmBooking).where(OrmBooking.ride_id == ride_id)
         if only_active:

@@ -1,3 +1,5 @@
+import math
+
 from aiogram.types import Message
 from aiogram_dialog import Dialog, DialogManager, Window
 from aiogram_dialog.widgets.input import MessageInput
@@ -12,6 +14,8 @@ from seatbot.infrastructure.notifications import fmt_amount
 
 from ..user_dialogs.states import DepositSG
 
+MAX_DEPOSIT_AMOUNT = 100_000
+
 
 def _get_user_id(manager: DialogManager) -> int | None:
     start_data = manager.start_data
@@ -25,12 +29,12 @@ def _get_user_id(manager: DialogManager) -> int | None:
 async def _parse_amount(text: str) -> float | None:
     text = text.strip().replace(",", ".")
     try:
-        amount = float(text)
-        if amount <= 0:
-            return None
-        return amount
+        amount = round(float(text), 2)
     except ValueError:
         return None
+    if not math.isfinite(amount) or not 0 < amount <= MAX_DEPOSIT_AMOUNT:
+        return None
+    return amount
 
 
 @inject
@@ -42,7 +46,9 @@ async def on_topup_input(
 ) -> None:
     amount = await _parse_amount(message.text or "")
     if amount is None:
-        await message.answer("❌ Введите положительное число (например, <code>50.00</code>).")
+        await message.answer(
+            f"❌ Введите число от 0.01 до {MAX_DEPOSIT_AMOUNT} (например, <code>50.00</code>)."
+        )
         return
     user_id = _get_user_id(manager)
     if not user_id:
@@ -67,7 +73,9 @@ async def on_decrease_input(
 ) -> None:
     amount = await _parse_amount(message.text or "")
     if amount is None:
-        await message.answer("❌ Введите положительное число (например, <code>10.00</code>).")
+        await message.answer(
+            f"❌ Введите число от 0.01 до {MAX_DEPOSIT_AMOUNT} (например, <code>10.00</code>)."
+        )
         return
     user_id = _get_user_id(manager)
     if not user_id:

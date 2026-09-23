@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import case, func, select
+from sqlalchemy import case, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from seatbot.domain.schemas import Ride, RideStatus, RideWithStats
@@ -192,6 +192,21 @@ class RidesDAO:
         if orm_ride:
             orm_ride.awaiting_live_geo = value
             await self.session.flush()
+
+    async def stop_live(self, ride_id: int) -> None:
+        result = await self.session.execute(select(OrmRide).where(OrmRide.id == ride_id))
+        orm_ride = result.scalar_one_or_none()
+        if orm_ride:
+            orm_ride.awaiting_live_geo = False
+            orm_ride.live_chat_id = None
+            orm_ride.live_message_id = None
+            await self.session.flush()
+
+    async def clear_awaiting_live(self) -> None:
+        await self.session.execute(
+            update(OrmRide).where(OrmRide.awaiting_live_geo.is_(True)).values(awaiting_live_geo=False)
+        )
+        await self.session.flush()
 
     async def get_awaiting_live_orm(self) -> OrmRide | None:
         result = await self.session.execute(

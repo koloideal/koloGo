@@ -339,11 +339,14 @@ class MessageBuilder:
             text += f"\n💰 Оплата по факту: <b>{fmt_amount(due_amount)} BYN</b>"
         return text
 
+    def _departs_in(self, ride: Ride) -> str:
+        minutes = int((ride.departure_at - self._clock.now()).total_seconds() // 60)
+        return f"через {minutes} мин." if minutes > 0 else "прямо сейчас."
+
     def ride_reminder_notification(self, ride: Ride) -> str:
         return (
             f"⏰ <b>Напоминание о поездке!</b>\n\n"
-            f"Поездка отправляется через "
-            f"{ride.remind_minutes} мин.\n"
+            f"Поездка отправляется {self._departs_in(ride)}\n"
             f"🕒 Время: {self._clock.fmt(ride.departure_at)}\n"
             f"{route_line(ride)}"
             f"Не опаздывайте!"
@@ -424,9 +427,7 @@ class MessageBuilder:
 
     def ride_map_keyboard(self, map_url: str) -> InlineKeyboardMarkup:
         return InlineKeyboardMarkup(
-            inline_keyboard=[
-                [InlineKeyboardButton(text="🗺 Маршрут на карте", url=map_url)]
-            ]
+            inline_keyboard=[[InlineKeyboardButton(text="🗺 Маршрут на карте", url=map_url)]]
         )
 
     def ride_completed_admin_log(self, ride: Ride, passengers_count: int) -> str:
@@ -446,8 +447,7 @@ class MessageBuilder:
         lines.extend(self.departure_lines(ride))
         lines.append(route_line(ride).rstrip("\n"))
         lines.append(
-            "Бот следит за live-гео и завершит поездку автоматически "
-            "по прибытии в точку назначения."
+            "Бот следит за live-гео и завершит поездку автоматически по прибытии в точку назначения."
         )
         return "\n".join(lines)
 
@@ -462,7 +462,7 @@ class MessageBuilder:
             f"⏰ <b>Напоминание: поездка скоро отправляется</b>\n\n"
             f"🕒 Время: {self._clock.fmt(ride.departure_at)}\n"
             f"{route_line(ride)}"
-            f"⏳ Через: <b>{ride.remind_minutes} мин.</b>\n"
+            f"⏳ Отправление: <b>{self._departs_in(ride)}</b>\n"
             f"🪑 Подтверждённых пассажиров: <b>{approved_count}</b>"
         )
 
@@ -471,7 +471,7 @@ class MessageBuilder:
             "💰 <b>Баланс</b>\n",
             f"Текущий баланс: <b>{fmt_amount(balance)} BYN</b>\n",
             "<b>Зачем нужен баланс:</b>",
-            "🚗 Оплата поездок — при бронировании сумма списывается с депозита",
+            "🚗 Оплата поездок — после поездки сумма списывается с депозита (если средств не хватает — оплата по факту)",
             "⭐ Покупка VIP-статуса — кнопка в главном меню",
         ]
         if is_vip:
