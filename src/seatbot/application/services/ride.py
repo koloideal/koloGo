@@ -278,7 +278,9 @@ class RideService:
             else self._messages.new_rides_notification(visible)
         )
         markup = self._messages.book_rides_keyboard(visible)
-        for user in await self._users_dao.list_new_ride_subscribers():
+        for user in await self._users_dao.list_new_ride_subscribers(
+            exclude_user_id=self._bot_service.creator_id
+        ):
             await self._bot_service.notify_user(user.user_id, message, reply_markup=markup)
 
     async def cancel_ride(self, ride_id: int) -> Ride | None:

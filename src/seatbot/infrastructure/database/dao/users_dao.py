@@ -92,13 +92,14 @@ class UsersDAO:
         orm_user.notify_new_rides = enabled
         return self._map_to_domain(orm_user)
 
-    async def list_new_ride_subscribers(self) -> list[User]:
-        result = await self.session.execute(
-            select(OrmUser).where(
-                OrmUser.notify_new_rides.is_(True),
-                OrmUser.is_banned.is_(False),
-            )
+    async def list_new_ride_subscribers(self, exclude_user_id: int | None = None) -> list[User]:
+        query = select(OrmUser).where(
+            OrmUser.notify_new_rides.is_(True),
+            OrmUser.is_banned.is_(False),
         )
+        if exclude_user_id is not None:
+            query = query.where(OrmUser.user_id != exclude_user_id)
+        result = await self.session.execute(query)
         return [self._map_to_domain(user) for user in result.scalars().all()]
 
     async def get_all(self, limit: int = -1, exclude_user_id: int | None = None) -> list[User]:
@@ -111,7 +112,7 @@ class UsersDAO:
         return [self._map_to_domain(u) for u in result.scalars().all()]
 
     async def search(self, query: str, limit: int = 50, exclude_user_id: int | None = None) -> list[User]:
-        query_lower = query.lower().strip()
+        query_lower = query.lower().strip().lstrip("@")
         if not query_lower:
             return await self.get_all(limit=limit, exclude_user_id=exclude_user_id)
         sql_query = select(OrmUser).where(

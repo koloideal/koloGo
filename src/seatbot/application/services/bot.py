@@ -13,6 +13,10 @@ class BotService:
         self._config = config
         self._users_dao = users_dao
 
+    @property
+    def creator_id(self) -> int:
+        return self._config.bot.creator_id
+
     async def process_set_commands(self) -> None:
         start_command = BotCommand(command="start", description="Главное меню")
         await self._bot.set_my_commands([start_command])

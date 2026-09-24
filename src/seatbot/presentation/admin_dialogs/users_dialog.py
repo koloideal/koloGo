@@ -22,9 +22,14 @@ from seatbot.infrastructure.notifications import fmt_amount, user_display
 
 from ..user_dialogs.states import DepositSG, UsersSG
 
-_SORT_MODES: tuple[tuple[str, str, Callable[[UserStats], Any], bool], ...] = (
-    ("reg_desc", "📅 Новизна ↓", lambda s: s.registration_date, True),
-    ("reg_asc", "📅 Новизна ↑", lambda s: s.registration_date, False),
+
+def _reg_ts(stats: UserStats) -> float:
+    return stats.registration_date.timestamp() if stats.registration_date else 0.0
+
+
+_SORT_MODES: tuple[tuple[str, str, Callable[[UserStats], float], bool], ...] = (
+    ("reg_desc", "📅 Новизна ↓", _reg_ts, True),
+    ("reg_asc", "📅 Новизна ↑", _reg_ts, False),
     ("bal_desc", "💰 Баланс ↓", lambda s: s.balance, True),
     ("bal_asc", "💰 Баланс ↑", lambda s: s.balance, False),
     ("rides_desc", "🚗 Поездки ↓", lambda s: s.total_rides, True),
@@ -180,7 +185,7 @@ async def on_user_selected(
     item_id: str,
 ) -> None:
     manager.dialog_data["user_id"] = int(item_id)
-    await manager.next()
+    await manager.switch_to(UsersSG.user_detail)
 
 
 async def on_search_click(callback: CallbackQuery, button: Button, manager: DialogManager) -> None:

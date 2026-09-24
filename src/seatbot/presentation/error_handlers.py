@@ -9,7 +9,7 @@ from aiogram_dialog.api.exceptions import (InvalidStackIdError, NoContextError,
                                            OutdatedIntent, UnknownIntent, UnknownState)
 from dishka import FromDishka
 
-from seatbot.infrastructure.database.dao import UsersDAO
+from seatbot.infrastructure.config.models import Config
 
 from .user_dialogs.states import AdminPanelSG, MainMenuSG
 
@@ -22,7 +22,7 @@ error_router = Router()
 )
 async def on_stale_dialog(
     event: ErrorEvent,
-    users_dao: FromDishka[UsersDAO],
+    config: FromDishka[Config],
     dialog_manager: DialogManager | None = None,
 ) -> None:
     logger.info("Stale dialog event: %r", event.exception)
@@ -39,8 +39,7 @@ async def on_stale_dialog(
             pass
     elif update.message is not None and update.message.from_user is not None:
         user_id = update.message.from_user.id
-    user = await users_dao.get_by_id(user_id) if user_id is not None else None
-    state = AdminPanelSG.main if user and user.is_admin else MainMenuSG.main
+    state = AdminPanelSG.main if user_id == config.bot.creator_id else MainMenuSG.main
     try:
         await dialog_manager.start(state, mode=StartMode.RESET_STACK, show_mode=ShowMode.SEND)
     except Exception:

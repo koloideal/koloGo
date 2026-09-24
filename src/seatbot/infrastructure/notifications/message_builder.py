@@ -481,13 +481,13 @@ class MessageBuilder:
     def book_rides_keyboard(self, rides: list[Ride]) -> InlineKeyboardMarkup:
         if len(rides) == 1:
             rows = [
-                [InlineKeyboardButton(text="🪑 Забронировать", callback_data=f"open_ride:{rides[0].ride_id}")]
+                [InlineKeyboardButton(text="🚗 К поездке", callback_data=f"open_ride:{rides[0].ride_id}")]
             ]
         else:
             rows = [
                 [
                     InlineKeyboardButton(
-                        text=f"🪑 {self.short_date(r.departure_at)}", callback_data=f"open_ride:{r.ride_id}"
+                        text=f"🚗 {self.short_date(r.departure_at)}", callback_data=f"open_ride:{r.ride_id}"
                     )
                 ]
                 for r in rides

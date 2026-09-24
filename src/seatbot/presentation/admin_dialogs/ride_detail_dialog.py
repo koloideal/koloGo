@@ -1,3 +1,4 @@
+from html import escape
 from typing import Any
 
 from aiogram import F
@@ -295,11 +296,27 @@ async def get_passengers_list(
     **_kwargs: Any,
 ) -> dict[str, Any]:
     ride_id: int = dialog_manager.dialog_data.get("ride_id", 0)
+    query: str = dialog_manager.dialog_data.get("passenger_query", "")
+    base = {
+        "has_query": bool(query),
+        "search_hint": f"🔍 Поиск: <b>{escape(query)}</b>"
+        if query
+        else "🔍 Отправьте имя, @username или ID для поиска.",
+        "back_btn": "⬅️ К броням",
+    }
     if not ride_id:
-        return {"has_users": False, "empty_text": "🚫 Поездка не найдена.", "back_btn": "⬅️ К броням"}
-    stats = await statistics_service.all_users_stats(limit=100, exclude_user_id=config.bot.creator_id)
+        return {**base, "has_users": False, "empty_text": "🚫 Поездка не найдена."}
+    stats = (
+        await statistics_service.search_users_stats(query, limit=50, exclude_user_id=config.bot.creator_id)
+        if query
+        else await statistics_service.all_users_stats(limit=100, exclude_user_id=config.bot.creator_id)
+    )
     if not stats:
-        return {"has_users": False, "empty_text": "🚫 Нет пользователей.", "back_btn": "⬅️ К броням"}
+        return {
+            **base,
+            "has_users": False,
+            "empty_text": "🚫 Ничего не найдено." if query else "🚫 Нет пользователей.",
+        }
     existing = await bookings_dao.list_for_ride(ride_id, only_active=True)
     existing_ids = {b.user_id for b in existing}
     items = []
@@ -320,8 +337,17 @@ async def get_passengers_list(
             }
         )
     if not items:
-        return {"has_users": False, "empty_text": "🚫 Все клиенты уже в поездке.", "back_btn": "⬅️ К броням"}
-    return {"has_users": True, "users": items, "back_btn": "⬅️ К броням"}
+        empty = "🚫 Все найденные клиенты уже в поездке." if query else "🚫 Все клиенты уже в поездке."
+        return {**base, "has_users": False, "empty_text": empty}
+    return {**base, "has_users": True, "users": items}
+
+
+async def on_passenger_search_input(message: Message, widget: MessageInput, manager: DialogManager) -> None:
+    manager.dialog_data["passenger_query"] = (message.text or "").strip()[:64]
+
+
+async def on_passenger_search_reset(callback: CallbackQuery, button: Button, manager: DialogManager) -> None:
+    manager.dialog_data.pop("passenger_query", None)
 
 
 async def on_passenger_selected(
@@ -343,6 +369,7 @@ async def on_passenger_selected(
         return
     if not booking:
         await callback.answer("Не удалось добавить", show_alert=True)
+        manager.dialog_data.pop("passenger_query", None)
         await manager.switch_to(RideBookingsSG.bookings_list)
         return
     ride = await rides_dao.get_by_id(ride_id)
@@ -354,6 +381,7 @@ async def on_passenger_selected(
         bool(ride and (ride.is_free or (user and user.is_vip))),
     )
     await callback.answer(f"Клиент добавлен ({pay}), уведомление отправлено", show_alert=True)
+    manager.dialog_data.pop("passenger_query", None)
     await manager.switch_to(RideBookingsSG.bookings_list)
 
 
@@ -404,7 +432,9 @@ ride_detail_dialog = Dialog(
         getter=get_booking_detail,
     ),
     Window(
-        Const("➕ <b>Добавить клиента в поездку</b>\n\nВыберите клиента:"),
+        Const("➕ <b>Добавить клиента в поездку</b>\n"),
+        Format("{search_hint}"),
+        MessageInput(on_passenger_search_input, content_types=["text"]),
         ScrollingGroup(
             Select(
                 Format("{item[title]}"),
@@ -419,7 +449,15 @@ ride_detail_dialog = Dialog(
             id="users_scroll",
         ),
         Format("{empty_text}", when=~F["has_users"]),
-        SwitchTo(Format("{back_btn}"), id="back", state=RideBookingsSG.bookings_list),
+        Button(
+            Const("✖️ Сбросить поиск"), id="reset_search", on_click=on_passenger_search_reset, when="has_query"
+        ),
+        SwitchTo(
+            Format("{back_btn}"),
+            id="back",
+            state=RideBookingsSG.bookings_list,
+            on_click=on_passenger_search_reset,
+        ),
         state=RideBookingsSG.add_passenger,
         getter=get_passengers_list,
     ),
