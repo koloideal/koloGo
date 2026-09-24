@@ -1,7 +1,7 @@
 import logging
 
 from aiogram import Router
-from aiogram.exceptions import TelegramBadRequest
+from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
 from aiogram.filters import ExceptionTypeFilter
 from aiogram.types import ErrorEvent
 from aiogram_dialog import DialogManager, ShowMode, StartMode
@@ -42,7 +42,7 @@ async def on_stale_dialog(
     state = AdminPanelSG.main if user_id == config.bot.creator_id else MainMenuSG.main
     try:
         await dialog_manager.start(state, mode=StartMode.RESET_STACK, show_mode=ShowMode.SEND)
-    except Exception:
+    except TelegramAPIError:
         logger.exception("Failed to reset dialog to main menu")
 
 

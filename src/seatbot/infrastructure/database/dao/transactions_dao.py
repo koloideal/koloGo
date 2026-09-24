@@ -1,4 +1,5 @@
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from seatbot.domain.schemas import Transaction, TransactionStatus, TransactionType
@@ -31,6 +32,22 @@ class TransactionsDAO:
         self.session.add(orm)
         await self.session.flush()
         return self._map_to_domain(orm)
+
+    async def try_create(
+        self,
+        user_id: int,
+        amount: float,
+        type: TransactionType,
+        payment_id: str,
+        status: TransactionStatus = TransactionStatus.COMPLETED,
+    ) -> Transaction | None:
+        try:
+            async with self.session.begin_nested():
+                return await self.create(
+                    user_id=user_id, amount=amount, type=type, payment_id=payment_id, status=status
+                )
+        except IntegrityError:
+            return None
 
     async def get_by_payment_id(self, payment_id: str) -> Transaction | None:
         result = await self.session.execute(
@@ -66,9 +83,20 @@ class TransactionsDAO:
                 OrmTransaction.status == TransactionStatus.PENDING.value,
             )
             .order_by(OrmTransaction.created_at.desc())
+            .limit(1)
         )
         orm = result.scalar_one_or_none()
         return self._map_to_domain(orm) if orm else None
+
+    async def list_pending_cryptobot(self) -> list[Transaction]:
+        result = await self.session.execute(
+            select(OrmTransaction).where(
+                OrmTransaction.type == TransactionType.CRYPTOBOT_TOPUP.value,
+                OrmTransaction.status == TransactionStatus.PENDING.value,
+                OrmTransaction.payment_id.is_not(None),
+            )
+        )
+        return [self._map_to_domain(orm) for orm in result.scalars().all()]
 
     async def sum_total_revenue(self) -> float:
         paid = await self._sum_by_type(TransactionType.RIDE_PAYMENT)

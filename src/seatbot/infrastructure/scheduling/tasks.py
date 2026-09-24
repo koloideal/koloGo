@@ -1,6 +1,7 @@
 import logging
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 
+import aiohttp
 from apscheduler.jobstores.base import JobLookupError
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from dishka import AsyncContainer
@@ -9,10 +10,9 @@ from seatbot.application.services.bot import BotService
 from seatbot.application.services.ride import RideService
 from seatbot.application.services.tracking import TrackingService
 from seatbot.domain.schemas import BookingStatus, RideStatus, TransactionStatus
-from seatbot.infrastructure.database.dao import (BookingsDAO, RidesDAO, TransactionsDAO,
-                                                 UsersDAO)
+from seatbot.infrastructure.config.models import TrackingConfig
+from seatbot.infrastructure.database.dao import BookingsDAO, RidesDAO
 from seatbot.infrastructure.notifications import MessageBuilder
-from seatbot.infrastructure.payments import CryptoBotPaymentService
 from seatbot.infrastructure.time import LocalClock
 
 logger = logging.getLogger(__name__)
@@ -21,15 +21,35 @@ logger = logging.getLogger(__name__)
 async def auto_close_past_rides(container: AsyncContainer) -> None:
     async with container() as scope:
         rides_dao: RidesDAO = await scope.get(RidesDAO)
+        bookings_dao: BookingsDAO = await scope.get(BookingsDAO)
         ride_service: RideService = await scope.get(RideService)
+        bot_service: BotService = await scope.get(BotService)
+        messages: MessageBuilder = await scope.get(MessageBuilder)
+        tracking: TrackingConfig = await scope.get(TrackingConfig)
         clock: LocalClock = await scope.get(LocalClock)
 
         now = clock.now()
-        active_rides = await rides_dao.list_active()
-        for ride in active_rides:
-            if ride.departure_at < now - timedelta(minutes=30):
-                await rides_dao.set_status(ride.ride_id, RideStatus.CLOSED)
-                await ride_service.invalidate_ride(ride.ride_id)
+        for ride in await rides_dao.list_open_departed(now - timedelta(minutes=30)):
+            await rides_dao.set_status(ride.ride_id, RideStatus.CLOSED)
+            await ride_service.invalidate_ride(ride.ride_id)
+            approved = await bookings_dao.count_approved_for_ride(ride.ride_id)
+            await bot_service.send_log_to_admin(
+                messages.ride_not_started_admin_log(ride, approved, tracking.auto_complete_after_h),
+                reply_markup=messages.ride_not_started_keyboard(ride.ride_id),
+            )
+
+
+async def auto_complete_stale_rides(container: AsyncContainer) -> None:
+    async with container() as scope:
+        rides_dao: RidesDAO = await scope.get(RidesDAO)
+        ride_service: RideService = await scope.get(RideService)
+        tracking: TrackingConfig = await scope.get(TrackingConfig)
+        clock: LocalClock = await scope.get(LocalClock)
+
+        before = clock.now() - timedelta(hours=tracking.auto_complete_after_h)
+        for ride in await rides_dao.list_unfinished_departed(before):
+            if await ride_service.complete_ride(ride.ride_id):
+                logger.info("Auto-completed stale ride %s", ride.ride_id)
 
 
 async def finish_stale_arrivals(container: AsyncContainer) -> None:
@@ -74,81 +94,21 @@ async def send_ride_reminders(container: AsyncContainer) -> None:
             await rides_dao.mark_remind_sent(ride.ride_id)
 
 
-async def check_cryptobot_payment_status(
-    payment_id: str,
-    user_id: int,
-    amount: float,
-    created_at: datetime,
-    container: AsyncContainer,
-) -> None:
-    logger.info(
-        "check_cryptobot_payment_status: payment_id=%s user_id=%s amount=%s", payment_id, user_id, amount
-    )
-    scheduler: AsyncIOScheduler = await container.get(AsyncIOScheduler)
-    cryptobot_service: CryptoBotPaymentService = await container.get(CryptoBotPaymentService)
-    should_remove_job = False
+async def check_cryptobot_payment_status(payment_id: str, container: AsyncContainer) -> None:
+    from seatbot.application.services.payment import PaymentService
+
     try:
         async with container() as scope:
-            transactions_dao: TransactionsDAO = await scope.get(TransactionsDAO)
-            users_dao: UsersDAO = await scope.get(UsersDAO)
-            bot_service: BotService = await scope.get(BotService)
-            messages: MessageBuilder = await scope.get(MessageBuilder)
-            transaction = await transactions_dao.get_by_payment_id_for_update(payment_id)
-            if not transaction:
-                logger.warning("Transaction not found for payment_id=%s", payment_id)
-                should_remove_job = True
-                return
-            logger.info(
-                "Transaction %s: status=%s, amount=%s",
-                payment_id,
-                transaction.status,
-                transaction.amount,
-            )
-            if transaction.status != TransactionStatus.PENDING:
-                logger.info(
-                    "Transaction %s not pending (status=%s), skipping", payment_id, transaction.status
-                )
-                should_remove_job = True
-                return
-            if (datetime.now(UTC) - created_at) > timedelta(minutes=15):
-                logger.info("Transaction %s expired (15min timeout)", payment_id)
-                await transactions_dao.update_status(payment_id, TransactionStatus.FAILED)
-                user = await users_dao.get_by_id(user_id)
-                if user:
-                    await bot_service.notify_user(user_id, messages.payment_expired_notification())
-                should_remove_job = True
-                return
-            logger.info("Checking CryptoBot payment status for invoice %s", payment_id)
-            status = await cryptobot_service.check_payment(payment_id)
-            logger.info("CryptoBot check_payment(%s) → %s", payment_id, status)
-            if status == "paid":
-                logger.info("Payment %s confirmed paid, updating balance", payment_id)
-                await transactions_dao.update_status(payment_id, TransactionStatus.COMPLETED)
-                await users_dao.increase_balance(user_id, amount)
-                user = await users_dao.get_by_id(user_id)
-                if user:
-                    logger.info(
-                        "Balance updated for user %s: +%.2f, new balance=%.2f",
-                        user_id,
-                        amount,
-                        user.balance,
-                    )
-                    await bot_service.notify_user(
-                        user_id, messages.payment_success_notification(amount, user.balance)
-                    )
-                    await bot_service.send_log_to_admin(messages.payment_admin_log(user, amount))
-                else:
-                    logger.error("User %s not found after balance increase!", user_id)
-                should_remove_job = True
-            else:
-                logger.debug("Payment %s still not paid, will retry", payment_id)
-    except Exception:
-        logger.exception("Error in check_cryptobot_payment_status for payment_id=%s", payment_id)
-        raise
-    finally:
-        if should_remove_job:
-            try:
-                scheduler.remove_job(f"check_payment_{payment_id}")
-                logger.info("Removed scheduler job check_payment_%s", payment_id)
-            except JobLookupError:
-                logger.debug("Job check_payment_%s already removed", payment_id)
+            payment_service: PaymentService = await scope.get(PaymentService)
+            status = await payment_service.process_cryptobot_invoice(payment_id)
+    except (aiohttp.ClientError, ConnectionError, TimeoutError):
+        logger.warning("CryptoBot is unavailable, will retry payment_id=%s", payment_id, exc_info=True)
+        return
+    if status == TransactionStatus.PENDING:
+        return
+    logger.info("CryptoBot invoice %s finished with status=%s", payment_id, status)
+    scheduler: AsyncIOScheduler = await container.get(AsyncIOScheduler)
+    try:
+        scheduler.remove_job(f"check_payment_{payment_id}")
+    except JobLookupError:
+        pass

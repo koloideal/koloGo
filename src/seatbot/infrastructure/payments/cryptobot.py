@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Literal, cast
+from typing import Any, Literal
 
 import aiohttp
 
@@ -69,12 +69,16 @@ class CryptoBotPaymentService:
             )
         return data.get("result")
 
-    async def create_payment(self, amount: float, asset: str = "USDT") -> CryptoBotPayment:
-        params = {
+    async def create_payment(
+        self, amount: float, asset: str = "USDT", expires_in: int | None = None
+    ) -> CryptoBotPayment:
+        params: dict[str, Any] = {
             "amount": str(amount),
             "asset": asset,
             "description": "Пополнение баланса SeatBot",
         }
+        if expires_in:
+            params["expires_in"] = expires_in
         logger.info("Creating CryptoBot invoice: amount=%s %s", amount, asset)
         result = await self._make_request("POST", "createInvoice", params=params)
         logger.info("CryptoBot invoice created: invoice_id=%s", result.get("invoice_id"))
@@ -90,4 +94,13 @@ class CryptoBotPaymentService:
         result: dict[str, Any] = items[0]
         invoice_status = result.get("status", "unknown")
         logger.info("CryptoBot invoice %s status=%s", invoice_id, invoice_status)
-        return cast(Literal["paid", "not_paid"], "not_paid" if invoice_status == "active" else "paid")
+        return "paid" if invoice_status == "paid" else "not_paid"
+
+    async def delete_invoice(self, invoice_id: str) -> bool:
+        try:
+            return bool(
+                await self._make_request("POST", "deleteInvoice", params={"invoice_id": int(invoice_id)})
+            )
+        except (aiohttp.ClientError, ConnectionError, ValueError):
+            logger.warning("CryptoBot deleteInvoice(%s) failed", invoice_id, exc_info=True)
+            return False

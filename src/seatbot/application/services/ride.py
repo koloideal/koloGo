@@ -1,21 +1,21 @@
 from datetime import datetime, timedelta
 
 from seatbot.application.services.bot import BotService
-from seatbot.domain.exceptions import (AlreadyBookedError, NoFreeSeatsError,
-                                       RideInPastError, RideNotBookableError,
-                                       SeatBotError, UserBannedError, VipHoldActiveError)
+from seatbot.domain.exceptions import (AlreadyBookedError, InsufficientBalanceError,
+                                       NoFreeSeatsError, RideInPastError,
+                                       RideNotBookableError, SeatBotError,
+                                       UserBannedError, VipHoldActiveError)
 from seatbot.domain.schemas import (Booking, BookingStatus, Ride, RideStatus,
                                     RideWithStats, TransactionType, User)
 from seatbot.infrastructure.cache import (CacheKeys, RedisService, dump_booking,
                                           dump_ride, dump_ride_stats, load_booking,
                                           load_ride, load_ride_stats)
+from seatbot.infrastructure.config.app import AppConfig
 from seatbot.infrastructure.database.dao import (BookingsDAO, RidesDAO, TrackPointsDAO,
                                                  TransactionsDAO, UsersDAO)
 from seatbot.infrastructure.geo import GeoService
 from seatbot.infrastructure.notifications import MessageBuilder
 from seatbot.infrastructure.time import LocalClock
-
-_ACTIVE_RIDE_STATUSES = (RideStatus.OPEN, RideStatus.CLOSED, RideStatus.IN_PROGRESS)
 
 
 class RideService:
@@ -32,6 +32,7 @@ class RideService:
         geo: GeoService,
         cache: RedisService,
         cache_keys: CacheKeys,
+        app_config: AppConfig,
     ) -> None:
         self._rides_dao = rides_dao
         self._bookings_dao = bookings_dao
@@ -44,6 +45,7 @@ class RideService:
         self._geo = geo
         self._cache = cache
         self._cache_keys = cache_keys
+        self._active_statuses = app_config.active_ride_statuses
 
     # ── кэшированные чтения ─────────────────────────────────────────────────
 
@@ -76,11 +78,8 @@ class RideService:
         if cached is not None:
             return load_ride_stats(cached["rws"]) if cached["rws"] else None
         rws = await self._rides_dao.get_with_stats(ride_id)
-        await self._cache.set(
-            self._cache_keys.ride_stats,
-            {"rws": dump_ride_stats(rws) if rws else None},
-            ride_id=ride_id,
-        )
+        if rws is not None:
+            await self._cache.set(self._cache_keys.ride_stats, {"rws": dump_ride_stats(rws)}, ride_id=ride_id)
         return rws
 
     async def list_pending_bookings(self) -> list[Booking]:
@@ -285,7 +284,7 @@ class RideService:
 
     async def cancel_ride(self, ride_id: int) -> Ride | None:
         ride = await self._rides_dao.get_by_id_for_update(ride_id)
-        if not ride or ride.status not in _ACTIVE_RIDE_STATUSES:
+        if not ride or ride.status not in self._active_statuses:
             return None
         await self._rides_dao.set_status(ride_id, RideStatus.CANCELLED)
         await self._rides_dao.stop_live(ride_id)
@@ -361,7 +360,7 @@ class RideService:
 
     async def complete_ride(self, ride_id: int) -> Ride | None:
         ride = await self._rides_dao.get_by_id_for_update(ride_id)
-        if not ride or ride.status not in _ACTIVE_RIDE_STATUSES:
+        if not ride or ride.status not in self._active_statuses:
             return None
         await self._rides_dao.set_awaiting_live(ride_id, False)
         if ride.finished_at is None:
@@ -377,14 +376,18 @@ class RideService:
             is_free = ride.is_free or bool(user and user.is_vip)
             price = float(ride.price)
             if not is_free and user and user.balance >= price:
-                await self._users_dao.decrease_balance(booking.user_id, price)
-                await self._transactions_dao.create(
-                    user_id=booking.user_id,
-                    amount=price,
-                    type=TransactionType.RIDE_PAYMENT,
-                    ride_id=ride_id,
-                )
-                await self._bookings_dao.set_paid_amount(booking.booking_id, price)
+                try:
+                    await self._users_dao.decrease_balance(booking.user_id, price)
+                except InsufficientBalanceError:
+                    pass
+                else:
+                    await self._transactions_dao.create(
+                        user_id=booking.user_id,
+                        amount=price,
+                        type=TransactionType.RIDE_PAYMENT,
+                        ride_id=ride_id,
+                    )
+                    await self._bookings_dao.set_paid_amount(booking.booking_id, price)
             await self._bookings_dao.set_status(booking.booking_id, BookingStatus.COMPLETED)
             updated = await self._bookings_dao.get_by_id(booking.booking_id)
             paid = updated.paid_amount if updated else 0.0
@@ -408,7 +411,7 @@ class RideService:
         return final
 
     def can_mark_no_show(self, ride: Ride) -> bool:
-        return ride.status in _ACTIVE_RIDE_STATUSES and (
+        return ride.status in self._active_statuses and (
             ride.status != RideStatus.OPEN or ride.departure_at <= self._clock.now()
         )
 
@@ -452,7 +455,7 @@ class RideService:
         approved = await self._bookings_dao.list_for_ride_with_status(ride_id, {BookingStatus.APPROVED})
         sent = 0
         for booking in approved:
-            ok = await self._bot_service.notify_user(booking.user_id, text)
+            ok = await self._bot_service.notify_user_now(booking.user_id, text)
             if ok:
                 sent += 1
         return sent

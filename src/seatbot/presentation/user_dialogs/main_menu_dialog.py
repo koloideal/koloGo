@@ -9,16 +9,12 @@ from dishka.integrations.aiogram_dialog import inject
 
 from seatbot.application.services.ride import RideService
 from seatbot.domain.schemas import BookingStatus, RideStatus
+from seatbot.infrastructure.config import AppConfig
 from seatbot.infrastructure.database.dao import BookingsDAO, RidesDAO, UsersDAO
 from seatbot.infrastructure.notifications import MessageBuilder, fmt_amount, route_str
 
 from .states import (BalanceSG, MainMenuSG, MyBookingsSG, RequisitesSG, RidesSG, StatsSG,
                      VipSG)
-
-_NEXT_STATUS = {
-    BookingStatus.APPROVED: "✅ Место закреплено",
-    BookingStatus.PENDING: "⏳ Заявка на рассмотрении у водителя",
-}
 
 
 @inject
@@ -28,6 +24,7 @@ async def get_main_menu(
     bookings_dao: FromDishka[BookingsDAO],
     ride_service: FromDishka[RideService],
     messages: FromDishka[MessageBuilder],
+    app_config: FromDishka[AppConfig],
     **_kwargs: Any,
 ) -> dict[str, Any]:
     user_id = dialog_manager.middleware_data["event_from_user"].id
@@ -49,7 +46,7 @@ async def get_main_menu(
         status = (
             "🚙 Водитель в пути"
             if next_ride.status == RideStatus.IN_PROGRESS
-            else _NEXT_STATUS.get(next_booking.status, "")
+            else app_config.next_booking_status.get(next_booking.status, "")
         )
         route = route_str(next_ride)
         lines += [

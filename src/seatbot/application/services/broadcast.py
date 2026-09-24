@@ -2,8 +2,8 @@ import asyncio
 import logging
 
 from aiogram import Bot
-from aiogram.exceptions import (TelegramBadRequest, TelegramForbiddenError,
-                                TelegramRetryAfter)
+from aiogram.exceptions import (TelegramAPIError, TelegramBadRequest,
+                                TelegramForbiddenError, TelegramRetryAfter)
 
 from seatbot.infrastructure.config.models import Config
 from seatbot.infrastructure.database.dao import UsersDAO
@@ -35,7 +35,7 @@ class BroadcastService:
                 success += 1
             except (TelegramForbiddenError, TelegramBadRequest, TelegramRetryAfter):
                 pass
-            except Exception:
+            except TelegramAPIError:
                 logger.exception("broadcast: failed to send to user %s", user.user_id)
             await asyncio.sleep(0.05)
         return success, total

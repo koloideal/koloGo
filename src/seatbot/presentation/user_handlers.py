@@ -1,6 +1,6 @@
 from aiogram import F, Router
 from aiogram.filters import Command
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, Message, PreCheckoutQuery
 from aiogram_dialog import DialogManager, ShowMode, StartMode
 from dishka import FromDishka
 
@@ -8,6 +8,7 @@ from seatbot.application.interactors.user.create_or_get_user import (
     CreateOrGetUserCommand, CreateOrGetUserInteractor)
 from seatbot.application.services.bot import BotService
 from seatbot.application.services.payment import PaymentService
+from seatbot.domain.schemas import BookingStatus
 from seatbot.infrastructure.database.dao import BookingsDAO, RidesDAO, UsersDAO
 from seatbot.infrastructure.notifications import MessageBuilder
 
@@ -49,7 +50,8 @@ async def cb_ride_origin(
     ride_id = int((callback.data or "").split(":", 1)[1])
     ride = await rides_dao.get_by_id(ride_id)
     booking = await bookings_dao.get_by_ride_and_user(ride_id, callback.from_user.id)
-    if not ride or not booking or ride.origin_lat is None or ride.origin_lon is None:
+    approved = booking is not None and booking.status == BookingStatus.APPROVED
+    if not ride or not approved or ride.origin_lat is None or ride.origin_lon is None:
         await callback.answer("Место отправления недоступно", show_alert=True)
         return
     await callback.answer()
@@ -57,7 +59,15 @@ async def cb_ride_origin(
         await callback.message.answer_location(latitude=ride.origin_lat, longitude=ride.origin_lon)
 
 
-@user_router.message(lambda m: m.successful_payment is not None)
+@user_router.pre_checkout_query()
+async def on_pre_checkout(query: PreCheckoutQuery, payment_service: FromDishka[PaymentService]) -> None:
+    if query.currency == "XTR" and payment_service.parse_stars_payload(query.invoice_payload) is not None:
+        await query.answer(ok=True)
+    else:
+        await query.answer(ok=False, error_message="Платёж не распознан. Создайте новый счёт в «Баланс».")
+
+
+@user_router.message(F.successful_payment)
 async def on_stars_payment(
     message: Message,
     payment_service: FromDishka[PaymentService],
@@ -66,17 +76,11 @@ async def on_stars_payment(
     bot_service: FromDishka[BotService],
 ) -> None:
     sp = message.successful_payment
-    if not sp:
+    if not sp or not message.from_user:
         return
     charge_id = sp.telegram_payment_charge_id
-    payload = sp.invoice_payload
-    if not payload.startswith("stars_topup:"):
-        return
-    try:
-        amount_byn = float(payload.split(":", 1)[1])
-    except (ValueError, IndexError):
-        return
-    if not message.from_user:
+    amount_byn = payment_service.parse_stars_payload(sp.invoice_payload)
+    if amount_byn is None:
         return
     user_id = message.from_user.id
     ok = await payment_service.complete_stars_payment(user_id, amount_byn, charge_id)

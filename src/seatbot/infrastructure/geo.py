@@ -1,31 +1,31 @@
 import math
 from collections.abc import Sequence
 
+from seatbot.infrastructure.config.app import AppConfig
 from seatbot.infrastructure.config.models import GeoConfig
-
-EARTH_RADIUS_M = 6_371_000
 
 
 class GeoService:
-    def __init__(self, config: GeoConfig) -> None:
+    def __init__(self, config: GeoConfig, app_config: AppConfig) -> None:
         self._config = config
+        self._earth_radius_m = app_config.earth_radius_m
 
-    @staticmethod
-    def haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    def haversine_m(self, lat1: float, lon1: float, lat2: float, lon2: float) -> float:
         phi1, phi2 = math.radians(lat1), math.radians(lat2)
         dphi = math.radians(lat2 - lat1)
         dlam = math.radians(lon2 - lon1)
         a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlam / 2) ** 2
-        return 2 * EARTH_RADIUS_M * math.asin(math.sqrt(a))
+        return 2 * self._earth_radius_m * math.asin(math.sqrt(a))
 
-    @staticmethod
-    def segment_distance_m(a: tuple[float, float], b: tuple[float, float], p: tuple[float, float]) -> float:
+    def segment_distance_m(
+        self, a: tuple[float, float], b: tuple[float, float], p: tuple[float, float]
+    ) -> float:
         k = math.cos(math.radians(p[0]))
 
         def project(pt: tuple[float, float]) -> tuple[float, float]:
             return (
-                math.radians(pt[1] - p[1]) * k * EARTH_RADIUS_M,
-                math.radians(pt[0] - p[0]) * EARTH_RADIUS_M,
+                math.radians(pt[1] - p[1]) * k * self._earth_radius_m,
+                math.radians(pt[0] - p[0]) * self._earth_radius_m,
             )
 
         (ax, ay), (bx, by) = project(a), project(b)

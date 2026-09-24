@@ -5,19 +5,8 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from seatbot.domain.schemas import (Booking, BookingStatus, Ride, RideStatus,
                                     RideWithStats, User)
+from seatbot.infrastructure.config.app import AppConfig
 from seatbot.infrastructure.time import LocalClock
-
-BOOKING_STATUS_RU = {
-    BookingStatus.PENDING: "ожидает",
-    BookingStatus.APPROVED: "одобрена",
-    BookingStatus.REJECTED: "отклонена",
-    BookingStatus.CANCELLED: "отменена",
-    BookingStatus.COMPLETED: "завершена",
-    BookingStatus.NO_SHOW: "неявка",
-}
-
-
-WEEKDAYS_RU = ("пн", "вт", "ср", "чт", "пт", "сб", "вс")
 
 
 def fmt_amount(value: float) -> str:
@@ -58,8 +47,10 @@ def route_line(ride: Ride) -> str:
 
 
 class MessageBuilder:
-    def __init__(self, clock: LocalClock) -> None:
+    def __init__(self, clock: LocalClock, app_config: AppConfig) -> None:
         self._clock = clock
+        self._booking_status_ru = app_config.booking_status_ru
+        self._weekdays_ru = app_config.weekdays_ru
 
     def departure_lines(self, r: Ride) -> list[str]:
         if r.started_at:
@@ -162,7 +153,7 @@ class MessageBuilder:
             lines.append(f"📍 {route}")
         lines += [
             payment,
-            f"📋 Статус: {status_map.get(booking.status, BOOKING_STATUS_RU.get(booking.status, '—'))}",
+            f"📋 Статус: {status_map.get(booking.status, self._booking_status_ru.get(booking.status, '—'))}",
         ]
         if ride.status == RideStatus.COMPLETED:
             lines.extend(self.track_stats_lines(ride))
@@ -509,7 +500,7 @@ class MessageBuilder:
 
     def short_date(self, dt: datetime) -> str:
         local = self._clock.to_local(dt)
-        return f"{local:%d.%m} ({WEEKDAYS_RU[local.weekday()]}) {local:%H:%M}"
+        return f"{local:%d.%m} ({self._weekdays_ru[local.weekday()]}) {local:%H:%M}"
 
     def ride_map_keyboard(self, map_url: str) -> InlineKeyboardMarkup:
         return InlineKeyboardMarkup(
@@ -545,6 +536,26 @@ class MessageBuilder:
             f"⚠️ <b>Live-гео поездки #{ride_id} остановлено.</b>\n\n"
             f"{where}"
             "Трекинг прекращён. Завершите поездку вручную в меню поездок."
+        )
+
+    def ride_not_started_admin_log(self, ride: Ride, approved_count: int, auto_complete_after_h: int) -> str:
+        return (
+            f"⚠️ <b>Поездка #{ride.ride_id} не стартовала</b>\n\n"
+            f"🕒 Время: {self._clock.fmt(ride.departure_at)}\n"
+            f"{route_line(ride)}"
+            f"🪑 Подтверждённых пассажиров: <b>{approved_count}</b>\n\n"
+            "Запись закрыта. Завершите поездку, чтобы списать оплату, или отмените её.\n"
+            f"<i>Через {auto_complete_after_h} ч после выезда поездка завершится автоматически.</i>"
+        )
+
+    def ride_not_started_keyboard(self, ride_id: int) -> InlineKeyboardMarkup:
+        return InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(text="🏁 Завершить", callback_data=f"adm_complete:{ride_id}"),
+                    InlineKeyboardButton(text="🚗 К поездке", callback_data=f"adm_ride:{ride_id}"),
+                ]
+            ]
         )
 
     def ride_reminder_admin_notification(self, ride: Ride, approved_count: int) -> str:

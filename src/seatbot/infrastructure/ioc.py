@@ -21,6 +21,7 @@ from seatbot.application.services.tracking import TrackingService
 from seatbot.application.services.user import UserService
 from seatbot.application.services.vip import VipService
 from seatbot.infrastructure.cache import CacheKeys, RedisService
+from seatbot.infrastructure.config.app import AppConfig
 from seatbot.infrastructure.config.models import Config, GeoConfig, TrackingConfig
 from seatbot.infrastructure.database.config import new_session_maker
 from seatbot.infrastructure.database.dao import (BookingsDAO, LocationsDAO, RequisitesDAO,
@@ -29,8 +30,10 @@ from seatbot.infrastructure.database.dao import (BookingsDAO, LocationsDAO, Requ
 from seatbot.infrastructure.geo import GeoService
 from seatbot.infrastructure.notifications import MessageBuilder
 from seatbot.infrastructure.payments import CryptoBotPaymentService
+from seatbot.infrastructure.post_commit import PostCommit
 from seatbot.infrastructure.scheduling.payment_poller import PaymentStatusPoller
 from seatbot.infrastructure.scheduling.tasks import (auto_close_past_rides,
+                                                     auto_complete_stale_rides,
                                                      finish_stale_arrivals,
                                                      send_ride_reminders)
 from seatbot.infrastructure.time import LocalClock
@@ -44,9 +47,16 @@ class DatabaseProvider(Provider):
         return new_session_maker(config.postgres.dsn)
 
     @provide
+    async def get_post_commit(self) -> AsyncIterable[PostCommit]:
+        post_commit = PostCommit()
+        yield post_commit
+        await post_commit.run()
+
+    @provide
     async def get_session(
-        self, session_maker: async_sessionmaker[AsyncSession]
+        self, session_maker: async_sessionmaker[AsyncSession], post_commit: PostCommit
     ) -> AsyncIterable[AsyncSession]:
+        # зависимость от post_commit гарантирует порядок финализации: сначала коммит, потом post-commit
         async with session_maker() as session, session.begin():
             yield session
 
@@ -87,11 +97,11 @@ class RedisProvider(Provider):
     scope = Scope.APP
 
     @provide
-    async def get_redis(self, config: Config) -> AsyncIterable[Redis]:
+    async def get_redis(self, config: Config, app_config: AppConfig) -> AsyncIterable[Redis]:
         redis: Redis = Redis.from_url(
             config.redis.cache_dsn,
             decode_responses=True,
-            max_connections=5,
+            max_connections=app_config.redis_max_connections,
         )
         try:
             yield redis
@@ -99,8 +109,8 @@ class RedisProvider(Provider):
             await redis.aclose()
 
     @provide(scope=Scope.REQUEST)
-    def get_cache_service(self, redis: Redis) -> RedisService:
-        return RedisService(redis)
+    def get_cache_service(self, redis: Redis, post_commit: PostCommit) -> RedisService:
+        return RedisService(redis, post_commit)
 
     @provide(scope=Scope.APP)
     def get_cache_keys(self) -> CacheKeys:
@@ -132,6 +142,12 @@ class SchedulerProvider(Provider):
             name="send_ride_reminders",
         )
         scheduler.add_job(
+            func=auto_complete_stale_rides,
+            trigger=IntervalTrigger(minutes=10),
+            kwargs={"container": async_container},
+            name="auto_complete_stale_rides",
+        )
+        scheduler.add_job(
             func=finish_stale_arrivals,
             trigger=IntervalTrigger(seconds=30),
             kwargs={"container": async_container},
@@ -158,12 +174,12 @@ class ServicesProvider(Provider):
         return config.tracking
 
     @provide(scope=Scope.APP)
-    def get_geo_service(self, geo_config: GeoConfig) -> GeoService:
-        return GeoService(geo_config)
+    def get_geo_service(self, geo_config: GeoConfig, app_config: AppConfig) -> GeoService:
+        return GeoService(geo_config, app_config)
 
     @provide
-    def get_message_builder(self, clock: LocalClock) -> MessageBuilder:
-        return MessageBuilder(clock)
+    def get_message_builder(self, clock: LocalClock, app_config: AppConfig) -> MessageBuilder:
+        return MessageBuilder(clock, app_config)
 
     @provide
     def get_user_service(
@@ -185,6 +201,7 @@ class ServicesProvider(Provider):
         geo: GeoService,
         cache: RedisService,
         cache_keys: CacheKeys,
+        app_config: AppConfig,
     ) -> RideService:
         return RideService(
             rides_dao,
@@ -198,6 +215,7 @@ class ServicesProvider(Provider):
             geo,
             cache,
             cache_keys,
+            app_config,
         )
 
     @provide
@@ -235,8 +253,10 @@ class ServicesProvider(Provider):
         return BroadcastService(bot, config, users_dao)
 
     @provide
-    def get_bot_service(self, bot: Bot, config: Config, users_dao: UsersDAO) -> BotService:
-        return BotService(bot, config, users_dao)
+    def get_bot_service(
+        self, bot: Bot, config: Config, users_dao: UsersDAO, post_commit: PostCommit
+    ) -> BotService:
+        return BotService(bot, config, users_dao, post_commit)
 
     @provide
     def get_vip_service(
@@ -248,6 +268,7 @@ class ServicesProvider(Provider):
         message_builder: MessageBuilder,
         cache: RedisService,
         cache_keys: CacheKeys,
+        app_config: AppConfig,
     ) -> VipService:
         return VipService(
             settings_dao,
@@ -257,6 +278,7 @@ class ServicesProvider(Provider):
             message_builder,
             cache,
             cache_keys,
+            app_config,
         )
 
     @provide(scope=Scope.APP)
@@ -274,6 +296,9 @@ class ServicesProvider(Provider):
         message_builder: MessageBuilder,
         cache: RedisService,
         cache_keys: CacheKeys,
+        bot_service: BotService,
+        clock: LocalClock,
+        app_config: AppConfig,
     ) -> PaymentService:
         return PaymentService(
             transactions_dao,
@@ -284,6 +309,9 @@ class ServicesProvider(Provider):
             message_builder,
             cache,
             cache_keys,
+            bot_service,
+            clock,
+            app_config,
         )
 
     @provide

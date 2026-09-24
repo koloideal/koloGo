@@ -70,6 +70,21 @@ async def cb_reject_booking(
         await callback.answer("Бронь уже обработана или не найдена", show_alert=True)
 
 
+@admin_router.callback_query(F.data.startswith("adm_complete:"))
+async def cb_complete_ride(
+    callback: CallbackQuery,
+    ride_service: FromDishka[RideService],
+) -> None:
+    ride_id = int((callback.data or "").split(":", 1)[1])
+    ride = await ride_service.complete_ride(ride_id)
+    if ride:
+        await _edit_log_message(callback, "🏁 Завершена", ride_id)
+        await callback.answer("Поездка завершена", show_alert=True)
+    else:
+        await _edit_log_message(callback, "ℹ️ Поездка уже завершена или отменена", ride_id)
+        await callback.answer("Поездка уже завершена или отменена", show_alert=True)
+
+
 @admin_router.callback_query(F.data.startswith("adm_ride:"))
 async def cb_open_ride(callback: CallbackQuery, dialog_manager: DialogManager) -> None:
     ride_id = int((callback.data or "").split(":", 1)[1])

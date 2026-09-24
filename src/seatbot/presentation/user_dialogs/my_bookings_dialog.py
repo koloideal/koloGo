@@ -11,6 +11,7 @@ from dishka.integrations.aiogram_dialog import inject
 
 from seatbot.application.services.ride import RideService
 from seatbot.domain.schemas import BookingStatus
+from seatbot.infrastructure.config import AppConfig
 from seatbot.infrastructure.database.dao import (BookingsDAO, RidesDAO, TrackPointsDAO,
                                                  UsersDAO)
 from seatbot.infrastructure.geo import GeoService
@@ -18,15 +19,6 @@ from seatbot.infrastructure.notifications import MessageBuilder, fmt_amount
 from seatbot.infrastructure.time import LocalClock
 
 from .states import MyBookingsSG
-
-_STATUS_EMOJI = {
-    BookingStatus.PENDING: "⏳",
-    BookingStatus.APPROVED: "✅",
-    BookingStatus.REJECTED: "❌",
-    BookingStatus.CANCELLED: "🚫",
-    BookingStatus.COMPLETED: "🏁",
-    BookingStatus.NO_SHOW: "🙅",
-}
 
 
 @inject
@@ -37,6 +29,7 @@ async def get_my_bookings(
     users_dao: FromDishka[UsersDAO],
     messages: FromDishka[MessageBuilder],
     clock: FromDishka[LocalClock],
+    app_config: FromDishka[AppConfig],
     **_kwargs: Any,
 ) -> dict[str, Any]:
     user_id = dialog_manager.middleware_data["event_from_user"].id
@@ -54,7 +47,7 @@ async def get_my_bookings(
         ride = await rides_dao.get_by_id(b.ride_id)
         if not ride:
             continue
-        emoji = _STATUS_EMOJI.get(b.status, "•")
+        emoji = app_config.booking_status_emoji.get(b.status, "•")
         pay = messages.payment_short(b.paid_amount, float(ride.price), ride.is_free or is_vip)
         items.append(
             {

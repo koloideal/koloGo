@@ -1,7 +1,6 @@
 import asyncio
-import os
 import sys
-from logging import Logger, getLogger
+from logging import getLogger
 
 import orjson
 from aiogram import Bot, Dispatcher
@@ -17,7 +16,8 @@ from dishka.integrations.aiogram import setup_dishka
 from redis.asyncio import Redis
 
 from seatbot.application.services.bot import BotService
-from seatbot.infrastructure.config import load_config
+from seatbot.application.services.payment import PaymentService
+from seatbot.infrastructure.config import AppConfig, load_config
 from seatbot.infrastructure.config.models import Config
 from seatbot.infrastructure.ioc import (DatabaseProvider, RedisProvider,
                                         SchedulerProvider, ServicesProvider, TimeProvider,
@@ -53,44 +53,41 @@ from seatbot.presentation.user_dialogs import stats_dialog as stats_dialog_mod
 from seatbot.presentation.user_dialogs import vip_dialog as vip_dialog_mod
 from seatbot.presentation.user_handlers import user_router
 
-config: Config = load_config("secret_data/config.toml")
-bot_token: str = config.bot.token
-
-session = AiohttpSession(timeout=30)
-bot: Bot = Bot(
-    token=bot_token,
-    default=DefaultBotProperties(parse_mode=ParseMode.HTML),
-    session=session,
-)
-
-logger: Logger = getLogger("seatbot")
-os.makedirs("logs", exist_ok=True)
-setup_logging("secret_data/logger-config.json")
-
-container = make_async_container(
-    DatabaseProvider(),
-    RedisProvider(),
-    TimeProvider(),
-    SchedulerProvider(),
-    ServicesProvider(),
-    UserAppProvider(),
-    context={Config: config, Bot: bot},
-)
-
-fsm_redis: Redis = Redis.from_url(config.redis.fsm_dsn, decode_responses=True, max_connections=5)
-storage: RedisStorage = RedisStorage(
-    fsm_redis,
-    key_builder=DefaultKeyBuilder(with_destiny=True),
-    json_dumps=lambda data: orjson.dumps(data).decode(),
-    json_loads=orjson.loads,
-    state_ttl=9000,
-    data_ttl=7200,
-)
-logger.critical("Successful connecting to Redis")
-dp: Dispatcher = Dispatcher(storage=storage)
-
 
 async def main() -> None:
+    app_config = AppConfig()
+    setup_logging(app_config.logger_config_path)
+    logger = getLogger("seatbot")
+    config = load_config(app_config.config_path)
+
+    bot = Bot(
+        token=config.bot.token,
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+        session=AiohttpSession(timeout=app_config.bot_http_timeout_s),
+    )
+    container = make_async_container(
+        DatabaseProvider(),
+        RedisProvider(),
+        TimeProvider(),
+        SchedulerProvider(),
+        ServicesProvider(),
+        UserAppProvider(),
+        context={Config: config, Bot: bot, AppConfig: app_config},
+    )
+    fsm_redis = Redis.from_url(
+        config.redis.fsm_dsn, decode_responses=True, max_connections=app_config.redis_max_connections
+    )
+    storage = RedisStorage(
+        fsm_redis,
+        key_builder=DefaultKeyBuilder(with_destiny=True),
+        json_dumps=lambda data: orjson.dumps(data).decode(),
+        json_loads=orjson.loads,
+        state_ttl=app_config.fsm_state_ttl_s,
+        data_ttl=app_config.fsm_data_ttl_s,
+    )
+    logger.critical("Successful connecting to Redis")
+    dp = Dispatcher(storage=storage)
+
     dp.include_routers(error_router, user_router, admin_router)
     dp.include_routers(
         main_menu_dialog_mod.main_menu_dialog,
@@ -133,6 +130,12 @@ async def main() -> None:
     scheduler = await container.get(AsyncIOScheduler)
     scheduler.start()
 
+    async with container() as nested_container:
+        payment_service = await nested_container.get(PaymentService)
+        resumed = await payment_service.resume_pending_polling()
+        if resumed:
+            logger.info("Resumed polling for %s pending CryptoBot invoice(s)", resumed)
+
     logger.critical("Starting SeatBot...")
     await dp.start_polling(bot)
 
@@ -141,5 +144,5 @@ if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        logger.critical("End of work...")
+        getLogger("seatbot").critical("End of work...")
         sys.exit()

@@ -40,9 +40,18 @@ class UsersDAO:
         orm_user.first_name = first_name
         return self._map_to_domain(orm_user)
 
+    async def _get_for_balance_update(self, user_id: int) -> OrmUser | None:
+        # FOR UPDATE + populate_existing: без блокировки параллельные списания/зачисления теряются
+        result = await self.session.execute(
+            select(OrmUser)
+            .where(OrmUser.user_id == user_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        return result.scalar_one_or_none()
+
     async def increase_balance(self, user_id: int, amount: float) -> User | None:
-        result = await self.session.execute(select(OrmUser).where(OrmUser.user_id == user_id))
-        orm_user = result.scalar_one_or_none()
+        orm_user = await self._get_for_balance_update(user_id)
         if not orm_user:
             return None
         orm_user.balance = Decimal(str(orm_user.balance)) + Decimal(str(amount))
@@ -50,14 +59,14 @@ class UsersDAO:
         return self._map_to_domain(orm_user)
 
     async def decrease_balance(self, user_id: int, amount: float) -> User | None:
-        result = await self.session.execute(select(OrmUser).where(OrmUser.user_id == user_id))
-        orm_user = result.scalar_one_or_none()
+        orm_user = await self._get_for_balance_update(user_id)
         if not orm_user:
             return None
         current = Decimal(str(orm_user.balance))
         if current < Decimal(str(amount)):
             raise InsufficientBalanceError(required=amount, available=float(current))
         orm_user.balance = current - Decimal(str(amount))
+        await self.session.flush()
         return self._map_to_domain(orm_user)
 
     async def ban_user(self, user_id: int) -> User | None:

@@ -1,6 +1,5 @@
-from collections.abc import Callable
+from datetime import datetime
 from html import escape
-from types import MappingProxyType
 from typing import Any
 
 from aiogram import F
@@ -16,6 +15,7 @@ from dishka.integrations.aiogram_dialog import inject
 from seatbot.application.services.statistics import StatisticsService
 from seatbot.application.services.user import UserService
 from seatbot.domain.schemas import UserStats
+from seatbot.infrastructure.config import AppConfig
 from seatbot.infrastructure.config.models import Config
 from seatbot.infrastructure.database.dao import UsersDAO
 from seatbot.infrastructure.notifications import fmt_amount, user_display
@@ -23,31 +23,28 @@ from seatbot.infrastructure.notifications import fmt_amount, user_display
 from ..user_dialogs.states import DepositSG, UsersSG
 
 
-def _reg_ts(stats: UserStats) -> float:
-    return stats.registration_date.timestamp() if stats.registration_date else 0.0
+def _sort_value(stats: UserStats, field: str) -> float:
+    value = getattr(stats, field)
+    if isinstance(value, datetime):
+        return value.timestamp()
+    return float(value) if value is not None else 0.0
 
 
-_SORT_MODES: tuple[tuple[str, str, Callable[[UserStats], float], bool], ...] = (
-    ("reg_desc", "📅 Новизна ↓", _reg_ts, True),
-    ("reg_asc", "📅 Новизна ↑", _reg_ts, False),
-    ("bal_desc", "💰 Баланс ↓", lambda s: s.balance, True),
-    ("bal_asc", "💰 Баланс ↑", lambda s: s.balance, False),
-    ("rides_desc", "🚗 Поездки ↓", lambda s: s.total_rides, True),
-    ("rides_asc", "🚗 Поездки ↑", lambda s: s.total_rides, False),
-)
-_SORT_MAP = MappingProxyType({m[0]: (m[2], m[3]) for m in _SORT_MODES})
-_SORT_LABELS = MappingProxyType({m[0]: m[1] for m in _SORT_MODES})
-_SORT_ORDER: tuple[str, ...] = tuple(m[0] for m in _SORT_MODES)
+def _sort_stats(stats: list[UserStats], mode: str, app_config: AppConfig) -> list[UserStats]:
+    modes = {m[0]: m for m in app_config.user_sort_modes}
+    _, _, field, reverse = modes.get(mode, app_config.user_sort_modes[0])
+    return sorted(stats, key=lambda s: _sort_value(s, field), reverse=reverse)
 
 
-def _sort_stats(stats: list[UserStats], mode: str) -> list[UserStats]:
-    key_func, reverse = _SORT_MAP.get(mode, _SORT_MAP["reg_desc"])
-    return sorted(stats, key=key_func, reverse=reverse)
+def _sort_label(mode: str, app_config: AppConfig) -> str:
+    labels = {m[0]: m[1] for m in app_config.user_sort_modes}
+    return labels.get(mode, app_config.user_sort_modes[0][1])
 
 
-def _next_sort_mode(current: str) -> str:
-    idx = _SORT_ORDER.index(current) if current in _SORT_ORDER else 0
-    return _SORT_ORDER[(idx + 1) % len(_SORT_ORDER)]
+def _next_sort_mode(current: str, app_config: AppConfig) -> str:
+    order = [m[0] for m in app_config.user_sort_modes]
+    idx = order.index(current) if current in order else 0
+    return order[(idx + 1) % len(order)]
 
 
 @inject
@@ -55,18 +52,19 @@ async def get_users_list(
     dialog_manager: DialogManager,
     statistics_service: FromDishka[StatisticsService],
     config: FromDishka[Config],
+    app_config: FromDishka[AppConfig],
     **_kwargs: Any,
 ) -> dict[str, Any]:
+    sort_mode = dialog_manager.dialog_data.get("sort_mode", app_config.user_sort_modes[0][0])
     stats = await statistics_service.all_users_stats(limit=100, exclude_user_id=config.bot.creator_id)
     if not stats:
         return {
             "has_users": False,
             "empty_text": "🚫 Нет пользователей.",
             "back_btn": "⬅️ В панель",
-            "sort_btn": "📅 Новизна ↓",
+            "sort_btn": _sort_label(sort_mode, app_config),
         }
-    sort_mode = dialog_manager.dialog_data.get("sort_mode", "reg_desc")
-    stats = _sort_stats(stats, sort_mode)
+    stats = _sort_stats(stats, sort_mode, app_config)
     items = []
     for s in stats:
         badges = []
@@ -87,7 +85,7 @@ async def get_users_list(
         "has_users": True,
         "users": items,
         "back_btn": "⬅️ В панель",
-        "sort_btn": _SORT_LABELS.get(sort_mode, "📅 Новизна ↓"),
+        "sort_btn": _sort_label(sort_mode, app_config),
     }
 
 
@@ -192,9 +190,15 @@ async def on_search_click(callback: CallbackQuery, button: Button, manager: Dial
     await manager.switch_to(UsersSG.search)
 
 
-async def on_sort_click(callback: CallbackQuery, button: Button, manager: DialogManager) -> None:
-    current = manager.dialog_data.get("sort_mode", "reg_desc")
-    manager.dialog_data["sort_mode"] = _next_sort_mode(current)
+@inject
+async def on_sort_click(
+    callback: CallbackQuery,
+    button: Button,
+    manager: DialogManager,
+    app_config: FromDishka[AppConfig],
+) -> None:
+    current = manager.dialog_data.get("sort_mode", app_config.user_sort_modes[0][0])
+    manager.dialog_data["sort_mode"] = _next_sort_mode(current, app_config)
     await manager.update({})
 
 

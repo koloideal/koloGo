@@ -28,3 +28,5 @@ max_accuracy_m = 100.0
 arrival_radius_m = 150.0
 arrival_debounce = 2
 arrival_dwell_s = 60
+# через сколько часов после времени выезда незавершённая поездка завершается автоматически
+auto_complete_after_h = 12

@@ -14,6 +14,7 @@ from seatbot.application.services.ride import RideService
 from seatbot.application.services.tracking import TrackingService
 from seatbot.domain.exceptions import RideInPastError
 from seatbot.domain.schemas import RideStatus
+from seatbot.infrastructure.config import AppConfig
 from seatbot.infrastructure.database.dao import RidesDAO, TrackPointsDAO
 from seatbot.infrastructure.geo import GeoService
 from seatbot.infrastructure.notifications import MessageBuilder, fmt_amount, route_str
@@ -21,20 +22,13 @@ from seatbot.infrastructure.time import LocalClock
 
 from ..user_dialogs.states import RideBookingsSG, RidesMgmtSG
 
-_STATUS_EMOJI = {
-    RideStatus.OPEN: "🟢",
-    RideStatus.CLOSED: "🟡",
-    RideStatus.IN_PROGRESS: "🚙",
-    RideStatus.COMPLETED: "✅",
-    RideStatus.CANCELLED: "❌",
-}
-
 
 @inject
 async def get_rides_list(
     dialog_manager: DialogManager,
     rides_dao: FromDishka[RidesDAO],
     clock: FromDishka[LocalClock],
+    app_config: FromDishka[AppConfig],
     **_kwargs: Any,
 ) -> dict[str, Any]:
     rides = await rides_dao.list_all(limit=100)
@@ -42,7 +36,7 @@ async def get_rides_list(
         return {"has_rides": False, "empty_text": "🚫 Поездок пока нет.", "back_btn": "⬅️ В панель"}
     items = []
     for rws in rides:
-        emoji = _STATUS_EMOJI.get(rws.ride.status, "•")
+        emoji = app_config.ride_status_emoji.get(rws.ride.status, "•")
         price_str = "бесплатно" if rws.ride.is_free else f"{fmt_amount(rws.ride.price)} BYN"
         route = route_str(rws.ride)
         route_part = f" • {route}" if route else ""

@@ -15,22 +15,13 @@ from seatbot.application.services.ride import RideService
 from seatbot.application.services.statistics import StatisticsService
 from seatbot.domain.exceptions import NoFreeSeatsError
 from seatbot.domain.schemas import Booking, BookingStatus, RideStatus
+from seatbot.infrastructure.config import AppConfig
 from seatbot.infrastructure.config.models import Config
 from seatbot.infrastructure.database.dao import BookingsDAO, RidesDAO, UsersDAO
-from seatbot.infrastructure.notifications import (BOOKING_STATUS_RU, MessageBuilder,
-                                                  fmt_amount, user_display)
+from seatbot.infrastructure.notifications import MessageBuilder, fmt_amount, user_display
 from seatbot.infrastructure.time import LocalClock
 
 from ..user_dialogs.states import RideBookingsSG
-
-_STATUS_EMOJI = {
-    BookingStatus.PENDING: "⏳",
-    BookingStatus.APPROVED: "✅",
-    BookingStatus.REJECTED: "❌",
-    BookingStatus.CANCELLED: "🚫",
-    BookingStatus.COMPLETED: "🏁",
-    BookingStatus.NO_SHOW: "🙅",
-}
 
 
 @inject
@@ -40,6 +31,7 @@ async def get_ride_bookings(
     users_dao: FromDishka[UsersDAO],
     rides_dao: FromDishka[RidesDAO],
     messages: FromDishka[MessageBuilder],
+    app_config: FromDishka[AppConfig],
     **_kwargs: Any,
 ) -> dict[str, Any]:
     if "ride_id" not in dialog_manager.dialog_data:
@@ -56,7 +48,11 @@ async def get_ride_bookings(
         }
     dialog_manager.dialog_data["ride_id"] = ride_id
     ride = await rides_dao.get_by_id(ride_id)
-    can_add = ride is not None and ride.status == RideStatus.OPEN
+    can_add = (
+        ride is not None
+        and ride.status == RideStatus.OPEN
+        and await bookings_dao.count_approved_for_ride(ride_id) < ride.seats_total
+    )
     all_bookings = await bookings_dao.list_for_ride(ride_id)
     latest_by_user: dict[int, Booking] = {}
     for b in all_bookings:
@@ -77,10 +73,10 @@ async def get_ride_bookings(
     items = []
     for b in bookings:
         user = await users_dao.get_by_id(b.user_id)
-        emoji = _STATUS_EMOJI.get(b.status, "•")
+        emoji = app_config.booking_status_emoji.get(b.status, "•")
         vip = " ⭐" if (user and user.is_vip) else ""
         uname = user_display(user.username, user.first_name, b.user_id) if user else f"id:{b.user_id}"
-        status_ru = BOOKING_STATUS_RU.get(b.status, b.status.value)
+        status_ru = app_config.booking_status_ru.get(b.status, b.status.value)
         pay = (
             messages.payment_short(
                 b.paid_amount,
@@ -114,6 +110,7 @@ async def get_booking_detail(
     messages: FromDishka[MessageBuilder],
     clock: FromDishka[LocalClock],
     ride_service: FromDishka[RideService],
+    app_config: FromDishka[AppConfig],
     **_kwargs: Any,
 ) -> dict[str, Any]:
     booking_id: int = dialog_manager.dialog_data["booking_id"]
@@ -137,8 +134,8 @@ async def get_booking_detail(
             )
             + "\n"
         )
-    status_ru = BOOKING_STATUS_RU.get(booking.status, booking.status.value)
-    text += f"📋 Статус: {_STATUS_EMOJI.get(booking.status, '•')} {status_ru.capitalize()}"
+    status_ru = app_config.booking_status_ru.get(booking.status, booking.status.value)
+    text += f"📋 Статус: {app_config.booking_status_emoji.get(booking.status, '•')} {status_ru.capitalize()}"
     is_pending = booking.status == BookingStatus.PENDING
     seats_left = ride.seats_total - await bookings_dao.count_approved_for_ride(ride.ride_id) if ride else 0
     can_approve = is_pending and seats_left > 0

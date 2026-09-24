@@ -46,6 +46,7 @@ class TrackingConfig:
     arrival_radius_m: float = 150.0
     arrival_debounce: int = 2
     arrival_dwell_s: int = 60
+    auto_complete_after_h: int = 12
 
 
 @dataclass

@@ -24,7 +24,7 @@ class Transaction(Base):
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
     )
-    payment_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    payment_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True, unique=True)
     payment_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(
         String(16), nullable=False, default="completed", server_default="completed"

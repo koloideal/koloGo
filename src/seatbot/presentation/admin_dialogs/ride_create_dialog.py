@@ -20,6 +20,7 @@ from dishka.integrations.aiogram_dialog import inject
 from seatbot.application.services.location import LocationService
 from seatbot.application.services.ride import RideService
 from seatbot.domain.exceptions import RideInPastError
+from seatbot.infrastructure.config import AppConfig
 from seatbot.infrastructure.database.dao import LocationsDAO, RidesDAO
 from seatbot.infrastructure.notifications import MessageBuilder, fmt_amount, route_str
 from seatbot.infrastructure.time import LocalClock
@@ -53,34 +54,9 @@ async def get_templates(
     return {"has_templates": True, "templates": items, "back_btn": "⬅️ В панель"}
 
 
-_PAST_TIME_TEXT = "⛔ Это время уже прошло. Выберите время в будущем."
-_PAST_DATE_TEXT = "⛔ Нельзя создать поездку на прошедшую дату."
-MAX_RIDE_PRICE = 10_000
-
-
 class FutureCalendar(Calendar):
     async def _get_user_config(self, data: dict[str, Any], manager: DialogManager) -> CalendarUserConfig:
         return CalendarUserConfig(min_date=data.get("min_date"), timezone=data.get("calendar_tz"))
-
-
-MAX_REPEAT_DAYS = 28
-_WEEKDAYS = ("пн", "вт", "ср", "чт", "пт", "сб", "вс")
-_ALL_WEEKDAYS = list(range(7))
-_WORKDAYS = list(range(5))
-
-_EDITABLE_STEPS: dict[str, tuple[str, State]] = {
-    "edit_date": ("📅 Дата", RideCreateSG.calendar),
-    "edit_time": ("🕒 Время", RideCreateSG.time),
-    "edit_route": ("📍 Маршрут", RideCreateSG.origin),
-    "edit_price": ("💰 Цена", RideCreateSG.price),
-    "edit_seats": ("🪑 Места", RideCreateSG.seats),
-    "edit_repeat": ("🔁 Повтор", RideCreateSG.repeat_days),
-    "edit_remind": ("⏰ Напоминание", RideCreateSG.remind),
-    "edit_vip": ("⭐ VIP-холд", RideCreateSG.vip_hold),
-    "edit_auto": ("⚡ Авто-апрув", RideCreateSG.auto_approve),
-    "edit_vis": ("👁️ Видимость", RideCreateSG.visibility),
-    "edit_note": ("📝 Заметка", RideCreateSG.note),
-}
 
 
 def _local_today(clock: LocalClock) -> date:
@@ -109,16 +85,22 @@ def _selected_departure(data: dict[str, Any], clock: LocalClock) -> datetime | N
     )
 
 
-def _weekdays(data: dict[str, Any]) -> list[int]:
-    return list(data.get("weekdays", _ALL_WEEKDAYS))
+async def _app_config(manager: DialogManager) -> AppConfig:
+    app_config: AppConfig = await manager.middleware_data["dishka_container"].get(AppConfig)
+    return app_config
 
 
-def _weekdays_label(weekdays: list[int]) -> str:
-    if sorted(weekdays) == _ALL_WEEKDAYS:
+def _weekdays(data: dict[str, Any], app_config: AppConfig) -> list[int]:
+    return list(data.get("weekdays", app_config.all_weekdays))
+
+
+def _weekdays_label(weekdays: list[int], app_config: AppConfig) -> str:
+    days = tuple(sorted(weekdays))
+    if days == app_config.all_weekdays:
         return "все дни"
-    if sorted(weekdays) == _WORKDAYS:
+    if days == app_config.workdays:
         return "будни (пн–пт)"
-    return ", ".join(_WEEKDAYS[i] for i in sorted(weekdays))
+    return ", ".join(app_config.weekdays_ru[i] for i in days)
 
 
 @inject
@@ -161,11 +143,12 @@ async def get_repeat_data(
     ride_service: FromDishka[RideService],
     messages: FromDishka[MessageBuilder],
     clock: FromDishka[LocalClock],
+    app_config: FromDishka[AppConfig],
     **_kwargs: Any,
 ) -> dict[str, Any]:
     data = dialog_manager.dialog_data
     repeat_days: int = data.get("repeat_days", 1)
-    weekdays = _weekdays(data)
+    weekdays = _weekdays(data, app_config)
     departure = _selected_departure(data, clock)
     planned = ride_service.plan_departures(departure, repeat_days, set(weekdays)) if departure else []
     preview = "\n".join(f"• {messages.short_date(d)}" for d in planned[:10])
@@ -174,16 +157,16 @@ async def get_repeat_data(
     text = (
         "🔁 <b>Повтор поездки</b>\n\n"
         f"Период: <b>{repeat_days} дн.</b> с {data.get('selected_date', '—')}\n"
-        f"Дни недели: <b>{_weekdays_label(weekdays)}</b>\n\n"
+        f"Дни недели: <b>{_weekdays_label(weekdays, app_config)}</b>\n\n"
         f"Будет создано поездок: <b>{len(planned)}</b>\n{preview or '—'}\n\n"
-        f"Отметьте дни недели, введите длину периода в днях (1–{MAX_REPEAT_DAYS}) "
+        f"Отметьте дни недели, введите длину периода в днях (1–{app_config.max_repeat_days}) "
         "или выберите готовый вариант."
     )
     return {
         "repeat_info": text,
         "weekday_items": [
             {"id": i, "label": f"{'✅' if i in weekdays else '▫️'}{label}"}
-            for i, label in enumerate(_WEEKDAYS)
+            for i, label in enumerate(app_config.weekdays_ru)
         ],
         "can_continue": bool(planned),
         "back_btn": "⬅️ Назад",
@@ -304,6 +287,7 @@ async def get_confirm_data(
     dialog_manager: DialogManager,
     clock: FromDishka[LocalClock],
     ride_service: FromDishka[RideService],
+    app_config: FromDishka[AppConfig],
     **_kwargs: Any,
 ) -> dict[str, Any]:
     selected_date = dialog_manager.dialog_data.get("selected_date", "—")
@@ -320,13 +304,13 @@ async def get_confirm_data(
     destination = dialog_manager.dialog_data.get("destination")
     route = escape(f"{origin} → {destination}" if origin and destination else (origin or destination or "—"))
     price_str = "Бесплатно" if price <= 0 else f"{fmt_amount(price)} BYN"
-    weekdays = _weekdays(dialog_manager.dialog_data)
+    weekdays = _weekdays(dialog_manager.dialog_data, app_config)
     departure_at = _selected_departure(dialog_manager.dialog_data, clock)
     rides_count = (
         len(ride_service.plan_departures(departure_at, repeat_days, set(weekdays))) if departure_at else 0
     )
     repeat_str = (
-        f"{repeat_days} дн., {_weekdays_label(weekdays)} → {rides_count} поездок"
+        f"{repeat_days} дн., {_weekdays_label(weekdays, app_config)} → {rides_count} поездок"
         if repeat_days > 1
         else "только этот день"
     )
@@ -359,7 +343,9 @@ async def get_confirm_data(
         "confirm_text": text,
         "create_btn": "✅ Создать",
         "back_btn": "⬅️ Назад",
-        "edit_items": [{"id": key, "label": f"✏️ {label}"} for key, (label, _) in _EDITABLE_STEPS.items()],
+        "edit_items": [
+            {"id": key, "label": f"✏️ {label}"} for key, (label, _) in app_config.ride_edit_steps.items()
+        ],
     }
 
 
@@ -376,7 +362,7 @@ async def on_date_selected(
     clock: LocalClock = await container.get(LocalClock)
     if selected_date < _local_today(clock):
         if isinstance(event, CallbackQuery):
-            await event.answer(_PAST_DATE_TEXT, show_alert=True)
+            await event.answer((await _app_config(manager)).past_date_text, show_alert=True)
         return
     manager.dialog_data["selected_date"] = selected_date.strftime("%d.%m.%Y")
     manager.dialog_data["selected_date_obj"] = selected_date.isoformat()
@@ -426,7 +412,7 @@ class TimeChangedHandler(OnValueChanged):
         if clock.local_dt(d.year, d.month, d.day, value.hour, value.minute) <= clock.now():
             await widget.set_value(None)
             if isinstance(event, CallbackQuery):
-                await event.answer(_PAST_TIME_TEXT, show_alert=True)
+                await event.answer((await _app_config(manager)).past_time_text, show_alert=True)
             return
         time_str = f"{value.hour:02d}:{value.minute:02d}"
         manager.dialog_data["selected_time"] = time_str
@@ -447,11 +433,12 @@ async def on_time_preset(
     manager: DialogManager,
     item_id: str,
     clock: FromDishka[LocalClock],
+    app_config: FromDishka[AppConfig],
 ) -> None:
     hour, minute = int(item_id[:2]), int(item_id[2:])
     d = date.fromisoformat(manager.dialog_data["selected_date_obj"])
     if clock.local_dt(d.year, d.month, d.day, hour, minute) <= clock.now():
-        await callback.answer(_PAST_TIME_TEXT, show_alert=True)
+        await callback.answer(app_config.past_time_text, show_alert=True)
         return
     manager.dialog_data["selected_time"] = f"{hour:02d}:{minute:02d}"
     manager.dialog_data["selected_hour"] = hour
@@ -463,7 +450,7 @@ async def on_time_preset(
 async def on_weekday_toggle(
     callback: CallbackQuery, select: Select, manager: DialogManager, item_id: str
 ) -> None:
-    weekdays = _weekdays(manager.dialog_data)
+    weekdays = _weekdays(manager.dialog_data, await _app_config(manager))
     day = int(item_id)
     if day in weekdays:
         if len(weekdays) == 1:
@@ -477,13 +464,13 @@ async def on_weekday_toggle(
 
 async def on_repeat_single(callback: CallbackQuery, button: Button, manager: DialogManager) -> None:
     manager.dialog_data["repeat_days"] = 1
-    manager.dialog_data["weekdays"] = _ALL_WEEKDAYS
+    manager.dialog_data["weekdays"] = list((await _app_config(manager)).all_weekdays)
     await _advance(manager)
 
 
 async def _repeat_workdays(manager: DialogManager, weeks: int) -> None:
     manager.dialog_data["repeat_days"] = 7 * weeks
-    manager.dialog_data["weekdays"] = _WORKDAYS
+    manager.dialog_data["weekdays"] = list((await _app_config(manager)).workdays)
     await _advance(manager)
 
 
@@ -526,7 +513,8 @@ def _back_to_confirm() -> Button:
 async def on_edit_field(
     callback: CallbackQuery, select: Select, manager: DialogManager, item_id: str
 ) -> None:
-    _, state = _EDITABLE_STEPS[item_id]
+    _, state_name = (await _app_config(manager)).ride_edit_steps[item_id]
+    state: State = getattr(RideCreateSG, state_name)
     manager.dialog_data["edit_mode"] = item_id
     await manager.switch_to(state)
 
@@ -626,14 +614,15 @@ async def on_destination_location_selected(
 
 
 async def on_price_input(message: Message, widget: MessageInput, manager: DialogManager) -> None:
+    max_price = (await _app_config(manager)).max_ride_price
     text = (message.text or "").strip().replace(",", ".")
     try:
         price = float(text)
-        if not math.isfinite(price) or not 0 <= price <= MAX_RIDE_PRICE:
+        if not math.isfinite(price) or not 0 <= price <= max_price:
             raise ValueError
     except ValueError:
         await message.answer(
-            f"❌ Введите число от 0 до {MAX_RIDE_PRICE} (например, <code>15.50</code> или <code>0</code>)."
+            f"❌ Введите число от 0 до {fmt_amount(max_price)} (например, <code>15.50</code> или <code>0</code>)."
         )
         return
     manager.dialog_data["price"] = round(price, 2)
@@ -654,13 +643,14 @@ async def on_seats_input(message: Message, widget: MessageInput, manager: Dialog
 
 
 async def on_repeat_input(message: Message, widget: MessageInput, manager: DialogManager) -> None:
+    max_days = (await _app_config(manager)).max_repeat_days
     text = (message.text or "").strip()
     try:
         repeat_days = int(text)
-        if not 1 <= repeat_days <= MAX_REPEAT_DAYS:
+        if not 1 <= repeat_days <= max_days:
             raise ValueError
     except ValueError:
-        await message.answer(f"❌ Введите число от 1 до {MAX_REPEAT_DAYS}.")
+        await message.answer(f"❌ Введите число от 1 до {max_days}.")
         return
     manager.dialog_data["repeat_days"] = repeat_days
 
@@ -733,6 +723,7 @@ async def on_create(
     manager: DialogManager,
     ride_service: FromDishka[RideService],
     clock: FromDishka[LocalClock],
+    app_config: FromDishka[AppConfig],
 ) -> None:
     date_str: str = manager.dialog_data["selected_date_obj"]
     hour: int = manager.dialog_data.get("selected_hour", 18)
@@ -773,10 +764,10 @@ async def on_create(
             remind_minutes=remind_minutes,
             vip_hold_minutes=vip_hold_minutes,
             template_ride_id=manager.dialog_data.get("template_ride_id"),
-            weekdays=set(_weekdays(manager.dialog_data)),
+            weekdays=set(_weekdays(manager.dialog_data, app_config)),
         )
     except RideInPastError:
-        await callback.answer(_PAST_TIME_TEXT, show_alert=True)
+        await callback.answer(app_config.past_time_text, show_alert=True)
         await manager.switch_to(RideCreateSG.time)
         return
     if not rides:

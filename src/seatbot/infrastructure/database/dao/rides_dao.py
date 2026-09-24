@@ -114,6 +114,21 @@ class RidesDAO:
         result = await self.session.execute(query)
         return [self._map_to_domain(r) for r in result.scalars().all()]
 
+    async def list_open_departed(self, before: datetime) -> list[Ride]:
+        result = await self.session.execute(
+            select(OrmRide).where(OrmRide.status == RideStatus.OPEN.value, OrmRide.departure_at < before)
+        )
+        return [self._map_to_domain(r) for r in result.scalars().all()]
+
+    async def list_unfinished_departed(self, before: datetime) -> list[Ride]:
+        result = await self.session.execute(
+            select(OrmRide).where(
+                OrmRide.status.in_([RideStatus.CLOSED.value, RideStatus.IN_PROGRESS.value]),
+                OrmRide.departure_at < before,
+            )
+        )
+        return [self._map_to_domain(r) for r in result.scalars().all()]
+
     async def hide_template(self, ride_id: int) -> bool:
         template = await self.get_by_id(ride_id)
         if not template:

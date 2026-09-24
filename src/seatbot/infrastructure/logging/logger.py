@@ -1,16 +1,15 @@
 import json
 import logging.config
-import os
 from pathlib import Path
 
 
 def setup_logging(config_path: str) -> None:
     path = Path(config_path)
-    if path.exists():
-        with open(path, "r", encoding="utf-8") as f:
-            config = json.load(f)
-        logging.config.dictConfig(config)
-    else:
+    if not path.exists():
         logging.basicConfig(level=logging.INFO)
-
-    os.makedirs("logs", exist_ok=True)
+        return
+    config = json.loads(path.read_text(encoding="utf-8"))
+    for handler in config.get("handlers", {}).values():
+        if filename := handler.get("filename"):
+            Path(filename).parent.mkdir(parents=True, exist_ok=True)
+    logging.config.dictConfig(config)

@@ -11,6 +11,7 @@ from dishka.integrations.aiogram_dialog import inject
 
 from seatbot.application.services.payment import PaymentService
 from seatbot.domain.schemas import TransactionStatus
+from seatbot.infrastructure.config import AppConfig
 from seatbot.infrastructure.database.dao import TransactionsDAO, UsersDAO
 from seatbot.infrastructure.notifications import MessageBuilder, fmt_amount
 
@@ -35,10 +36,13 @@ async def get_balance_data(
     }
 
 
-async def get_top_up_amount_data(**_kwargs: Any) -> dict[str, Any]:
+@inject
+async def get_top_up_amount_data(app_config: FromDishka[AppConfig], **_kwargs: Any) -> dict[str, Any]:
     return {
         "amount_prompt": (
-            "💳 <b>Пополнение баланса</b>\n\nВведите сумму в BYN (от 1 до 1000):\nПример: <code>50</code>"
+            "💳 <b>Пополнение баланса</b>\n\n"
+            f"Введите сумму в BYN (от {fmt_amount(app_config.topup_min_byn)} "
+            f"до {fmt_amount(app_config.topup_max_byn)}):\nПример: <code>50</code>"
         ),
         "back_btn": "⬅️ Назад",
     }
@@ -107,13 +111,15 @@ async def on_top_up_clicked(
 
 
 async def on_amount_entered(message: Message, widget: MessageInput, manager: DialogManager) -> None:
+    app_config: AppConfig = await manager.middleware_data["dishka_container"].get(AppConfig)
+    low, high = app_config.topup_min_byn, app_config.topup_max_byn
     text = (message.text or "").strip().replace(",", ".")
     try:
         amount = float(text)
-        if not 1 <= amount <= 1000:
+        if not low <= amount <= high:
             raise ValueError
     except ValueError:
-        await message.answer("❌ Введите число от 1 до 1000.")
+        await message.answer(f"❌ Введите число от {fmt_amount(low)} до {fmt_amount(high)}.")
         return
     manager.dialog_data["top_up_amount"] = amount
     await manager.switch_to(BalanceSG.top_up_method)
@@ -150,7 +156,7 @@ async def on_stars_clicked(
         chat_id=user_id,
         title=f"Пополнение баланса на {fmt_amount(amount)} BYN",
         description=f"Пополнение депозита SeatBot на {fmt_amount(amount)} BYN",
-        payload=f"stars_topup:{amount}",
+        payload=payment_service.stars_payload(amount),
         currency="XTR",
         prices=[LabeledPrice(label=f"{fmt_amount(amount)} BYN", amount=stars)],
     )
@@ -162,20 +168,17 @@ async def on_cancel_invoice_clicked(
     callback: CallbackQuery,
     button: Button,
     manager: DialogManager,
-    transactions_dao: FromDishka[TransactionsDAO],
+    payment_service: FromDishka[PaymentService],
 ) -> None:
     invoice_id: str = manager.dialog_data["invoice_id"]
-    transaction = await transactions_dao.get_by_payment_id_for_update(invoice_id)
-    if transaction and transaction.status == TransactionStatus.COMPLETED:
-        await callback.answer("Платёж уже оплачен, баланс пополнен", show_alert=True)
-        await manager.start(MainMenuSG.main, mode=StartMode.RESET_STACK)
-        return
-    if not transaction or transaction.status != TransactionStatus.PENDING:
-        await callback.answer("Платёж уже отменён", show_alert=True)
-        await manager.start(MainMenuSG.main, mode=StartMode.RESET_STACK)
-        return
-    await transactions_dao.update_status(invoice_id, TransactionStatus.FAILED)
-    await callback.answer("Платёж отменён", show_alert=True)
+    status = await payment_service.cancel_cryptobot_invoice(invoice_id)
+    if status == TransactionStatus.COMPLETED:
+        text = "Платёж уже оплачен, баланс пополнен"
+    elif status == TransactionStatus.FAILED:
+        text = "Платёж отменён"
+    else:
+        text = "Платёж не найден"
+    await callback.answer(text, show_alert=True)
     await manager.start(MainMenuSG.main, mode=StartMode.RESET_STACK)
 
 

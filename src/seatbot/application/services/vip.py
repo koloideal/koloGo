@@ -2,11 +2,9 @@ from seatbot.application.services.bot import BotService
 from seatbot.domain.exceptions import InsufficientBalanceError
 from seatbot.domain.schemas import TransactionType, User
 from seatbot.infrastructure.cache import CacheKeys, RedisService
+from seatbot.infrastructure.config.app import AppConfig
 from seatbot.infrastructure.database.dao import SettingsDAO, TransactionsDAO, UsersDAO
 from seatbot.infrastructure.notifications import MessageBuilder
-
-VIP_PRICE_KEY = "vip_price"
-VIP_PRICE_DEFAULT = 100.0
 
 
 class VipService:
@@ -19,6 +17,7 @@ class VipService:
         message_builder: MessageBuilder,
         cache: RedisService,
         cache_keys: CacheKeys,
+        app_config: AppConfig,
     ) -> None:
         self._settings_dao = settings_dao
         self._users_dao = users_dao
@@ -27,17 +26,20 @@ class VipService:
         self._messages = message_builder
         self._cache = cache
         self._cache_keys = cache_keys
+        self._app_config = app_config
 
     async def get_vip_price(self) -> float:
         cached = await self._cache.get(self._cache_keys.vip_price)
         if cached is not None:
             return cached
-        price = await self._settings_dao.get_float(VIP_PRICE_KEY, VIP_PRICE_DEFAULT)
+        price = await self._settings_dao.get_float(
+            self._app_config.vip_price_key, self._app_config.vip_price_default
+        )
         await self._cache.set(self._cache_keys.vip_price, price)
         return price
 
     async def set_vip_price(self, price: float) -> None:
-        await self._settings_dao.set_float(VIP_PRICE_KEY, price)
+        await self._settings_dao.set_float(self._app_config.vip_price_key, price)
         await self._cache.delete(self._cache_keys.vip_price)
 
     async def purchase_vip(self, user: User) -> User:
@@ -56,6 +58,7 @@ class VipService:
             type=TransactionType.VIP_PURCHASE,
         )
         await self._cache.delete(self._cache_keys.user_vip, user_id=user.user_id)
+        await self._cache.delete(self._cache_keys.users_stats)
         result = await self._users_dao.get_by_id(user.user_id)
         if result is None:
             raise InsufficientBalanceError(required=price, available=0.0)

@@ -44,5 +44,6 @@ def load_config(config_path: str) -> Config:
             ),
             arrival_debounce=int(tracking_raw.get("arrival_debounce", bot_raw.get("arrival_debounce", 2))),
             arrival_dwell_s=int(tracking_raw.get("arrival_dwell_s", 60)),
+            auto_complete_after_h=int(tracking_raw.get("auto_complete_after_h", 12)),
         ),
     )

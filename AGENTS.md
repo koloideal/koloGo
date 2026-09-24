@@ -24,6 +24,11 @@ Telegram-бот на aiogram для менеджмента платных пое
 - Все строки UI — на русском, встроены в диалоги напрямую (bot только русский).
 - Числа денег — `Decimal` в БД (`Numeric(10,2)`), `float` в domain-схемах.
 - Кэш-ключи — типобезопасные `CacheKey[CacheValue]` в `infrastructure/cache/keys.py`.
+- `PostCommit` (request scope): `BotService.notify_user`/`send_log_to_admin` и повторный `RedisService.delete` выполняются только после коммита транзакции запроса. Если нужен результат отправки сразу (счётчик доставок) — `notify_user_now`.
+- Баланс меняется только через `UsersDAO.increase_balance`/`decrease_balance` (SELECT … FOR UPDATE).
+- Константы, лимиты, тексты-справочники и маппинги статусов — только в `AppConfig` (`infrastructure/config/app.py`), инжектится через dishka (`FromDishka[AppConfig]`). Модульных глобальных констант нет.
+- Без докстрингов. Без `except Exception`/`BaseException` — ловить только конкретные исключения.
+- Тестовые прогоны на локальной БД — только в транзакции с откатом; шедулерные джобы на реальной БД не запускать.
 - Кэш — cache-aside в сервисах (`get` → DAO → `set`), сериализация домена в `cache/serializers.py`; при любой мутации, затрагивающей закэшированные данные, сервис обязан вызвать инвалидацию (`delete`). Чтение кэшированных списков/статов — только через методы сервисов (`RideService.get_upcoming_rides`, `get_ride_stats`, `list_pending_bookings`, `next_active_booking`, `user_booking_counts`, `list_templates`, `list_active_rides`, `get_in_progress_ride`, `LocationService.list_all`), а не напрямую из DAO — иначе кэш обходится.
 
 ## Команды
@@ -53,3 +58,5 @@ Telegram-бот на aiogram для менеджмента платных пое
 - Отмена поездки админом → возврат всем + уведомление.
 - No-show: админ отмечает, возврата нет, в статистику не идёт как completed.
 - Трекинг поездки: админ жмёт «Старт поездки» → шлёт live-гео → статус `in_progress`, точки в `ride_track_points`; прибытие — отрезок между апдейтами прошёл в `arrival_radius_m` (150м) от точки прибытия `arrival_debounce` (2) раза подряд → авто-завершение; также авто-завершение, если стоп live-гео в радиусе или в радиусе нет новых точек `arrival_dwell_s` (60с, джоба `finish_stale_arrivals`). Без координат точки прибытия автозавершения нет. Одно сообщение пассажирам со статой (выезд/прибытие/время/дистанция/скорости) + кнопка маршрута Яндекс. Стоп live-гео вне радиуса → трекинг снимается, поездка завершается вручную.
+- Незавершённые поездки: OPEN через 30 мин после выезда → CLOSED + админу «не стартовала» с кнопкой «🏁 Завершить»; CLOSED/IN_PROGRESS через `auto_complete_after_h` (12 ч) после выезда → автоматический `complete_ride` (джоба `auto_complete_stale_rides`).
+- CryptoBot: инвойс создаётся с `expires_in` 15 мин; `PaymentService.process_cryptobot_invoice` сначала проверяет оплату, потом истечение; отмена удаляет инвойс в CryptoBot; при старте бота опрос ожидающих инвойсов восстанавливается. Stars: обязателен ответ на `pre_checkout_query`; `transactions.payment_id` уникален.
