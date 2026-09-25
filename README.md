@@ -81,6 +81,13 @@ $ just run
 
 Вот и всё! Напишите боту `/start` как пассажир или `/admin` как водитель.
 
+Для мониторинга бот поднимает health-check — хост и порт настраиваются в секции `[health]`:
+
+```console
+$ curl http://localhost:8080/health
+OK
+```
+
 ## 🛠 Разработка
 
 ```console

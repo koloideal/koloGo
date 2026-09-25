@@ -1,7 +1,7 @@
 import toml
 
-from .models import (BotConfig, Config, CryptoBotConfig, GeoConfig, PostgresConfig,
-                     RedisConfig, TrackingConfig)
+from .models import (BotConfig, Config, CryptoBotConfig, GeoConfig, HealthConfig,
+                     PostgresConfig, RedisConfig, TrackingConfig)
 
 
 def load_config(config_path: str) -> Config:
@@ -10,6 +10,7 @@ def load_config(config_path: str) -> Config:
     cb = raw["cryptobot"]
     geo_raw = raw.get("geo", {})
     tracking_raw = raw.get("tracking", {})
+    health_raw = raw.get("health", {})
     cryptobot = CryptoBotConfig(
         api_token=cb["api_token"],
         api_url=cb.get("api_url", "https://pay.crypt.bot/api/"),
@@ -45,5 +46,10 @@ def load_config(config_path: str) -> Config:
             arrival_debounce=int(tracking_raw.get("arrival_debounce", bot_raw.get("arrival_debounce", 2))),
             arrival_dwell_s=int(tracking_raw.get("arrival_dwell_s", 60)),
             auto_complete_after_h=int(tracking_raw.get("auto_complete_after_h", 12)),
+        ),
+        health=HealthConfig(
+            host=str(health_raw.get("host", "0.0.0.0")),
+            port=int(health_raw.get("port", 8080)),
+            path=str(health_raw.get("path", "/health")),
         ),
     )

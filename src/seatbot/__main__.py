@@ -19,7 +19,8 @@ from seatbot.application.services.bot import BotService
 from seatbot.application.services.payment import PaymentService
 from seatbot.infrastructure.config import AppConfig, load_config
 from seatbot.infrastructure.config.models import Config
-from seatbot.infrastructure.ioc import (DatabaseProvider, RedisProvider,
+from seatbot.infrastructure.health import HealthServer
+from seatbot.infrastructure.ioc import (DatabaseProvider, HealthProvider, RedisProvider,
                                         SchedulerProvider, ServicesProvider, TimeProvider,
                                         UserAppProvider)
 from seatbot.infrastructure.logging.logger import setup_logging
@@ -67,6 +68,7 @@ async def main() -> None:
     )
     container = make_async_container(
         DatabaseProvider(),
+        HealthProvider(),
         RedisProvider(),
         TimeProvider(),
         SchedulerProvider(),
@@ -136,8 +138,13 @@ async def main() -> None:
         if resumed:
             logger.info("Resumed polling for %s pending CryptoBot invoice(s)", resumed)
 
+    await container.get(HealthServer)
+
     logger.critical("Starting SeatBot...")
-    await dp.start_polling(bot)
+    try:
+        await dp.start_polling(bot)
+    finally:
+        await container.close()
 
 
 if __name__ == "__main__":

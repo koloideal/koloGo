@@ -50,6 +50,13 @@ class TrackingConfig:
 
 
 @dataclass
+class HealthConfig:
+    host: str = "0.0.0.0"
+    port: int = 8080
+    path: str = "/health"
+
+
+@dataclass
 class Config:
     postgres: PostgresConfig
     redis: RedisConfig
@@ -57,3 +64,4 @@ class Config:
     cryptobot: CryptoBotConfig
     geo: GeoConfig
     tracking: TrackingConfig
+    health: HealthConfig

@@ -22,12 +22,14 @@ from seatbot.application.services.user import UserService
 from seatbot.application.services.vip import VipService
 from seatbot.infrastructure.cache import CacheKeys, RedisService
 from seatbot.infrastructure.config.app import AppConfig
-from seatbot.infrastructure.config.models import Config, GeoConfig, TrackingConfig
+from seatbot.infrastructure.config.models import (Config, GeoConfig, HealthConfig,
+                                                  TrackingConfig)
 from seatbot.infrastructure.database.config import new_session_maker
 from seatbot.infrastructure.database.dao import (BookingsDAO, LocationsDAO, RequisitesDAO,
                                                  RidesDAO, SettingsDAO, TrackPointsDAO,
                                                  TransactionsDAO, UsersDAO)
 from seatbot.infrastructure.geo import GeoService
+from seatbot.infrastructure.health import HealthServer
 from seatbot.infrastructure.notifications import MessageBuilder
 from seatbot.infrastructure.payments import CryptoBotPaymentService
 from seatbot.infrastructure.post_commit import PostCommit
@@ -123,6 +125,21 @@ class TimeProvider(Provider):
     @provide
     def get_local_clock(self, config: Config) -> LocalClock:
         return LocalClock(ZoneInfo(config.bot.timezone))
+
+
+class HealthProvider(Provider):
+    scope = Scope.APP
+
+    @provide
+    def get_health_config(self, config: Config) -> HealthConfig:
+        return config.health
+
+    @provide
+    async def get_health_server(self, health_config: HealthConfig) -> AsyncIterable[HealthServer]:
+        server = HealthServer(health_config)
+        await server.start()
+        yield server
+        await server.stop()
 
 
 class SchedulerProvider(Provider):

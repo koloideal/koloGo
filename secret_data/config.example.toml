@@ -30,3 +30,8 @@ arrival_debounce = 2
 arrival_dwell_s = 60
 # через сколько часов после времени выезда незавершённая поездка завершается автоматически
 auto_complete_after_h = 12
+
+[health]
+host = "0.0.0.0"
+port = 8080
+path = "/health"
