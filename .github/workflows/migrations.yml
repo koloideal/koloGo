@@ -1,0 +1,65 @@
+name: Migrations
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "alembic/**"
+      - "alembic.ini"
+      - "src/seatbot/infrastructure/database/**"
+      - "src/seatbot/infrastructure/config/**"
+      - "secret_data/config.example.toml"
+      - "uv.lock"
+      - ".github/workflows/migrations.yml"
+  pull_request:
+    paths:
+      - "alembic/**"
+      - "alembic.ini"
+      - "src/seatbot/infrastructure/database/**"
+      - "src/seatbot/infrastructure/config/**"
+      - "secret_data/config.example.toml"
+      - "uv.lock"
+      - ".github/workflows/migrations.yml"
+
+concurrency:
+  group: migrations-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  migrations:
+    name: upgrade → downgrade → upgrade
+    runs-on: ubuntu-latest
+    env:
+      PG_USER: seatbot
+      PG_PASSWORD: seatbot
+      PG_DB: seatbot
+      SEATBOT_CONFIG: ci-config.toml
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: seatbot
+          POSTGRES_PASSWORD: seatbot
+          POSTGRES_DB: seatbot
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.13"
+          enable-cache: true
+      - run: uv sync --locked --all-groups
+      - name: Build CI config from example
+        run: |
+          sed -e "s/^user = \"\"/user = \"$PG_USER\"/" \
+              -e "s/^password = \"\"/password = \"$PG_PASSWORD\"/" \
+              -e "s/^name = \"seatbot\"/name = \"$PG_DB\"/" \
+              secret_data/config.example.toml > "$SEATBOT_CONFIG"
+      - run: uv run alembic upgrade head
+      - run: uv run alembic downgrade base
+      - run: uv run alembic upgrade head

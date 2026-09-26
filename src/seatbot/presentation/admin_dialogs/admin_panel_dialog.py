@@ -34,7 +34,7 @@ async def get_panel(
     clock: FromDishka[LocalClock],
     **_kwargs: Any,
 ) -> dict[str, Any]:
-    lines = ["🚗 Привет, <b>Создатель</b>, rewrite in Rust please\n"]
+    lines = ["🚗 Привет, <b>Создатель</b>\n"]
     in_progress = await ride_service.get_in_progress_ride()
     upcoming = next((r for r in await ride_service.list_active_rides() if r.departure_at > clock.now()), None)
     pending_count = len(await ride_service.list_pending_bookings())

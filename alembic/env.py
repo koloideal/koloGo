@@ -1,4 +1,5 @@
 import asyncio
+import os
 from logging.config import fileConfig
 
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -20,7 +21,7 @@ if config.config_file_name is not None:
 
 target_metadata = Base.metadata
 
-db_config = load_config("secret_data/config.toml")
+db_config = load_config(os.environ.get("SEATBOT_CONFIG", "secret_data/config.toml"))
 
 
 def run_migrations_offline() -> None:
