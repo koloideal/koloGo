@@ -5,9 +5,9 @@ from logging.config import fileConfig
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from alembic import context
-from seatbot.infrastructure.config.loader import load_config
-from seatbot.infrastructure.database.models.base import Base
-from seatbot.infrastructure.database.models import (  # noqa: F401 — import for metadata registration
+from kologo.infrastructure.config.loader import load_config
+from kologo.infrastructure.database.models.base import Base
+from kologo.infrastructure.database.models import (  # noqa: F401 — import for metadata registration
     Booking,
     Ride,
     Transaction,
@@ -21,7 +21,7 @@ if config.config_file_name is not None:
 
 target_metadata = Base.metadata
 
-db_config = load_config(os.environ.get("SEATBOT_CONFIG", "secret_data/config.toml"))
+db_config = load_config(os.environ.get("KOLOGO_CONFIG", "secret_data/config.toml"))
 
 
 def run_migrations_offline() -> None:

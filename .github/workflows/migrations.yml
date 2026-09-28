@@ -6,8 +6,8 @@ on:
     paths:
       - "alembic/**"
       - "alembic.ini"
-      - "src/seatbot/infrastructure/database/**"
-      - "src/seatbot/infrastructure/config/**"
+      - "src/kologo/infrastructure/database/**"
+      - "src/kologo/infrastructure/config/**"
       - "secret_data/config.example.toml"
       - "uv.lock"
       - ".github/workflows/migrations.yml"
@@ -15,8 +15,8 @@ on:
     paths:
       - "alembic/**"
       - "alembic.ini"
-      - "src/seatbot/infrastructure/database/**"
-      - "src/seatbot/infrastructure/config/**"
+      - "src/kologo/infrastructure/database/**"
+      - "src/kologo/infrastructure/config/**"
       - "secret_data/config.example.toml"
       - "uv.lock"
       - ".github/workflows/migrations.yml"
@@ -30,17 +30,17 @@ jobs:
     name: upgrade → downgrade → upgrade
     runs-on: ubuntu-latest
     env:
-      PG_USER: seatbot
-      PG_PASSWORD: seatbot
-      PG_DB: seatbot
-      SEATBOT_CONFIG: ci-config.toml
+      PG_USER: kologo
+      PG_PASSWORD: kologo
+      PG_DB: kologo
+      KOLOGO_CONFIG: ci-config.toml
     services:
       postgres:
         image: postgres:17
         env:
-          POSTGRES_USER: seatbot
-          POSTGRES_PASSWORD: seatbot
-          POSTGRES_DB: seatbot
+          POSTGRES_USER: kologo
+          POSTGRES_PASSWORD: kologo
+          POSTGRES_DB: kologo
         ports: ["5432:5432"]
         options: >-
           --health-cmd pg_isready
@@ -58,8 +58,8 @@ jobs:
         run: |
           sed -e "s/^user = \"\"/user = \"$PG_USER\"/" \
               -e "s/^password = \"\"/password = \"$PG_PASSWORD\"/" \
-              -e "s/^name = \"seatbot\"/name = \"$PG_DB\"/" \
-              secret_data/config.example.toml > "$SEATBOT_CONFIG"
+              -e "s/^name = \"kologo\"/name = \"$PG_DB\"/" \
+              secret_data/config.example.toml > "$KOLOGO_CONFIG"
       - run: uv run alembic upgrade head
       - run: uv run alembic downgrade base
       - run: uv run alembic upgrade head

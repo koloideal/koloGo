@@ -34,23 +34,26 @@ migrate-new msg="auto":
 # ==============================================================================
 
 run:
-    uv run python -m seatbot
+    uv run python -m kologo
 
 
 watch:
-    uv run watchfiles --filter python 'python -m seatbot' src
+    uv run watchfiles --filter python 'python -m kologo' src
 
 
 # ==============================================================================
 # Quality
 # ==============================================================================
 lint:
-    uv run ruff check src
-    uv run isort --check-only src
+    uv run ruff check src tests
+    uv run isort --check-only src tests
 
 format:
-    uv run ruff format src
-    uv run isort src
+    uv run ruff format src tests
+    uv run isort src tests
 
 typecheck:
-    uv run mypy src
+    uv run mypy src tests
+
+test:
+    uv run pytest

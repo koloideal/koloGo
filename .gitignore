@@ -13,12 +13,9 @@ deploy.sh
 
 secret_data/config.toml
 logs
-test.py
-test2.py
 
 .kiro
 .idea
 .vscode
 *.mo
-test_*.py
 .*cache
