@@ -30,7 +30,7 @@ async def get_main_menu(
     user_id = dialog_manager.middleware_data["event_from_user"].id
     user = await users_dao.get_by_id(user_id)
     has_approved_booking = await bookings_dao.has_approved_for_user(user_id)
-    lines = ["🚗 <b>koloGo — поездки в Минск</b>\n"]
+    lines = ["🚗 <b>koloGo — поездки по маршрутам</b>\n"]
     if user and user.is_vip:
         lines.append("⭐ <b>VIP:</b> поездки бесплатно, апрув автоматически.")
     if user and user.balance > 0:
