@@ -1,7 +1,7 @@
 import pytest
 
-from seatbot.domain.exceptions import NoFreeSeatsError, RideNotBookableError
-from seatbot.domain.schemas import BookingStatus, RideStatus, TransactionType
+from kologo.domain.exceptions import NoFreeSeatsError, RideNotBookableError
+from kologo.domain.schemas import BookingStatus, RideStatus, TransactionType
 from tests.conftest import ServiceFixture
 from tests.factories import make_booking, make_ride, make_user
 

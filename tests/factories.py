@@ -1,6 +1,6 @@
 from datetime import UTC, datetime, timedelta
 
-from seatbot.domain.schemas import Booking, BookingStatus, Ride, RideStatus, User
+from kologo.domain.schemas import Booking, BookingStatus, Ride, RideStatus, User
 
 
 def make_ride(
@@ -34,8 +34,12 @@ def make_ride(
         origin=origin,
         destination=destination,
         vip_hold_minutes=vip_hold_minutes,
-        started_at=(now - timedelta(minutes=started_ago_minutes)) if started_ago_minutes is not None else None,
-        finished_at=(now - timedelta(minutes=finished_ago_minutes)) if finished_ago_minutes is not None else None,
+        started_at=(now - timedelta(minutes=started_ago_minutes))
+        if started_ago_minutes is not None
+        else None,
+        finished_at=(now - timedelta(minutes=finished_ago_minutes))
+        if finished_ago_minutes is not None
+        else None,
         track_distance_m=track_distance_m,
         track_max_speed_mps=track_max_speed_mps,
     )

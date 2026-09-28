@@ -1,8 +1,7 @@
-
-from seatbot.domain.exceptions import (AlreadyBookedError, NoFreeSeatsError,
-                                       RideNotBookableError, UserBannedError,
-                                       VipHoldActiveError)
-from seatbot.domain.schemas import BookingStatus, RideStatus, TransactionType
+from kologo.domain.exceptions import (AlreadyBookedError, NoFreeSeatsError,
+                                      RideNotBookableError, UserBannedError,
+                                      VipHoldActiveError)
+from kologo.domain.schemas import BookingStatus, RideStatus, TransactionType
 from tests.conftest import ServiceFixture
 from tests.factories import make_booking, make_ride, make_user
 
@@ -126,9 +125,7 @@ async def test_cancel_by_user_rejects_wrong_user(fx: ServiceFixture) -> None:
 
 async def test_cancel_by_user_rejects_completed_booking(fx: ServiceFixture) -> None:
     fx.rides.add(make_ride(ride_id=1, status=RideStatus.COMPLETED))
-    booking = fx.bookings.add(
-        make_booking(ride_id=1, user_id=1, status=BookingStatus.COMPLETED)
-    )
+    booking = fx.bookings.add(make_booking(ride_id=1, user_id=1, status=BookingStatus.COMPLETED))
     assert await fx.service.cancel_booking_by_user(booking.booking_id, 1) is None
 
 

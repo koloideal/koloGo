@@ -1,6 +1,6 @@
 import pytest
 
-from seatbot.infrastructure.geo import GeoService
+from kologo.infrastructure.geo import GeoService
 
 
 def test_haversine_same_point_is_zero(geo: GeoService) -> None:
@@ -51,4 +51,3 @@ def test_yandex_route_url_caps_points_at_config_limit(geo: GeoService) -> None:
     url = geo.yandex_route_url(points)
     rtext = url.split("rtext=")[1].split("&")[0]
     assert len(rtext.split("~")) == 20
-

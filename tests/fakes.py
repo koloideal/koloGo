@@ -3,18 +3,18 @@ from typing import Any, cast
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from seatbot.application.services.bot import BotService
-from seatbot.domain.exceptions import InsufficientBalanceError
-from seatbot.domain.schemas import (Booking, BookingStatus, Ride, RideStatus,
-                                    RideWithStats, Transaction, TransactionStatus,
-                                    TransactionType, User)
-from seatbot.infrastructure.cache.keys import CacheKey, CacheValue
-from seatbot.infrastructure.cache.service import RedisService
-from seatbot.infrastructure.database.dao.bookings_dao import BookingsDAO
-from seatbot.infrastructure.database.dao.rides_dao import RidesDAO
-from seatbot.infrastructure.database.dao.track_points_dao import TrackPointsDAO
-from seatbot.infrastructure.database.dao.transactions_dao import TransactionsDAO
-from seatbot.infrastructure.database.dao.users_dao import UsersDAO
+from kologo.application.services.bot import BotService
+from kologo.domain.exceptions import InsufficientBalanceError
+from kologo.domain.schemas import (Booking, BookingStatus, Ride, RideStatus,
+                                   RideWithStats, Transaction, TransactionStatus,
+                                   TransactionType, User)
+from kologo.infrastructure.cache.keys import CacheKey, CacheValue
+from kologo.infrastructure.cache.service import RedisService
+from kologo.infrastructure.database.dao.bookings_dao import BookingsDAO
+from kologo.infrastructure.database.dao.rides_dao import RidesDAO
+from kologo.infrastructure.database.dao.track_points_dao import TrackPointsDAO
+from kologo.infrastructure.database.dao.transactions_dao import TransactionsDAO
+from kologo.infrastructure.database.dao.users_dao import UsersDAO
 
 NO_SESSION = cast(AsyncSession, None)
 
@@ -41,9 +41,7 @@ class FakeRidesDAO(RidesDAO):
             return None
         return RideWithStats(
             ride=ride,
-            booked_seats=len(
-                await self._bookings.list_for_ride_with_status(ride_id, set(BookingStatus))
-            ),
+            booked_seats=len(await self._bookings.list_for_ride_with_status(ride_id, set(BookingStatus))),
             approved_seats=await self._bookings.count_approved_for_ride(ride_id),
             pending_seats=len(
                 await self._bookings.list_for_ride_with_status(ride_id, {BookingStatus.PENDING})
@@ -171,9 +169,7 @@ class FakeBookingsDAO(BookingsDAO):
             and (not only_active or b.status in (BookingStatus.PENDING, BookingStatus.APPROVED))
         ]
 
-    async def list_for_ride_with_status(
-        self, ride_id: int, statuses: set[BookingStatus]
-    ) -> list[Booking]:
+    async def list_for_ride_with_status(self, ride_id: int, statuses: set[BookingStatus]) -> list[Booking]:
         return [b for b in self.bookings.values() if b.ride_id == ride_id and b.status in statuses]
 
     async def set_status(self, booking_id: int, status: BookingStatus) -> Booking | None:

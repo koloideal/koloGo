@@ -3,13 +3,13 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from seatbot.application.services.ride import RideService
-from seatbot.infrastructure.cache import CacheKeys
-from seatbot.infrastructure.config.app import AppConfig
-from seatbot.infrastructure.config.models import GeoConfig
-from seatbot.infrastructure.geo import GeoService
-from seatbot.infrastructure.notifications import MessageBuilder
-from seatbot.infrastructure.time import LocalClock
+from kologo.application.services.ride import RideService
+from kologo.infrastructure.cache import CacheKeys
+from kologo.infrastructure.config.app import AppConfig
+from kologo.infrastructure.config.models import GeoConfig
+from kologo.infrastructure.geo import GeoService
+from kologo.infrastructure.notifications import MessageBuilder
+from kologo.infrastructure.time import LocalClock
 from tests.fakes import (FakeBookingsDAO, FakeBotService, FakeCache, FakeRidesDAO,
                          FakeTrackPointsDAO, FakeTransactionsDAO, FakeUsersDAO)
 

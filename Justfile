@@ -34,11 +34,11 @@ migrate-new msg="auto":
 # ==============================================================================
 
 run:
-    uv run python -m seatbot
+    uv run python -m kologo
 
 
 watch:
-    uv run watchfiles --filter python 'python -m seatbot' src
+    uv run watchfiles --filter python 'python -m kologo' src
 
 
 # ==============================================================================

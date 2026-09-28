@@ -1,4 +1,4 @@
-# SeatBot — агентские соглашения
+# koloGo — агентские соглашения
 
 ## О проекте
 Telegram-бот на aiogram для менеджмента платных поездок из колледжа в Минск.
@@ -12,7 +12,7 @@ Telegram-бот на aiogram для менеджмента платных пое
 - Redis (FSM + кэш), apscheduler, orjson
 - ruff / isort / mypy / pyright, Justfile, uv
 
-## Архитектура (DDD-слои в `src/seatbot`)
+## Архитектура (DDD-слои в `src/kologo`)
 - `domain/` — чистые dataclass-схемы сущностей и исключения, без зависимостей.
 - `application/` — сервисы (cross-cutting) и интеракторы (use-case) с командами и фасадами.
 - `infrastructure/` — конфиг, БД (models + dao), кэш, логирование, уведомления, шедулер, DI (`ioc.py`).

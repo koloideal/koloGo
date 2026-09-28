@@ -1,0 +1,323 @@
+from datetime import datetime
+from html import escape
+from typing import Any
+
+from aiogram import F
+from aiogram.types import CallbackQuery, Message
+from aiogram_dialog import Dialog, DialogManager, Window
+from aiogram_dialog.widgets.input import MessageInput
+from aiogram_dialog.widgets.kbd import (Button, Cancel, Group, ScrollingGroup, Select,
+                                        SwitchTo)
+from aiogram_dialog.widgets.text import Const, Format
+from dishka import FromDishka
+from dishka.integrations.aiogram_dialog import inject
+
+from kologo.application.services.statistics import StatisticsService
+from kologo.application.services.user import UserService
+from kologo.domain.schemas import UserStats
+from kologo.infrastructure.config import AppConfig
+from kologo.infrastructure.config.models import Config
+from kologo.infrastructure.database.dao import UsersDAO
+from kologo.infrastructure.notifications import fmt_amount, user_display
+
+from ..user_dialogs.states import DepositSG, UsersSG
+
+
+def _sort_value(stats: UserStats, field: str) -> float:
+    value = getattr(stats, field)
+    if isinstance(value, datetime):
+        return value.timestamp()
+    return float(value) if value is not None else 0.0
+
+
+def _sort_stats(stats: list[UserStats], mode: str, app_config: AppConfig) -> list[UserStats]:
+    modes = {m[0]: m for m in app_config.user_sort_modes}
+    _, _, field, reverse = modes.get(mode, app_config.user_sort_modes[0])
+    return sorted(stats, key=lambda s: _sort_value(s, field), reverse=reverse)
+
+
+def _sort_label(mode: str, app_config: AppConfig) -> str:
+    labels = {m[0]: m[1] for m in app_config.user_sort_modes}
+    return labels.get(mode, app_config.user_sort_modes[0][1])
+
+
+def _next_sort_mode(current: str, app_config: AppConfig) -> str:
+    order = [m[0] for m in app_config.user_sort_modes]
+    idx = order.index(current) if current in order else 0
+    return order[(idx + 1) % len(order)]
+
+
+@inject
+async def get_users_list(
+    dialog_manager: DialogManager,
+    statistics_service: FromDishka[StatisticsService],
+    config: FromDishka[Config],
+    app_config: FromDishka[AppConfig],
+    **_kwargs: Any,
+) -> dict[str, Any]:
+    sort_mode = dialog_manager.dialog_data.get("sort_mode", app_config.user_sort_modes[0][0])
+    stats = await statistics_service.all_users_stats(limit=100, exclude_user_id=config.bot.creator_id)
+    if not stats:
+        return {
+            "has_users": False,
+            "empty_text": "🚫 Нет пользователей.",
+            "back_btn": "⬅️ В панель",
+            "sort_btn": _sort_label(sort_mode, app_config),
+        }
+    stats = _sort_stats(stats, sort_mode, app_config)
+    items = []
+    for s in stats:
+        badges = []
+        if s.is_vip:
+            badges.append("⭐")
+        if s.is_banned:
+            badges.append("🚫")
+        badge_str = " " + "".join(badges) if badges else ""
+        uname = user_display(s.username, s.first_name, s.user_id)
+        first = s.first_name or "—"
+        items.append(
+            {
+                "user_id": s.user_id,
+                "title": f"{uname}{badge_str} • {first}",
+            }
+        )
+    return {
+        "has_users": True,
+        "users": items,
+        "back_btn": "⬅️ В панель",
+        "sort_btn": _sort_label(sort_mode, app_config),
+    }
+
+
+@inject
+async def get_user_detail(
+    dialog_manager: DialogManager,
+    statistics_service: FromDishka[StatisticsService],
+    users_dao: FromDishka[UsersDAO],
+    **_kwargs: Any,
+) -> dict[str, Any]:
+    if "user_id" not in dialog_manager.dialog_data:
+        start_data = dialog_manager.start_data
+        if isinstance(start_data, dict) and "user_id" in start_data:
+            dialog_manager.dialog_data["user_id"] = start_data["user_id"]
+    user_id: int = dialog_manager.dialog_data.get("user_id", 0)
+    if not user_id:
+        return {"user_text": "🚫 Пользователь не найден", "back_btn": "⬅️ Назад"}
+    stats = await statistics_service.user_stats(user_id)
+    user = await users_dao.get_by_id(user_id)
+    if not stats or not user:
+        return {"user_text": "🚫 Пользователь не найден", "back_btn": "⬅️ Назад"}
+    last_ride = stats.last_ride_at.strftime("%d.%m.%Y") if stats.last_ride_at else "—"
+    uname = user_display(user.username, user.first_name, user.user_id)
+    top_route_line = f"📍 Частый маршрут: <b>{escape(stats.top_route)}</b>\n" if stats.top_route else ""
+    text = (
+        f"<b>👤 Клиент</b>\n\n"
+        f"ID: <code>{user.user_id}</code>\n"
+        f"Имя: {uname}\n"
+        f"💳 Депозит: <b>{fmt_amount(user.balance)} BYN</b>\n"
+        f"🚗 Поездок завершено: <b>{stats.total_rides}</b>\n"
+        f"💰 Всего потрачено: <b>{fmt_amount(stats.total_spent)} BYN</b>\n"
+        f"{top_route_line}"
+        f"📅 Последняя бронь: {last_ride}\n"
+        f"⭐ VIP: {'да' if user.is_vip else 'нет'}\n"
+        f"🚫 В ЧС: {'да' if user.is_banned else 'нет'}"
+    )
+    return {
+        "user_text": text,
+        "is_banned": user.is_banned,
+        "is_vip": user.is_vip,
+        "ban_btn": "🚫 В ЧС" if not user.is_banned else "✅ Из ЧС",
+        "vip_btn": "⭐ Выдать VIP" if not user.is_vip else "⭐ Снять VIP",
+        "deposit_btn": "💰 Пополнить",
+        "decrease_btn": "💸 Списать",
+        "back_btn": "⬅️ К клиентам",
+    }
+
+
+@inject
+async def on_toggle_ban(
+    callback: CallbackQuery,
+    button: Button,
+    manager: DialogManager,
+    user_service: FromDishka[UserService],
+) -> None:
+    user_id: int = manager.dialog_data["user_id"]
+    user = await user_service.is_banned(user_id)
+    if user:
+        await user_service.set_unbanned(user_id)
+        await callback.answer("Удалён из ЧС", show_alert=True)
+    else:
+        await user_service.set_banned(user_id)
+        await callback.answer("Добавлен в ЧС", show_alert=True)
+    await manager.update({})
+
+
+@inject
+async def on_toggle_vip(
+    callback: CallbackQuery,
+    button: Button,
+    manager: DialogManager,
+    user_service: FromDishka[UserService],
+) -> None:
+    user_id: int = manager.dialog_data["user_id"]
+    is_vip = await user_service.is_vip(user_id)
+    await user_service.set_vip(user_id, not is_vip)
+    await callback.answer("VIP изменён", show_alert=True)
+    await manager.update({})
+
+
+async def on_deposit_click(callback: CallbackQuery, button: Button, manager: DialogManager) -> None:
+    user_id: int = manager.dialog_data["user_id"]
+    await manager.start(DepositSG.deposit_amount, data={"user_id": user_id})
+
+
+async def on_decrease_click(callback: CallbackQuery, button: Button, manager: DialogManager) -> None:
+    user_id: int = manager.dialog_data["user_id"]
+    await manager.start(DepositSG.decrease_amount, data={"user_id": user_id})
+
+
+async def on_user_selected(
+    callback: CallbackQuery,
+    select: Select,
+    manager: DialogManager,
+    item_id: str,
+) -> None:
+    manager.dialog_data["user_id"] = int(item_id)
+    await manager.switch_to(UsersSG.user_detail)
+
+
+async def on_search_click(callback: CallbackQuery, button: Button, manager: DialogManager) -> None:
+    await manager.switch_to(UsersSG.search)
+
+
+@inject
+async def on_sort_click(
+    callback: CallbackQuery,
+    button: Button,
+    manager: DialogManager,
+    app_config: FromDishka[AppConfig],
+) -> None:
+    current = manager.dialog_data.get("sort_mode", app_config.user_sort_modes[0][0])
+    manager.dialog_data["sort_mode"] = _next_sort_mode(current, app_config)
+    await manager.update({})
+
+
+async def on_search_input(message: Message, widget: MessageInput, manager: DialogManager) -> None:
+    query = (message.text or "").strip()
+    if not query:
+        await message.answer("❌ Введите запрос для поиска.")
+        return
+    manager.dialog_data["search_query"] = query
+    container = manager.middleware_data["dishka_container"]
+    statistics_service: StatisticsService = await container.get(StatisticsService)
+    config: Config = await container.get(Config)
+    stats = await statistics_service.search_users_stats(
+        query, limit=50, exclude_user_id=config.bot.creator_id
+    )
+    if len(stats) == 1:
+        manager.dialog_data["user_id"] = stats[0].user_id
+        await manager.switch_to(UsersSG.user_detail)
+    else:
+        await manager.switch_to(UsersSG.search_results)
+
+
+@inject
+async def get_search_results(
+    dialog_manager: DialogManager,
+    statistics_service: FromDishka[StatisticsService],
+    config: FromDishka[Config],
+    **_kwargs: Any,
+) -> dict[str, Any]:
+    query: str = dialog_manager.dialog_data.get("search_query", "")
+    if not query:
+        return {"has_users": False, "empty_text": "🚫 Пустой запрос.", "back_btn": "⬅️ Назад"}
+    stats = await statistics_service.search_users_stats(
+        query, limit=50, exclude_user_id=config.bot.creator_id
+    )
+    if not stats:
+        return {"has_users": False, "empty_text": "🚫 Ничего не найдено.", "back_btn": "⬅️ Назад"}
+    items = []
+    for s in stats:
+        badges = []
+        if s.is_vip:
+            badges.append("⭐")
+        if s.is_banned:
+            badges.append("🚫")
+        badge_str = " " + "".join(badges) if badges else ""
+        uname = user_display(s.username, s.first_name, s.user_id)
+        first = s.first_name or "—"
+        items.append(
+            {
+                "user_id": s.user_id,
+                "title": f"{uname}{badge_str} • {first}",
+            }
+        )
+    return {"has_users": True, "users": items, "back_btn": "⬅️ Назад"}
+
+
+users_dialog = Dialog(
+    Window(
+        Const("👥 <b>Клиенты</b>"),
+        ScrollingGroup(
+            Select(
+                Format("{item[title]}"),
+                id="users_sel",
+                item_id_getter=lambda item: str(item["user_id"]),
+                items="users",
+                on_click=on_user_selected,
+                when="has_users",
+            ),
+            width=1,
+            height=8,
+            id="users_scroll",
+        ),
+        Format("{empty_text}", when=~F["has_users"]),
+        Button(Format("{sort_btn}"), id="sort", on_click=on_sort_click, when="has_users"),
+        Button(Const("🔍 Поиск"), id="search", on_click=on_search_click),
+        Cancel(Format("{back_btn}")),
+        state=UsersSG.users_list,
+        getter=get_users_list,
+    ),
+    Window(
+        Format("{user_text}"),
+        Group(
+            Button(Format("{deposit_btn}"), id="deposit", on_click=on_deposit_click),
+            Button(Format("{decrease_btn}"), id="decrease", on_click=on_decrease_click),
+            width=2,
+        ),
+        Group(
+            Button(Format("{ban_btn}"), id="toggle_ban", on_click=on_toggle_ban),
+            Button(Format("{vip_btn}"), id="toggle_vip", on_click=on_toggle_vip),
+            width=2,
+        ),
+        SwitchTo(Format("{back_btn}"), id="back", state=UsersSG.users_list),
+        state=UsersSG.user_detail,
+        getter=get_user_detail,
+    ),
+    Window(
+        Const("🔍 <b>Поиск клиентов</b>\n\nВведите имя, username или ID для поиска:"),
+        MessageInput(on_search_input),
+        SwitchTo(Const("⬅️ Назад"), id="back", state=UsersSG.users_list),
+        state=UsersSG.search,
+    ),
+    Window(
+        Const("🔍 <b>Результаты поиска</b>"),
+        ScrollingGroup(
+            Select(
+                Format("{item[title]}"),
+                id="users_search_sel",
+                item_id_getter=lambda item: str(item["user_id"]),
+                items="users",
+                on_click=on_user_selected,
+                when="has_users",
+            ),
+            width=1,
+            height=8,
+            id="users_search_scroll",
+        ),
+        Format("{empty_text}", when=~F["has_users"]),
+        SwitchTo(Const("⬅️ Назад"), id="back", state=UsersSG.users_list),
+        state=UsersSG.search_results,
+        getter=get_search_results,
+    ),
+)

@@ -1,5 +1,5 @@
-from seatbot.domain.schemas import BookingStatus, RideStatus
-from seatbot.infrastructure.notifications import MessageBuilder, fmt_amount, fmt_duration
+from kologo.domain.schemas import BookingStatus, RideStatus
+from kologo.infrastructure.notifications import MessageBuilder, fmt_amount, fmt_duration
 from tests.factories import make_booking, make_ride
 
 

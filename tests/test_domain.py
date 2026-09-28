@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from seatbot.domain.schemas import RideGeoStats, RideStatus, RideWithStats
+from kologo.domain.schemas import RideGeoStats, RideStatus, RideWithStats
 from tests.factories import make_ride
 
 
