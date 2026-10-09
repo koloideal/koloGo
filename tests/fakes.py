@@ -107,7 +107,7 @@ class FakeRidesDAO(RidesDAO):
     async def get_in_progress(self) -> Ride | None:
         return next((r for r in self.rides.values() if r.status == RideStatus.IN_PROGRESS), None)
 
-    async def list_templates(self, limit: int = 10) -> list[Ride]:
+    async def list_templates(self, limit: int = 10, scan_limit: int = 200) -> list[Ride]:
         return []
 
 
