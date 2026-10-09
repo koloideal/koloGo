@@ -72,6 +72,7 @@ class Ride:
     finished_at: datetime | None = None
     track_distance_m: float = 0.0
     track_max_speed_mps: float = 0.0
+    departure_notified: bool = False
 
     @property
     def is_free(self) -> bool:

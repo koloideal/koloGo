@@ -133,16 +133,19 @@ class RidesDAO:
         template = await self.get_by_id(ride_id)
         if not template:
             return False
-        await self.session.execute(
-            update(OrmRide)
-            .where(
+        result = await self.session.execute(
+            select(OrmRide).where(
                 OrmRide.price == template.price,
+                OrmRide.seats_total == template.seats_total,
                 OrmRide.note.is_not_distinct_from(template.note),
                 OrmRide.origin == template.origin,
                 OrmRide.destination == template.destination,
             )
-            .values(template_hidden=True)
         )
+        dep = template.departure_at
+        for orm_ride in result.scalars().all():
+            if orm_ride.departure_at.hour == dep.hour and orm_ride.departure_at.minute == dep.minute:
+                orm_ride.template_hidden = True
         await self.session.flush()
         return True
 
@@ -156,22 +159,31 @@ class RidesDAO:
         orm_ride = result.scalar_one_or_none()
         return self._map_to_domain(orm_ride) if orm_ride else None
 
-    async def list_templates(self, limit: int = 10) -> list[Ride]:
+    async def list_templates(self, limit: int = 10, scan_limit: int = 200) -> list[Ride]:
         query = (
             select(OrmRide)
             .where(OrmRide.template_hidden.is_(False))
             .order_by(OrmRide.departure_at.desc())
-            .limit(limit * 3)
+            .limit(scan_limit)
         )
         result = await self.session.execute(query)
         rides = [self._map_to_domain(r) for r in result.scalars().all()]
-        seen: set[tuple[float, str | None, str, str]] = set()
+        seen: set[tuple[str, str, float, int, str | None, int, int]] = set()
         unique: list[Ride] = []
         for ride in rides:
-            key = (float(ride.price), ride.note, ride.origin, ride.destination)
-            if key not in seen:
-                seen.add(key)
-                unique.append(ride)
+            key = (
+                ride.origin,
+                ride.destination,
+                float(ride.price),
+                ride.seats_total,
+                ride.note,
+                ride.departure_at.hour,
+                ride.departure_at.minute,
+            )
+            if key in seen:
+                continue
+            seen.add(key)
+            unique.append(ride)
             if len(unique) >= limit:
                 break
         return unique
@@ -208,6 +220,7 @@ class RidesDAO:
             return None
         orm_ride.departure_at = departure_at
         orm_ride.remind_sent = False
+        orm_ride.departure_notified = False
         await self.session.flush()
         return self._map_to_domain(orm_ride)
 
@@ -224,6 +237,13 @@ class RidesDAO:
         orm_ride = result.scalar_one_or_none()
         if orm_ride:
             orm_ride.remind_sent = True
+            await self.session.flush()
+
+    async def mark_departure_notified(self, ride_id: int) -> None:
+        result = await self.session.execute(select(OrmRide).where(OrmRide.id == ride_id))
+        orm_ride = result.scalar_one_or_none()
+        if orm_ride:
+            orm_ride.departure_notified = True
             await self.session.flush()
 
     async def set_finished_at(self, ride_id: int, finished_at: datetime) -> None:
@@ -408,4 +428,5 @@ class RidesDAO:
             finished_at=orm_ride.finished_at,
             track_distance_m=orm_ride.track_distance_m,
             track_max_speed_mps=orm_ride.track_max_speed_mps,
+            departure_notified=orm_ride.departure_notified,
         )

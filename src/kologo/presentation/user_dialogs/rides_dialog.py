@@ -47,26 +47,13 @@ def payment_line(ride: Ride, user: User | None) -> str:
     return f"💵 Оплата по факту поездки: <b>{fmt_amount(price)} BYN</b>"
 
 
-def seats_word(n: int) -> str:
-    if n % 10 == 1 and n % 100 != 11:
-        return "место"
-    if 2 <= n % 10 <= 4 and not 12 <= n % 100 <= 14:
-        return "места"
-    return "мест"
-
-
 def auto_approved_for(ride: Ride, user: User | None) -> bool:
     return ride.auto_approve or bool(user and user.is_vip)
 
 
 def queue_line(rws: RideWithStats, user: User | None) -> str:
-    if auto_approved_for(rws.ride, user) or rws.free_seats <= 0:
+    if auto_approved_for(rws.ride, user):
         return ""
-    if rws.pending_seats:
-        return (
-            f"⏳ Заявок в очереди: <b>{rws.pending_seats}</b> на <b>{rws.free_seats}</b> "
-            f"{seats_word(rws.free_seats)} — решение за водителем."
-        )
     return "⏳ Брони подтверждает водитель."
 
 
@@ -109,8 +96,7 @@ async def get_rides_list(
             {
                 "ride_id": rws.ride.ride_id,
                 "title": (
-                    f"{mark}{clock.fmt(rws.ride.departure_at, '%d.%m %H:%M')} • {price} • "
-                    f"{rws.free_seats}/{rws.ride.seats_total} мест{route_part}"
+                    f"{mark}{clock.fmt(rws.ride.departure_at, '%d.%m %H:%M')} • {price}{route_part}"
                 ),
             }
         )
@@ -140,7 +126,7 @@ async def get_ride_detail(
     user = await users_dao.get_by_id(user_id)
     existing = await bookings_dao.get_by_ride_and_user(ride_id, user_id)
 
-    ride_text = messages.ride_card(rws)
+    ride_text = messages.ride_card(rws, show_seats=False)
     now = clock.now()
     hold_active = rws.ride.is_vip_hold_active(now)
     is_vip = bool(user and user.is_vip)
@@ -229,8 +215,7 @@ async def get_book_confirm(
     else:
         lines.append(
             "⏳ Заявку рассмотрит водитель. "
-            f"Сейчас заявок: <b>{rws.pending_seats}</b>, свободных мест: <b>{rws.free_seats}</b>.\n"
-            "Если места займут раньше — заявка отклонится автоматически, ничего не спишется."
+            "Если место не достанется — заявка отклонится автоматически, ничего не спишется."
         )
     lines.append("\n<i>Отменить бронь можно в «Мои брони» до отправления.</i>")
     return {"confirm_text": "\n".join(lines), "can_confirm": error is None}

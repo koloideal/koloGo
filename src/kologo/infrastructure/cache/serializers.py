@@ -41,6 +41,7 @@ def load_ride(data: dict[str, Any]) -> Ride:
         finished_at=_opt_dt(data.get("finished_at")),
         track_distance_m=data.get("track_distance_m", 0.0),
         track_max_speed_mps=data.get("track_max_speed_mps", 0.0),
+        departure_notified=data.get("departure_notified", False),
     )
 
 

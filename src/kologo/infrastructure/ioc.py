@@ -37,6 +37,7 @@ from kologo.infrastructure.scheduling.payment_poller import PaymentStatusPoller
 from kologo.infrastructure.scheduling.tasks import (auto_close_past_rides,
                                                     auto_complete_stale_rides,
                                                     finish_stale_arrivals,
+                                                    notify_departure_due,
                                                     send_ride_reminders)
 from kologo.infrastructure.time import LocalClock
 
@@ -157,6 +158,12 @@ class SchedulerProvider(Provider):
             trigger=IntervalTrigger(minutes=1),
             kwargs={"container": async_container},
             name="send_ride_reminders",
+        )
+        scheduler.add_job(
+            func=notify_departure_due,
+            trigger=IntervalTrigger(minutes=1),
+            kwargs={"container": async_container},
+            name="notify_departure_due",
         )
         scheduler.add_job(
             func=auto_complete_stale_rides,

@@ -60,6 +60,28 @@ async def finish_stale_arrivals(container: AsyncContainer) -> None:
             logger.info("Auto-finished %s ride(s) stuck at destination", finished)
 
 
+async def notify_departure_due(container: AsyncContainer) -> None:
+    async with container() as scope:
+        rides_dao: RidesDAO = await scope.get(RidesDAO)
+        bookings_dao: BookingsDAO = await scope.get(BookingsDAO)
+        bot_service: BotService = await scope.get(BotService)
+        messages: MessageBuilder = await scope.get(MessageBuilder)
+        clock: LocalClock = await scope.get(LocalClock)
+
+        now = clock.now()
+        for ride in await rides_dao.list_active():
+            if ride.status != RideStatus.OPEN or ride.departure_notified:
+                continue
+            if ride.departure_at > now:
+                continue
+            await rides_dao.mark_departure_notified(ride.ride_id)
+            approved = await bookings_dao.count_approved_for_ride(ride.ride_id)
+            await bot_service.send_log_to_admin(
+                messages.ride_departure_due_admin_notification(ride, approved),
+                reply_markup=messages.ride_departure_due_keyboard(ride.ride_id),
+            )
+
+
 async def send_ride_reminders(container: AsyncContainer) -> None:
     async with container() as scope:
         rides_dao: RidesDAO = await scope.get(RidesDAO)

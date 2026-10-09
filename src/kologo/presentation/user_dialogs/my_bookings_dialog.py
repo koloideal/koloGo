@@ -97,13 +97,10 @@ async def get_booking_detail(
             route_url = geo.yandex_route_url(points)
     text = messages.booking_card(booking, ride, is_vip=bool(user and user.is_vip))
     if booking.status == BookingStatus.PENDING:
-        rws = await ride_service.get_ride_stats(ride.ride_id)
-        if rws:
-            text += (
-                f"\n\n⏳ Заявок в очереди: <b>{rws.pending_seats}</b>, свободных мест: <b>{rws.free_seats}</b>.\n"
-                "Решение за водителем — ответ придёт сообщением. "
-                "Если места займут раньше, заявка отклонится автоматически."
-            )
+        text += (
+            "\n\n⏳ Заявка ждёт решения водителя — ответ придёт сообщением. "
+            "Если место не достанется, заявка отклонится автоматически."
+        )
     return {
         "booking_text": text,
         "can_cancel": can_cancel,

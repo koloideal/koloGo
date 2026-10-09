@@ -60,7 +60,9 @@ class MessageBuilder:
             ]
         return [f"🕒 Отправление: <b>{self._clock.fmt(r.departure_at)}</b>"]
 
-    def ride_card(self, ride: Ride | RideWithStats, free_seats: int | None = None) -> str:
+    def ride_card(
+        self, ride: Ride | RideWithStats, free_seats: int | None = None, show_seats: bool = True
+    ) -> str:
         if isinstance(ride, RideWithStats):
             r = ride.ride
             free = ride.free_seats
@@ -92,9 +94,9 @@ class MessageBuilder:
             lines.append(f"🚙 <b>В пути</b> (дистанция: {r.track_distance_m / 1000:.1f} км)")
         elif r.status == RideStatus.CANCELLED:
             lines.append(f"🪑 Мест было: <b>{r.seats_total}</b>")
-        else:
+        elif show_seats:
             lines.append(f"🪑 Свободно мест: <b>{free}/{r.seats_total}</b>")
-        if approved or pending:
+        if show_seats and (approved or pending):
             lines.append(f"   (подтверждено: {approved}, ожидает: {pending})")
         if r.auto_approve:
             lines.append("⚡ Авто-одобрение включено")
@@ -546,6 +548,22 @@ class MessageBuilder:
             f"🪑 Подтверждённых пассажиров: <b>{approved_count}</b>\n\n"
             "Запись закрыта. Завершите поездку, чтобы списать оплату, или отмените её.\n"
             f"<i>Через {auto_complete_after_h} ч после выезда поездка завершится автоматически.</i>"
+        )
+
+    def ride_departure_due_admin_notification(self, ride: Ride, approved_count: int) -> str:
+        return (
+            f"🚀 <b>Время выезжать — поездка #{ride.ride_id}</b>\n\n"
+            f"🕒 Отправление: {self._clock.fmt(ride.departure_at)}\n"
+            f"{route_line(ride)}"
+            f"🪑 Подтверждённых пассажиров: <b>{approved_count}</b>\n\n"
+            "Откройте поездку и нажмите «🚀 Старт поездки», затем отправьте live-гео."
+        )
+
+    def ride_departure_due_keyboard(self, ride_id: int) -> InlineKeyboardMarkup:
+        return InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="🚗 К поездке", callback_data=f"adm_ride:{ride_id}")]
+            ]
         )
 
     def ride_not_started_keyboard(self, ride_id: int) -> InlineKeyboardMarkup:

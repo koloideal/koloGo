@@ -11,7 +11,6 @@ from dishka.integrations.aiogram_dialog import inject
 from kologo.application.services.ride import RideService
 from kologo.domain.schemas import RideStatus, RideWithStats
 from kologo.infrastructure.notifications import MessageBuilder, route_str
-from kologo.infrastructure.time import LocalClock
 
 from ..user_dialogs.states import (AdminPanelSG, AdminRequisitesSG, AdminSettingsSG,
                                    AdminStatsSG, BroadcastSG, PendingSG, RideCreateSG,
@@ -31,12 +30,11 @@ async def get_panel(
     dialog_manager: DialogManager,
     ride_service: FromDishka[RideService],
     messages: FromDishka[MessageBuilder],
-    clock: FromDishka[LocalClock],
     **_kwargs: Any,
 ) -> dict[str, Any]:
     lines = ["🚗 Привет, <b>Создатель</b>\n"]
     in_progress = await ride_service.get_in_progress_ride()
-    upcoming = next((r for r in await ride_service.list_active_rides() if r.departure_at > clock.now()), None)
+    upcoming = next(iter(await ride_service.list_active_rides()), None)
     pending_count = len(await ride_service.list_pending_bookings())
 
     if in_progress and (rws := await ride_service.get_ride_stats(in_progress.ride_id)):

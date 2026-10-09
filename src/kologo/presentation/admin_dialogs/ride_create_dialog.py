@@ -35,7 +35,7 @@ async def get_templates(
     clock: FromDishka[LocalClock],
     **_kwargs: Any,
 ) -> dict[str, Any]:
-    templates = await ride_service.list_templates(limit=8)
+    templates = await ride_service.list_templates(limit=5)
     if not templates:
         return {"has_templates": False, "empty_text": "🚫 Шаблонов пока нет.", "back_btn": "⬅️ В панель"}
     items = []
@@ -126,11 +126,15 @@ async def get_time_data(
 ) -> dict[str, Any]:
     selected_date = dialog_manager.dialog_data.get("selected_date", "—")
     selected_time = dialog_manager.dialog_data.get("selected_time", "—")
-    presets = sorted({clock.fmt(r.departure_at, "%H:%M") for r in await ride_service.list_templates(limit=8)})
+    presets: list[str] = []
+    for r in await ride_service.list_templates(limit=5):
+        t = clock.fmt(r.departure_at, "%H:%M")
+        if t not in presets:
+            presets.append(t)
     return {
         "selected_date": selected_date,
         "selected_time": selected_time,
-        "time_presets": [{"id": t.replace(":", ""), "label": f"⚡ {t}"} for t in presets[:6]],
+        "time_presets": [{"id": t.replace(":", ""), "label": f"⚡ {t}"} for t in presets],
         "has_presets": bool(presets),
         "next_btn": "➡️ Дальше",
         "back_btn": "⬅️ К календарю",
